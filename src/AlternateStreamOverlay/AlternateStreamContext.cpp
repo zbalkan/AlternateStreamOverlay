@@ -79,66 +79,6 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST pidlFolder, IData
     return hr;
 }
 
-STDMETHODIMP CAlternateStreamContext::QueryContextMenu(
-    HMENU hmenu,
-    UINT indexMenu,
-    UINT idCmdFirst,
-    UINT idCmdLast,
-    UINT uFlags)
-{
-    if (uFlags & CMF_DEFAULTONLY || m_streams.empty())
-    {
-        return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, 0);
-    }
-
-    UINT uId = idCmdFirst;
-
-    //	InsertMenu(hmenu, uId, MF_BYPOSITION | MF_SEPARATOR, uId, L"");
-    //	uId++;
-    HMENU subMenu = CreatePopupMenu();
-
-    UINT id = 0;
-    for (std::vector<std::wstring>::const_iterator vit = m_streams.begin(); vit != m_streams.end(); ++vit)
-    {
-        InsertMenu(subMenu, id++, MF_BYPOSITION, uId++, vit->c_str());
-    }
-
-    MENUITEMINFO mii = { sizeof(MENUITEMINFO) };
-
-    mii.fMask = MIIM_SUBMENU | MIIM_STRING | MIIM_ID;
-    mii.wID = uId++;
-    mii.hSubMenu = subMenu;
-    mii.dwTypeData = _T("Alternate Streams");
-
-    InsertMenuItem(hmenu, indexMenu, TRUE, &mii);
-
-    return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, uId - idCmdFirst);
-}
-
-// Don't actually do anything - it's available in the property page.
-STDMETHODIMP CAlternateStreamContext::InvokeCommand(
-    CMINVOKECOMMANDINFO* pCmdInfo)
-{
-    return S_OK;
-}
-
-STDMETHODIMP CAlternateStreamContext::GetCommandString(
-    UINT_PTR idCmd,
-    UINT uFlags,
-    UINT* pReserved,
-    LPSTR pszName,
-    UINT cchMax)
-{
-    if (idCmd != 0 || !(uFlags & GCS_HELPTEXT) || pszName == nullptr || cchMax == 0)
-        return E_INVALIDARG;
-
-    constexpr wchar_t helpW[] = L"AlternateStreamOverlay - www.benf.org";
-    constexpr char helpA[] = "AlternateStreamOverlay - www.benf.org";
-    if (uFlags & GCS_UNICODE)
-        return StringCchCopyW(reinterpret_cast<LPWSTR>(pszName), cchMax, helpW);
-    return StringCchCopyA(pszName, cchMax, helpA);
-}
-
 const std::vector<std::wstring>& CAlternateStreamContext::get_streams() const
 {
     return m_streams;

@@ -8,14 +8,13 @@
 #include <string>
 #include <windows.h>
 
-/* Responsible for context menu item, and property tab */
+/* Provides the alternate-stream property tab in Explorer. */
 
 class ATL_NO_VTABLE CAlternateStreamContext :
     public CComObjectRootEx<CComMultiThreadModel>,
     public CComCoClass<CAlternateStreamContext, &CLSID_AlternateStreamContext>,
     public IAlternateStreamContext,
     public IShellExtInit,
-    public IContextMenu,
     public IShellPropSheetExt
 {
 private:
@@ -34,7 +33,6 @@ public:
     BEGIN_COM_MAP(CAlternateStreamContext)
         COM_INTERFACE_ENTRY(IAlternateStreamContext)
         COM_INTERFACE_ENTRY(IShellExtInit)
-        COM_INTERFACE_ENTRY(IContextMenu)
         COM_INTERFACE_ENTRY(IShellPropSheetExt)
     END_COM_MAP()
 
@@ -55,21 +53,6 @@ public:
     const std::wstring& get_path() const;
     // IShellExtInit
     STDMETHODIMP Initialize(LPCITEMIDLIST pidlFolder, IDataObject* pdtobj, HKEY hkeyProgId);
-    // IContextMenu
-    STDMETHODIMP QueryContextMenu(
-        HMENU hmenu,
-        UINT indexMenu,
-        UINT idCmdFirst,
-        UINT idCmdLast,
-        UINT uFlags);
-    STDMETHODIMP InvokeCommand(
-        CMINVOKECOMMANDINFO* pici);
-    STDMETHODIMP GetCommandString(
-        UINT_PTR idCmd,
-        UINT uType,
-        UINT* pReserved,
-        LPSTR pszName,
-        UINT cchMax);
     // IShellPropSheetExt
     STDMETHODIMP AddPages(
         LPFNSVADDPROPSHEETPAGE pfnAddPage,
