@@ -263,8 +263,18 @@ function Test-UnicodeNames {
 
     foreach ($case in $cases) {
         $path = Join-Path $Root $case.File
+        $streamPath = $path + ':' + $case.Stream
+
+        # CI's TEMP root can be longer than a developer's. The long ADS
+        # fixture may exceed legacy MAX_PATH despite a valid 255-unit
+        # NTFS stream-name limit; use Win32's extended-length path syntax.
+        if ($streamPath.Length -ge 248) {
+            $path = '\\?\' + $path
+            $streamPath = $path + ':' + $case.Stream
+        }
+
         [NativeAdsFixture]::Create($path)
-        [NativeAdsFixture]::Create($path + ':' + $case.Stream)
+        [NativeAdsFixture]::Create($streamPath)
         $expected = ':' + $case.Stream + ':$DATA'
         $names = [NativeAdsFixture]::Streams($path)
         $found = $false
