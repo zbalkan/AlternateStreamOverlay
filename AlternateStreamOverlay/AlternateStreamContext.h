@@ -24,7 +24,7 @@ private:
     bool m_isDirectory;
     std::vector<std::wstring> m_streams;
 public:
-    CAlternateStreamContext() : font(NULL)
+    CAlternateStreamContext() : font(NULL), m_isDirectory(false)
     {
     }
 

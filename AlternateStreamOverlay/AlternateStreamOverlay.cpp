@@ -47,9 +47,6 @@ STDAPI DllUnregisterServer(void)
 #ifdef _MERGE_PROXYSTUB
     if (FAILED(hr))
         return hr;
-    hr = PrxDllRegisterServer();
-    if (FAILED(hr))
-        return hr;
     hr = PrxDllUnregisterServer();
 #endif
     return hr;
