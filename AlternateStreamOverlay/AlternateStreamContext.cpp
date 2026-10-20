@@ -66,8 +66,12 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST pidlFolder, IData
     m_path = filePath;
     m_isDirectory = directory;
     m_streams = listAlternateStreams(filePath.c_str());
-    // We have the filename, do we want to present a menu item for it?
-    if (m_streams.size() <= (directory ? 0u : 1u))
+    // FILE_STREAM_INFO includes the unnamed default stream for ordinary files.
+    // The property page should present only named alternate data streams.
+    m_streams.erase(
+        std::remove(m_streams.begin(), m_streams.end(), L"::$DATA"),
+        m_streams.end());
+    if (m_streams.empty())
     {
         hr = E_FAIL;
     }
@@ -82,7 +86,7 @@ STDMETHODIMP CAlternateStreamContext::QueryContextMenu(
     UINT idCmdLast,
     UINT uFlags)
 {
-    if (uFlags & CMF_DEFAULTONLY || m_streams.size() <= (m_isDirectory ? 0u : 1u))
+    if (uFlags & CMF_DEFAULTONLY || m_streams.empty())
     {
         return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, 0);
     }
