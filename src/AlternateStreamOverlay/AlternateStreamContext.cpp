@@ -8,10 +8,6 @@
 #include <ios>
 #include "Common.h"
 
-constexpr auto START_OF_HEX_TEXT = 10;
-constexpr auto START_OF_ASCII_TEXT = 36;
-
-
 STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST pidlFolder, IDataObject* pDataObj, HKEY hkeyProgId)
 {
     FORMATETC fmt = { CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
@@ -183,66 +179,43 @@ namespace
 {
 char asciificate(BYTE b)
 {
-    if (b >= 32 && b <= 126) return (char)b;
+    if (b >= 32 && b <= 126) return static_cast<char>(b);
     return '.';
 }
 
-#pragma warning(push)
-#pragma warning(disable:4996)
-// I don't really know why, but I still prefer sprintf(X) to ios::hex. ;)
-void hexinto(char* tgt, unsigned char val)
+// Eight-byte rows keep the ASCII column visible in the narrow properties tab.
+void DumpHex(const BYTE* bytes, DWORD size, std::stringstream& output)
 {
-    sprintf(tgt, "%2.2X", val);
-    tgt[2] = ' ';
-}
+    constexpr DWORD BytesPerLine = 8;
+    constexpr char Digits[] = "0123456789ABCDEF";
 
-void hexinto(char* tgt, unsigned int val)
-{
-    sprintf(tgt, "%8.8X", val);
-    tgt[8] = ' ';
-}
-#pragma warning(pop)
-
-void setuphexline(char* tgt, const int len, char*& hexo, char*& txto)
-{
-    memset(tgt, ' ', len);
-    hexo = &tgt[START_OF_HEX_TEXT];
-    txto = &tgt[START_OF_ASCII_TEXT];
-}
-
-void DumpHex(BYTE* buf, DWORD size, std::stringstream& tgt)
-{
-    const int LINESIZE = 46;
-    char tmp[LINESIZE + 4];
-    tmp[LINESIZE] = ' ';
-    tmp[LINESIZE + 1] = '\r';
-    tmp[LINESIZE + 2] = '\n';
-    tmp[LINESIZE + 3] = 0;
-    char* lineo = &tmp[0];
-    char* hexo = nullptr;
-    char* charo = nullptr;
-    setuphexline(lineo, LINESIZE, hexo, charo);
-    size_t cnt = 0;
-    for (unsigned int x = 0;x < size;++x, ++buf)
+    for (DWORD offset = 0; offset < size; offset += BytesPerLine)
     {
-        if (cnt == 0)
+        // Each offset covers the first 64 KiB, so eight hex digits suffice.
+        for (int shift = 28; shift >= 0; shift -= 4)
+            output << Digits[(offset >> shift) & 0xF];
+        output << "  ";
+
+        const DWORD count = (size - offset < BytesPerLine)
+            ? size - offset : BytesPerLine;
+        for (DWORD i = 0; i < BytesPerLine; ++i)
         {
-            hexinto(lineo, x);
+            if (i < count)
+            {
+                const BYTE b = bytes[offset + i];
+                output << Digits[b >> 4] << Digits[b & 0xF] << ' ';
+            }
+            else
+                output << "   ";
         }
-        hexinto(hexo, (unsigned char)(*buf));
-        *charo = asciificate(*buf);
-        cnt++;
-        hexo += 3;
-        charo++;
-        if (cnt == 8)
-        {
-            tgt << tmp;
-            setuphexline(lineo, LINESIZE, hexo, charo);
-            cnt = 0;
-        }
+
+        output << " |";
+        for (DWORD i = 0; i < count; ++i)
+            output << asciificate(bytes[offset + i]);
+        for (DWORD i = count; i < BytesPerLine; ++i)
+            output << ' ';
+        output << "|\r\n";
     }
-    if (cnt != 0)
-        tgt << tmp;
 }
 
 void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND textBox)
