@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "AlternateStreamContext.h"
-#include <atlconv.h>
+#include <strsafe.h>
+#include <vector>
 #include <sstream>
 #include <string>
 #include <ios>
@@ -13,7 +14,9 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST pidlFolder, IData
 {
     FORMATETC fmt = { CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
     STGMEDIUM stg = { TYMED_HGLOBAL };
-    HDROP	  hDrop;
+    if (pDataObj == nullptr) return E_INVALIDARG;
+
+    HDROP hDrop = nullptr;
 
     if (FAILED(pDataObj->GetData(&fmt, &stg)))
     {
@@ -22,7 +25,11 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST pidlFolder, IData
 
     hDrop = (HDROP)GlobalLock(stg.hGlobal);
 
-    if (NULL == hDrop) return E_INVALIDARG;
+    if (hDrop == nullptr)
+    {
+        ReleaseStgMedium(&stg);
+        return E_INVALIDARG;
+    }
 
     UINT uNumFiles = DragQueryFile(hDrop, 0xffffffff, NULL, 0);
     HRESULT hr = S_OK;
@@ -34,21 +41,29 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST pidlFolder, IData
         return E_INVALIDARG;
     }
 
-    TCHAR szFile[MAX_PATH];
-    if (0 == DragQueryFile(hDrop, 0, szFile, MAX_PATH))
-    {
+    const UINT pathLength = DragQueryFileW(hDrop, 0, nullptr, 0);
+    if (pathLength == 0)
         hr = E_INVALIDARG;
+
+    std::wstring filePath;
+    if (SUCCEEDED(hr))
+    {
+        std::vector<WCHAR> path(pathLength + 1);
+        if (DragQueryFileW(hDrop, 0, path.data(), static_cast<UINT>(path.size())) != pathLength)
+            hr = E_INVALIDARG;
+        else
+            filePath.assign(path.data(), pathLength);
     }
 
     GlobalUnlock(stg.hGlobal);
     ReleaseStgMedium(&stg);
 
-    bool directory = PathIsDirectory(szFile) != FALSE;
     if (FAILED(hr)) return hr;
 
-    m_path = szFile;
+    const bool directory = PathIsDirectoryW(filePath.c_str()) != FALSE;
+    m_path = filePath;
     m_isDirectory = directory;
-    m_streams = listAlternateStreams(szFile);
+    m_streams = listAlternateStreams(filePath.c_str());
     // We have the filename, do we want to present a menu item for it?
     if (m_streams.size() <= (directory ? 0u : 1u))
     {
@@ -108,36 +123,14 @@ STDMETHODIMP CAlternateStreamContext::GetCommandString(
     LPSTR pszName,
     UINT cchMax)
 {
-    USES_CONVERSION;
+    if (idCmd != 0 || !(uFlags & GCS_HELPTEXT) || pszName == nullptr || cchMax == 0)
+        return E_INVALIDARG;
 
-    // Only support one command right now.
-    if (0 != idCmd) return E_INVALIDARG;
-
-    // If explorer is asking for a help string, copy our string into the supplied buffer.
-    if (uFlags & GCS_HELPTEXT)
-    {
-        LPCTSTR szText = _T("AlternateStreamOverlay - www.benf.org");
-
-        if (uFlags & GCS_UNICODE)
-        {
-            LPWSTR const destination = reinterpret_cast<LPWSTR>(pszName);
-
-if (lstrcpynW(destination, T2CW(szText), cchMax) != destination)
-{
-    // Handle the failure as appropriate for this function.
-}
-(void)lstrcpynW(
-    reinterpret_cast<LPWSTR>(pszName),
-    T2CW(szText),
-    cchMax);;
-        }
-        else
-        {
-            lstrcpynA(pszName, T2A(szText), cchMax);
-        }
-        return S_OK;
-    }
-    return E_INVALIDARG;
+    constexpr wchar_t helpW[] = L"AlternateStreamOverlay - www.benf.org";
+    constexpr char helpA[] = "AlternateStreamOverlay - www.benf.org";
+    if (uFlags & GCS_UNICODE)
+        return StringCchCopyW(reinterpret_cast<LPWSTR>(pszName), cchMax, helpW);
+    return StringCchCopyA(pszName, cchMax, helpA);
 }
 
 const std::vector<std::wstring>& CAlternateStreamContext::get_streams() const
@@ -188,7 +181,8 @@ void DumpHex(BYTE* buf, DWORD size, std::stringstream& tgt)
     tmp[LINESIZE + 2] = '\n';
     tmp[LINESIZE + 3] = 0;
     char* lineo = &tmp[0];
-    char* hexo, * charo;
+    char* hexo = nullptr;
+    char* charo = nullptr;
     setuphexline(lineo, LINESIZE, hexo, charo);
     size_t cnt = 0;
     for (unsigned int x = 0;x < size;++x, ++buf)
@@ -209,7 +203,8 @@ void DumpHex(BYTE* buf, DWORD size, std::stringstream& tgt)
             cnt = 0;
         }
     }
-    tgt << tmp;
+    if (cnt != 0)
+        tgt << tmp;
 }
 
 void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND textBox)
@@ -217,7 +212,7 @@ void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND tex
     const std::vector<std::wstring>& streams = pthis->get_streams();
     const std::wstring& fname = pthis->get_path();
 
-    if (idx < 0 || idx >= streams.size())
+    if (idx >= streams.size())
     {
         OutputDebugStringA("Invalid index");
         return;
@@ -237,25 +232,27 @@ void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND tex
         return;
     }
 
-    BYTE buf[64 * 1024];
-    DWORD dwBytesRead;
-
-    // Dump only the first 64k.
-    ::ReadFile(hFile, buf, sizeof(buf) - sizeof(BYTE), &dwBytesRead, NULL);
-    // Make sure it's null terminated.
-    buf[(64 * 1024) - 1] = 0;
+    // Large buffers belong on the heap, not on Explorer's callback stack.
+    std::vector<BYTE> buffer(64 * 1024);
+    DWORD bytesRead = 0;
+    if (!ReadFile(hFile, buffer.data(), static_cast<DWORD>(buffer.size() - 1),
+                  &bytesRead, nullptr))
+    {
+        SetWindowTextW(textBox, L"Unable to read alternate stream.");
+        return;
+    }
 
     if (asHex)
     {
-        std::stringstream tgt;
-        DumpHex(&buf[0], dwBytesRead, tgt);
-        SendMessageA(textBox, WM_SETTEXT, 0, (LPARAM)tgt.str().c_str());
+        std::stringstream output;
+        DumpHex(buffer.data(), bytesRead, output);
+        const std::string formatted = output.str();
+        SetWindowTextA(textBox, formatted.c_str());
     }
     else
     {
-        // Cheeky!
-        buf[dwBytesRead] = 0;
-        SendMessageA(textBox, WM_SETTEXT, dwBytesRead, (LPARAM)buf);
+        buffer[bytesRead] = 0;
+        SetWindowTextA(textBox, reinterpret_cast<const char*>(buffer.data()));
     }
 }
 
@@ -309,7 +306,7 @@ typedef INT_PTR DLGRETURN;
 
 DLGRETURN CALLBACK PropPageDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    DLGRETURN bRet = (DLGRETURN)FALSE;
+    DLGRETURN bRet = FALSE;
 
     switch (uMsg)
     {
@@ -355,8 +352,8 @@ STDMETHODIMP CAlternateStreamContext::AddPages(
     LPFNSVADDPROPSHEETPAGE pfnAddPage,
     LPARAM lParam)
 {
-    PROPSHEETPAGE psp;
-    HPROPSHEETPAGE hPage;
+    PROPSHEETPAGE psp = {};
+    HPROPSHEETPAGE hPage = nullptr;
     LPCWSTR szPageTitle = L"AlternateStreams";
     psp.dwSize = sizeof(PROPSHEETPAGE);
     psp.dwFlags = PSP_USETITLE | PSP_USECALLBACK;
@@ -367,18 +364,23 @@ STDMETHODIMP CAlternateStreamContext::AddPages(
     psp.lParam = (LPARAM)this;
     psp.pszTitle = szPageTitle;
 
-    hPage = CreatePropertySheetPage(&psp);
-
-    if (NULL != hPage)
-    {
-        if (!pfnAddPage(hPage, lParam))
-        {
-            DestroyPropertySheetPage(hPage);
-            return S_OK;
-        }
-    }
-    // Addref if succeeded, released on destruction.
+    // The property-page release callback owns a reference once the page exists.
+    // Acquire it first; otherwise a page destroyed synchronously can release
+    // an object whose reference count has not yet been incremented.
     this->AddRef();
+    hPage = CreatePropertySheetPage(&psp);
+    if (hPage == nullptr)
+    {
+        this->Release();
+        return E_OUTOFMEMORY;
+    }
+
+    if (!pfnAddPage(hPage, lParam))
+    {
+        // PSPCB_RELEASE balances AddRef when this page is destroyed.
+        DestroyPropertySheetPage(hPage);
+        return E_FAIL;
+    }
     return S_OK;
 }
 
