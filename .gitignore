@@ -1,0 +1,78 @@
+# Visual Studio User-Specific Files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.opensdf
+*.sdf
+*.cache
+*.opendb
+
+# Visual Studio Workspace/Folder Settings
+.vs/
+
+# Build Results & Intermediate Output (MSVC)
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleasesPublic/
+[Rr]eleases/
+x64/
+x86/
+ARM/
+ARM64/
+ipch/
+[Bb]in/
+[Oo]bj/
+
+# C++ Compilation Artifacts
+*.obj
+*.o
+*.ilk
+*.pdb
+*.idb
+*.exp
+*.lib
+*.a
+*.so
+*.dll
+*.exe
+*.out
+*.app
+*.aps
+*.res
+*.pch
+*.asm
+*.cod
+
+# Diagnostics & Profiling
+*.psess
+*.vsp
+*.vspx
+*.sap
+*.log
+*.tlog
+
+# NuGet Packages & Local Caches
+**/packages/*
+!**/packages/build/
+*.nupkg
+vcpkg_installed/
+
+# CMake Build Folders (if using CMake with VS)
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+/_deps/
+/build/
+/build-*/
+
+# OS Generated Files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
