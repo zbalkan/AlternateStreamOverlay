@@ -56,7 +56,7 @@ jobs:
             if (Test-Path -LiteralPath $candidate) { $dumpbin = $candidate; break }
           }
           if (-not $dumpbin) { throw 'x64 dumpbin.exe not found' }
-          foreach ($binary in @('.\src\x64\Release\AlternateStreamOverlay.dll', '.\src\x64\Release\altstrm.exe')) {
+          foreach ($binary in @('.\src\AlternateStreamOverlay\x64\Release\AlternateStreamOverlay.dll', '.\src\x64\Release\altstrm.exe')) {
             if (-not (Test-Path -LiteralPath $binary)) { throw "Missing Release binary: $binary" }
             $lines = & $dumpbin /headers /loadconfig $binary 2>&1
             if ($LASTEXITCODE -ne 0) { throw "dumpbin failed for $binary" }
