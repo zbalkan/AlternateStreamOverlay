@@ -151,7 +151,7 @@ STDMETHODIMP CAlternateStreamContext::GetCommandString(
         return E_INVALIDARG;
 
     const UINT kind = uFlags & 0x00000007;
-    if (kind == GCS_VALIDATEA)
+    if (kind == GCS_VALIDATEA || kind == GCS_VALIDATEW)
         return S_OK;
     if (pszName == nullptr || cchMax == 0)
         return E_INVALIDARG;
