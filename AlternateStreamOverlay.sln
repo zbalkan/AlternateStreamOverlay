@@ -1,14 +1,13 @@
 ﻿
-Microsoft Visual Studio Solution File, Format Version 10.00
-# Visual Studio 2008
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "AlternateStreamOverlay", "AlternateStreamOverlay\AlternateStreamOverlay.vcproj", "{45C9D47E-15A0-4D0E-823B-F7A7FD8688FC}"
-	ProjectSection(ProjectDependencies) = postProject
-		{8BC40EB3-8843-42D1-A26A-EF117180129A} = {8BC40EB3-8843-42D1-A26A-EF117180129A}
-	EndProjectSection
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.11.12306.390 stable
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "AlternateStreamOverlay", "AlternateStreamOverlay\AlternateStreamOverlay.vcxproj", "{45C9D47E-15A0-4D0E-823B-F7A7FD8688FC}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "altstrm", "altstrm\altstrm.vcproj", "{31940E04-E4B1-4EB2-9C56-97D17253DF8F}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "altstrm", "altstrm\altstrm.vcxproj", "{31940E04-E4B1-4EB2-9C56-97D17253DF8F}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "altstrm_common", "altstrm_common.lib\altstrm_common.lib.vcproj", "{8BC40EB3-8843-42D1-A26A-EF117180129A}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "altstrm_common", "altstrm_common.lib\altstrm_common.lib.vcxproj", "{8BC40EB3-8843-42D1-A26A-EF117180129A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -45,5 +44,8 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {F84F8A63-6208-41E0-82F8-55FE4C8278CA}
 	EndGlobalSection
 EndGlobal
