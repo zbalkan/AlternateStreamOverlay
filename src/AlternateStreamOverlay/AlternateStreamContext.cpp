@@ -269,15 +269,20 @@ void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND tex
         return;
     }
 
-    // Large buffers belong on the heap, not on Explorer's callback stack.
-    std::vector<BYTE> buffer(64 * 1024);
+    // Read one byte beyond the display limit to detect truncated previews
+    // without loading an unbounded stream into the Explorer process.
+    constexpr DWORD MaxPreviewBytes = 64 * 1024 - 1;
+    std::vector<BYTE> buffer(MaxPreviewBytes + 1);
     DWORD bytesRead = 0;
-    if (!ReadFile(hFile, buffer.data(), static_cast<DWORD>(buffer.size() - 1),
+    if (!ReadFile(hFile, buffer.data(), static_cast<DWORD>(buffer.size()),
                   &bytesRead, nullptr))
     {
         SetWindowTextW(textBox, L"Unable to read alternate stream.");
         return;
     }
+    const bool truncated = bytesRead > MaxPreviewBytes;
+    if (truncated)
+        bytesRead = MaxPreviewBytes;
 
     // Treat the byte stream as UTF-8 text only when conversion is valid.
     // An edit control cannot display embedded NUL characters.
@@ -302,6 +307,8 @@ void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND tex
                 &text[0], charCount);
             if (converted == charCount)
             {
+                if (truncated)
+                    text += L"\r\n[Preview truncated after 65535 bytes]";
                 SetWindowTextW(textBox, text.c_str());
                 return;
             }
@@ -311,7 +318,9 @@ void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND tex
     // Binary, non-UTF-8, or explicitly requested hexadecimal preview.
     std::stringstream output;
     DumpHex(buffer.data(), bytesRead, output);
-    const std::string formatted = output.str();
+    std::string formatted = output.str();
+    if (truncated)
+        formatted += "\r\n[Preview truncated after 65535 bytes]";
     SetWindowTextA(textBox, formatted.c_str());
 }
 } // namespace
