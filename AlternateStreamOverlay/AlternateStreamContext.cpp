@@ -282,11 +282,6 @@ void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND tex
 }
 } // namespace
 
-void CAlternateStreamContext::attach_font_resource(HFONT font)
-{
-    this->font = font;
-}
-
 BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
 {
     PROPSHEETPAGE* ppsp = (PROPSHEETPAGE*)lParam;
@@ -303,10 +298,19 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
         SendMessage(comboBox, CB_ADDSTRING, 0, (LPARAM)vit->c_str());
     }
 
+    // Each dialog owns its preview font. The COM object may outlive the page
+    // or own more than one page, so it must not own the dialog's GDI objects.
     HFONT font = CreateFont(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_OUTLINE_PRECIS,
         CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, FF_DONTCARE, L"Courier New");
-    pthis->attach_font_resource(font);
-    SendMessage(textBox, WM_SETFONT, (WPARAM)font, MAKELPARAM(TRUE, 0));
+    if (font != nullptr && textBox != nullptr)
+    {
+        SetWindowLongPtr(textBox, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(font));
+        SendMessage(textBox, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+    }
+    else if (font != nullptr)
+    {
+        DeleteObject(font);
+    }
 
     SendMessage(checkBox, BM_SETCHECK, BST_UNCHECKED, 0);
     if (!streams.empty())
@@ -323,7 +327,7 @@ UINT CALLBACK PropPageCallbackProc(HWND hWnd, UINT uMsg, LPPROPSHEETPAGE ppsp)
 
     if (uMsg == PSPCB_RELEASE)
     {
-        // Releasing the CAlternateStreamContext will delete the font resource.
+        // The dialog releases its own font in WM_DESTROY.
         pthis->Release();
         ppsp->lParam = 0;
     }
@@ -337,6 +341,25 @@ DLGRETURN CALLBACK PropPageDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
 {
     if (uMsg == WM_INITDIALOG)
         return OnInitDialog(hWnd, lParam);
+
+    if (uMsg == WM_DESTROY)
+    {
+        HWND textBox = GetDlgItem(hWnd, IDC_EDIT1);
+        if (textBox != nullptr)
+        {
+            HFONT font = reinterpret_cast<HFONT>(
+                GetWindowLongPtr(textBox, GWLP_USERDATA));
+            if (font != nullptr)
+            {
+                // Stop the control from referencing the font before deleting it.
+                SendMessage(textBox, WM_SETFONT, 0, FALSE);
+                SetWindowLongPtr(textBox, GWLP_USERDATA, 0);
+                DeleteObject(font);
+            }
+        }
+        SetWindowLongPtr(hWnd, GWLP_USERDATA, 0);
+        return FALSE;
+    }
 
     if (uMsg != WM_COMMAND)
         return FALSE;

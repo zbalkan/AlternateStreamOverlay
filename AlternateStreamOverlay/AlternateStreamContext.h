@@ -19,21 +19,12 @@ class ATL_NO_VTABLE CAlternateStreamContext :
     public IShellPropSheetExt
 {
 private:
-    HFONT font;
     std::wstring m_path;
     bool m_isDirectory;
     std::vector<std::wstring> m_streams;
 public:
-    CAlternateStreamContext() : font(NULL), m_isDirectory(false)
+    CAlternateStreamContext() : m_isDirectory(false)
     {
-    }
-
-    ~CAlternateStreamContext()
-    {
-        if (font != NULL)
-        {
-            DeleteObject(font);
-        }
     }
 
     DECLARE_REGISTRY_RESOURCEID(IDR_ALTERNATESTREAMCONTEXT)
@@ -62,7 +53,6 @@ public:
     // Native
     const std::vector<std::wstring>& get_streams() const;
     const std::wstring& get_path() const;
-    void attach_font_resource(HFONT font);
     // IShellExtInit
     STDMETHODIMP Initialize(LPCITEMIDLIST pidlFolder, IDataObject* pdtobj, HKEY hkeyProgId);
     // IContextMenu
