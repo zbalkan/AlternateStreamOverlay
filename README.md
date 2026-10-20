@@ -4,8 +4,7 @@ A fork of Lee Benfield's [AlternateStreamOverlay](https://www.benf.org/other/alt
 
 ## Supported platform
 
-- Windows 10 or Windows 11, x64.
-- 64-bit Windows Explorer. The in-process shell extension is built exclusively for its host architecture.
+- Windows 10 or Windows 11 (tested), Server 2019, 2022, 2025 (untested).
 - MSVC and the Windows SDK, using the toolset configured in the Visual C++ projects.
 
 Only `Debug|x64` and `Release|x64` are supported.
