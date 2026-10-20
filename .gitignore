@@ -80,4 +80,4 @@ $RECYCLE.BIN/
 # Generated stubs
 /src/AlternateStreamOverlay/AlternateStreamOverlay_i.c
 /src/AlternateStreamOverlay/AlternateStreamOverlay_i.h
-/AlternateStreamOverlay/AlternateStreamOverlay_p.c
+/src/AlternateStreamOverlay/AlternateStreamOverlay_p.c
