@@ -13,7 +13,7 @@
 
 AlternateStreamReader g_streamReader;
 
-static int _tmain(int argc, _TCHAR* argv[])
+int _tmain(int argc, _TCHAR* argv[])
 {
     WIN32_FIND_DATA FindFileData;
     HANDLE hFind;
