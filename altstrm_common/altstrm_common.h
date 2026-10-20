@@ -1,107 +1,39 @@
 #ifndef _ALTSTRM_COMMON_H_
-#define _ALTSTRM_COMMON_H_ 1
+#define _ALTSTRM_COMMON_H_
 
-#include <shlobj.h> 
-#include <comdef.h> 
-#include <vector> 
-#include <string> 
-#include <windows.h> 
+#include <windows.h>
+#include <string>
+#include <vector>
 
-
+// Owns a Win32 file handle. It must not be copied.
 class HandleW
 {
-	HANDLE m_hnd;
 public:
-	HandleW(HANDLE hnd)
-	{
-		m_hnd = hnd;
-	}
-	~HandleW()
-	{
-		if (m_hnd != INVALID_HANDLE_VALUE) close();
-	}
-	void close()
-	{
-		::CloseHandle(m_hnd);
-	}
-	operator HANDLE() 
-	{
-		return m_hnd;
-	}
-};
+    explicit HandleW(HANDLE handle) : handle_(handle) {}
+    ~HandleW()
+    {
+        if (handle_ != nullptr && handle_ != INVALID_HANDLE_VALUE)
+            CloseHandle(handle_);
+    }
 
-/*
- * Avoid requiring the DDK headers.
- */
-typedef struct IO_STATUS_BLOCK
-{
-	union
-	{
-		NTSTATUS Status;
-		PVOID Pointer;
-	};
-	ULONG_PTR Information;
-} IO_STATUS_BLOCK, *PIO_STATUS_BLOCK;
+    HandleW(const HandleW&) = delete;
+    HandleW& operator=(const HandleW&) = delete;
 
-typedef enum FILE_INFORMATION_CLASS
-{
-	FileStreamInformation = 22,
-};
+    HANDLE get() const { return handle_; }
+    operator HANDLE() const { return handle_; }
 
-
-class INTInner {
-public:
-	virtual bool GetInformationByHandle(HANDLE FileHandle, PFILE_STREAM_INFO infoBlock, unsigned long length) = 0;
-};
-
-// In XP we have to use this undocumented function.
-typedef NTSTATUS (WINAPI *tNtQueryInformationFile)(HANDLE FileHandle, IO_STATUS_BLOCK * pIOStatusBlock, 
-									   void * pOutFileInformation, unsigned long length, 
-									   FILE_INFORMATION_CLASS fileInformationClass);
-
-
-
-// In vista and higher, we can get away with this instead.
-
-typedef BOOL (WINAPI *tGetFileInformationByHandleEx)(
-    __in  HANDLE hFile,
-    __in  FILE_INFO_BY_HANDLE_CLASS FileInformationClass,
-    __out_bcount(dwBufferSize) LPVOID lpFileInformation,
-    __in  DWORD dwBufferSize
-);
-
-class NTInnerXP : public INTInner {
-	CRITICAL_SECTION csQuery;
-	HMODULE hNtDll;
-	tNtQueryInformationFile ntQueryInformationFile;
-public:
-	NTInnerXP();
-	~NTInnerXP();
-public:
-	virtual bool GetInformationByHandle(HANDLE FileHandle, PFILE_STREAM_INFO infoBlock, unsigned long length);
-};
-
-class NTInnerAPI : public INTInner {
-	tGetFileInformationByHandleEx getFileInformationByHandleEx;
-public:
-	NTInnerAPI();
-	virtual bool GetInformationByHandle(HANDLE FileHandle, PFILE_STREAM_INFO infoBlock, unsigned long length);
-};
-
-class NTDllFuncs
-{
 private:
-	INTInner * inner;
-public:
-	NTDllFuncs();
-	~NTDllFuncs();
-
-	bool HasAlternateStreams(HANDLE hFile);
-	bool HasAlternateStreams(LPCWSTR fname);
-	std::vector<std::wstring> ListAlternateStreams(HANDLE hFile);
-	std::vector<std::wstring> ListAlternateStreams(LPCWSTR fname);
+    HANDLE handle_;
 };
 
-#endif // include guard
+// Enumerate alternate streams using the documented Windows 10+ API.
+class AlternateStreamReader
+{
+public:
+    bool HasAlternateStreams(HANDLE file) const;
+    bool HasAlternateStreams(LPCWSTR filename) const;
+    std::vector<std::wstring> ListAlternateStreams(HANDLE file) const;
+    std::vector<std::wstring> ListAlternateStreams(LPCWSTR filename) const;
+};
 
-
+#endif // _ALTSTRM_COMMON_H_
