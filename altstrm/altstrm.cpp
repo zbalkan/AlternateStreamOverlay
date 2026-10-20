@@ -9,12 +9,11 @@
 #include <string>
 #include <sstream>
 #include <iostream>
-#include <windows.h>
 #include "altstrm_common.h"
 
 AlternateStreamReader g_streamReader;
 
-int _tmain(int argc, _TCHAR* argv[])
+static int _tmain(int argc, _TCHAR* argv[])
 {
     WIN32_FIND_DATA FindFileData;
     HANDLE hFind;

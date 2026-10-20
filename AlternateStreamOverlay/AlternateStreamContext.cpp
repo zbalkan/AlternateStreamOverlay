@@ -6,8 +6,8 @@
 #include <ios>
 #include "Common.h"
 
-#define START_OF_HEX_TEXT 10
-#define START_OF_ASCII_TEXT 36
+constexpr auto START_OF_HEX_TEXT = 10;
+constexpr auto START_OF_ASCII_TEXT = 36;
 
 STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST pidlFolder, IDataObject* pDataObj, HKEY hkeyProgId)
 {
@@ -120,7 +120,16 @@ STDMETHODIMP CAlternateStreamContext::GetCommandString(
 
         if (uFlags & GCS_UNICODE)
         {
-            lstrcpynW((LPWSTR)pszName, T2CW(szText), cchMax);
+            LPWSTR const destination = reinterpret_cast<LPWSTR>(pszName);
+
+if (lstrcpynW(destination, T2CW(szText), cchMax) != destination)
+{
+    // Handle the failure as appropriate for this function.
+}
+(void)lstrcpynW(
+    reinterpret_cast<LPWSTR>(pszName),
+    T2CW(szText),
+    cchMax);;
         }
         else
         {
