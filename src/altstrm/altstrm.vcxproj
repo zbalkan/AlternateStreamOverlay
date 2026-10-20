@@ -77,6 +77,8 @@
       <TargetEnvironment>X64</TargetEnvironment>
     </Midl>
     <ClCompile>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalOptions>/guard:cf %(AdditionalOptions)</AdditionalOptions>
       <Optimization>MaxSpeed</Optimization>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <AdditionalIncludeDirectories>..\altstrm_common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -88,6 +90,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
     <Link>
+      <AdditionalOptions>/guard:cf %(AdditionalOptions)</AdditionalOptions>
       <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
