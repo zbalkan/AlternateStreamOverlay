@@ -13,7 +13,7 @@ import "ocidl.idl";
 	helpstring("IAlternateStreamOverlayIcon Interface"),
 	pointer_default(unique)
 ]
-interface IAlternateStreamOverlayIcon : IUnknown{
+interface IAlternateStreamOverlayIcon : IUnknown {
 };
 [
 	object,
@@ -21,7 +21,7 @@ interface IAlternateStreamOverlayIcon : IUnknown{
 	helpstring("IAlternateStreamContext Interface"),
 	pointer_default(unique)
 ]
-interface IAlternateStreamContext : IUnknown{
+interface IAlternateStreamContext : IUnknown {
 };
 [
 	uuid(C0034A83-7FA3-43A7-82DD-3ADF66F0086C),
@@ -35,7 +35,7 @@ library AlternateStreamOverlayLib
 		uuid(FBAB8C58-59C9-4522-B7E8-1A6AA23B318C),
 		helpstring("AlternateStreamOverlayIcon Class")
 	]
-	coclass AlternateStreamOverlayIcon
+		coclass AlternateStreamOverlayIcon
 	{
 		[default] interface IAlternateStreamOverlayIcon;
 	};
@@ -43,7 +43,7 @@ library AlternateStreamOverlayLib
 		uuid(4A26024B-5499-45BE-A23F-4A65E88888D0),
 		helpstring("AlternateStreamContext Class")
 	]
-	coclass AlternateStreamContext
+		coclass AlternateStreamContext
 	{
 		[default] interface IAlternateStreamContext;
 	};
