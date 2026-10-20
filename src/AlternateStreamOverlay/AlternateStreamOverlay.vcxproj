@@ -119,7 +119,7 @@
       <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
-      <AdditionalOptions>/guard:cf %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/CETCOMPAT /guard:cf %(AdditionalOptions)</AdditionalOptions>
       <RegisterOutput>true</RegisterOutput>
       <AdditionalDependencies>comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ModuleDefinitionFile>.\AlternateStreamOverlay.def</ModuleDefinitionFile>
