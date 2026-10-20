@@ -79,6 +79,7 @@ std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(HANDLE fil
 
         if (next != 0 &&
             (next < StreamInfoHeaderSize ||
+                next % alignof(FILE_STREAM_INFO) != 0 ||
                 next > remaining ||
                 nameBytes > next - StreamInfoHeaderSize))
             return {};
@@ -94,6 +95,9 @@ std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(HANDLE fil
 
 std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(LPCWSTR filename) const
 {
+    if (filename == nullptr || *filename == L'\0')
+        return {};
+
     HandleW file(CreateFileW(filename, 0,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
         nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS,
@@ -135,6 +139,7 @@ bool AlternateStreamReader::HasAlternateStreams(HANDLE file) const
 
         if (next != 0 &&
             (next < StreamInfoHeaderSize ||
+                next % alignof(FILE_STREAM_INFO) != 0 ||
                 next > remaining ||
                 nameBytes > next - StreamInfoHeaderSize))
             return false;
@@ -157,6 +162,9 @@ bool AlternateStreamReader::HasAlternateStreams(HANDLE file) const
 
 bool AlternateStreamReader::HasAlternateStreams(LPCWSTR filename) const
 {
+    if (filename == nullptr || *filename == L'\0')
+        return false;
+
     HandleW file(CreateFileW(filename, 0,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
         nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS,
