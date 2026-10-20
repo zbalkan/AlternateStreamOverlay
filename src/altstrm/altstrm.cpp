@@ -4,6 +4,7 @@
 
 #include "stdafx.h"
 #include <windows.h>
+#include <algorithm>
 #include <tchar.h>
 #include <stdio.h>
 #include <string>
@@ -45,10 +46,11 @@ int _tmain(int argc, _TCHAR* argv[])
 
     do
     {
-        bool isDir = (FindFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
         std::wstring fullPath = directory + FindFileData.cFileName;
         std::vector<std::wstring> subnames = g_streamReader.ListAlternateStreams(fullPath.c_str());
-        if (subnames.size() > (isDir ? 0u : 1u))
+        // Only named streams are ADS; the unnamed "::$DATA" entry is not.
+        subnames.erase(std::remove(subnames.begin(), subnames.end(), L"::$DATA"), subnames.end());
+        if (!subnames.empty())
         {
             std::wcout << fullPath << L"\n";
             for (std::vector<std::wstring>::const_iterator vit = subnames.begin(); vit != subnames.end(); ++vit)
