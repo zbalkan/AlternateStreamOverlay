@@ -1,0 +1,34 @@
+name: Native static analysis
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: MSVC and clang-tidy (Release x64)
+    runs-on: windows-2025
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Visual Studio 2026 MSBuild
+        uses: microsoft/setup-msbuild@v3
+        with:
+          vs-version: '[18.0,19.0)'
+          msbuild-architecture: x64
+
+      - name: Analyze native C++ projects
+        shell: pwsh
+        run: |
+          msbuild .\src\AlternateStreamOverlay.sln /t:Rebuild /m /nologo /verbosity:normal /p:Configuration=Release /p:Platform=x64 /p:RegisterOutput=false /p:RunCodeAnalysis=true
+          if ($LASTEXITCODE -ne 0) { throw "MSVC static-analysis build failed with exit code $LASTEXITCODE" }
+
+      - name: Analyze C++ Core Guidelines with clang-tidy
+        shell: pwsh
+        run: |
+          msbuild .\src\AlternateStreamOverlay.sln /t:Rebuild /m /nologo /verbosity:normal /p:Configuration=Release /p:Platform=x64 /p:RegisterOutput=false /p:RunCodeAnalysis=true /p:EnableMicrosoftCodeAnalysis=false /p:EnableClangTidyCodeAnalysis=true /p:ClangTidyChecks=cppcoreguidelines-*
+          if ($LASTEXITCODE -ne 0) { throw "clang-tidy analysis build failed with exit code $LASTEXITCODE" }
