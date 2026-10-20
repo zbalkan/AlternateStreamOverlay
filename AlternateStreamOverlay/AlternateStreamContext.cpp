@@ -8,8 +8,6 @@
 #include <ios>
 #include "Common.h"
 
-namespace
-{
 constexpr auto START_OF_HEX_TEXT = 10;
 constexpr auto START_OF_ASCII_TEXT = 36;
 
