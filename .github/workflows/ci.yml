@@ -63,7 +63,7 @@ jobs:
             $details = $lines -join [Environment]::NewLine
             Write-Host "--- $binary ---"
             $lines | Select-String -Pattern 'Guard', 'CF Instrumented', 'FID table present', 'CET compatible' | ForEach-Object { Write-Host $_.Line }
-            if ($details -notmatch '(?im)^\s*Guard\s*$') { throw "Missing CFG PE characteristic in $binary" }
+            if ($details -notmatch '(?im)^\s*Control Flow Guard\s*$') { throw "Missing CFG PE characteristic in $binary" }
             if ($details -notmatch '(?im)^\s*CF Instrumented\b') { throw "Missing CFG instrumentation in $binary" }
             if ($details -notmatch '(?im)^\s*FID table present\b') { throw "Missing CFG function table in $binary" }
             if ($details -notmatch '(?im)\bCET compatible\b') { throw "Missing CET compatibility marker in $binary" }
