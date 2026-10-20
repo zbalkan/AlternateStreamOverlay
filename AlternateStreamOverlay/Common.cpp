@@ -1,17 +1,15 @@
 #include "stdafx.h"
 #include "altstrm_common.h"
 
+// The reader has no OS-dependent initialization or global state.
+AlternateStreamReader g_streamReader;
 
-// Static.  But we're always going to have ntdll in memory, so it's
-// no biggie....
-NTDllFuncs g_ntDllFuncs;
-
-bool hasAlternateStreams(LPCWSTR pwszPath)
+bool hasAlternateStreams(LPCWSTR path)
 {
-	return g_ntDllFuncs.HasAlternateStreams(pwszPath);
+    return g_streamReader.HasAlternateStreams(path);
 }
 
-std::vector<std::wstring> listAlternateStreams(LPCWSTR pwszPath)
+std::vector<std::wstring> listAlternateStreams(LPCWSTR path)
 {
-	return g_ntDllFuncs.ListAlternateStreams(pwszPath);
+    return g_streamReader.ListAlternateStreams(path);
 }
