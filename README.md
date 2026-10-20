@@ -1,5 +1,7 @@
 # AlternateStreamOverlay Shell Extension
 
+[![CI & Static Analysis](https://github.com/zbalkan/AlternateStreamOverlay/actions/workflows/ci.yml/badge.svg)](https://github.com/zbalkan/AlternateStreamOverlay/actions/workflows/ci.yml)
+
 A fork of Lee Benfield's [AlternateStreamOverlay](https://www.benf.org/other/alternatestreamoverlay/index.html), which shows NTFS alternate data streams in Windows Explorer using an icon overlay and a property page.
 
 ## Supported platform
