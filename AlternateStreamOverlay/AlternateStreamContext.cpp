@@ -52,7 +52,7 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST pidlFolder, IData
 	m_isDirectory = directory;
 	m_streams = listAlternateStreams(szFile);
 	// We have the filename, do we want to present a menu item for it?
-	if (m_streams.size() <= (directory ? 0 : 1)) 
+	if (m_streams.size() <= (directory ? 0u : 1u)) 
 	{
 		hr = E_FAIL;
 	}
@@ -67,7 +67,7 @@ STDMETHODIMP CAlternateStreamContext::QueryContextMenu(
             UINT idCmdLast,
             UINT uFlags)
 {
-	if (uFlags & CMF_DEFAULTONLY || m_streams.size() <= (m_isDirectory ? 0 : 1))
+	if (uFlags & CMF_DEFAULTONLY || m_streams.size() <= (m_isDirectory ? 0u : 1u))
 	{
 		return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, 0);
 	}
@@ -263,11 +263,7 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
 {
 	PROPSHEETPAGE * ppsp = (PROPSHEETPAGE*)lParam;
 	CAlternateStreamContext * pthis = reinterpret_cast<CAlternateStreamContext*>(ppsp->lParam);
-#ifdef _WIN64
-	SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG)pthis);
-#else
-	SetWindowLong(hWnd, GWL_USERDATA, (LONG)pthis);
-#endif
+	SetWindowLongPtr(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(pthis));
 
 	HWND comboBox = GetDlgItem(hWnd, IDC_COMBO1);
 	HWND checkBox = GetDlgItem(hWnd, IDC_CHECK1);
@@ -304,11 +300,7 @@ UINT CALLBACK PropPageCallbackProc(HWND hWnd, UINT uMsg, LPPROPSHEETPAGE ppsp)
 	return 1;
 }
 
-#ifdef _WIN64
 typedef INT_PTR DLGRETURN;
-#else
-typedef BOOL DLGRETURN;
-#endif
 
 DLGRETURN CALLBACK PropPageDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
@@ -337,12 +329,8 @@ DLGRETURN CALLBACK PropPageDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
 			case IDC_CHECK1: 
 				{
 					
-#ifdef _WIN64
-					long lUserData  = (long)GetWindowLongPtr(hWnd, GWLP_USERDATA);
-#else
-					long lUserData = (long)GetWindowLong(hWnd, GWL_USERDATA);
-#endif
-					CAlternateStreamContext *pthis = reinterpret_cast<CAlternateStreamContext*>(lUserData);
+					CAlternateStreamContext *pthis = reinterpret_cast<CAlternateStreamContext*>(
+						GetWindowLongPtr(hWnd, GWLP_USERDATA));
 					LRESULT idx = SendMessage(comboBox, CB_GETCURSEL, 0,0);
 					bool checked = (SendMessage(checkBox, BM_GETCHECK, 0, 0) == BST_CHECKED);
 					if (idx >= 0)

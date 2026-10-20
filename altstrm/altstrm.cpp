@@ -12,7 +12,7 @@
 #include <windows.h>
 #include "altstrm_common.h"
 
-NTDllFuncs g_ntDllFuncs;
+AlternateStreamReader g_streamReader;
 
 int _tmain(int argc, _TCHAR* argv[])
 {
@@ -30,7 +30,7 @@ int _tmain(int argc, _TCHAR* argv[])
    // if this is a directory, postfix '\*', if not carry on.
 
 
-   int pos = arg.find_last_of(L'\\');
+   std::wstring::size_type pos = arg.find_last_of(L'\\');
    std::wstring directory = L".\\";
    if (pos != std::wstring::npos)
    {
@@ -49,8 +49,8 @@ int _tmain(int argc, _TCHAR* argv[])
    {
      bool isDir = (FindFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
 	 std::wstring fullPath = directory + FindFileData.cFileName;
-	 std::vector<std::wstring> subnames = g_ntDllFuncs.ListAlternateStreams(fullPath.c_str());
-	 if (subnames.size() > (isDir ? 0 : 1))
+	 std::vector<std::wstring> subnames = g_streamReader.ListAlternateStreams(fullPath.c_str());
+	 if (subnames.size() > (isDir ? 0u : 1u))
 	 {
 		 std::wcout << fullPath << L"\n";
 		 for (std::vector<std::wstring>::const_iterator vit = subnames.begin(); vit != subnames.end(); ++vit)

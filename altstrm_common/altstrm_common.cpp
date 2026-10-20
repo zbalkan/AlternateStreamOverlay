@@ -17,190 +17,113 @@
  *
  */
 
-#include <string>
-#include <sstream>
+#include <cstddef>
+#include <vector>
 
-
-class CSLock {
-private:
-	CRITICAL_SECTION & cs; 
-public:
-	CSLock(CRITICAL_SECTION & c) : cs(c) {
-		EnterCriticalSection(&cs);
-	}
-	~CSLock() {
-		LeaveCriticalSection(&cs);
-	}
-};
-
-
-NTInnerXP::NTInnerXP() {
-	OutputDebugStringA("Using NTQueryInformationFile, as we're < vista");
-	InitializeCriticalSection(&csQuery);
-	hNtDll = LoadLibrary(L"ntdll.dll");
-	if (hNtDll == 0)
-	{
-		OutputDebugStringA("Unable to load NTDll.dll!");
-		ntQueryInformationFile = 0;
-	}
-	else
-	{
-		ntQueryInformationFile = (tNtQueryInformationFile)GetProcAddress(hNtDll, "NtQueryInformationFile");
-		if (!ntQueryInformationFile)
-		{
-			OutputDebugStringA("Unable to get NTQueryInformationFile");
-		}
-	}
-}
-
-NTInnerXP::~NTInnerXP() {
-	OutputDebugStringA("Destroying altstrm NTDllFuncs");
-	if (hNtDll != 0) FreeLibrary(hNtDll);
-	DeleteCriticalSection(&csQuery);
-	hNtDll = 0;
-}
-
-
-bool NTInnerXP::GetInformationByHandle(HANDLE hFile, PFILE_STREAM_INFO infoBlock, unsigned long length) {
-	if (!ntQueryInformationFile) return false;
-	IO_STATUS_BLOCK ioStatus;
-	memset(infoBlock, 0, sizeof(infoBlock));
-	{
-		CSLock cslock(csQuery); // QueryInformationFile isn't guaranteed threadsafe IIUC.
-		HRESULT hr = ntQueryInformationFile(hFile, &ioStatus, infoBlock, length, FileStreamInformation);
-		if (!SUCCEEDED(hr)) {
-			return false;
-		}
-	}
-	return true;
-}
-
-NTInnerAPI::NTInnerAPI() {
-	HMODULE kernelDll = GetModuleHandle(L"kernel32.dll");
-	getFileInformationByHandleEx = (tGetFileInformationByHandleEx)GetProcAddress(kernelDll, "GetFileInformationByHandleEx");
-	if (!getFileInformationByHandleEx)
-	{
-		OutputDebugStringA("Unable to get GetFileInformationByHandleEx");
-	}
-}
-
-bool NTInnerAPI::GetInformationByHandle(HANDLE hFile, PFILE_STREAM_INFO infoBlock, unsigned long length) {
-	if (!getFileInformationByHandleEx) return false;
-	// Can I just use getFileInformationByHandleEx now??
-	// Yes, if we can guarantee vista....
-	if (FALSE == getFileInformationByHandleEx(hFile,FileStreamInfo, infoBlock, length)) {
-		return false;
-	}
-	return true;
-}
-
-NTDllFuncs::NTDllFuncs() : inner(NULL)
+namespace
 {
-	OutputDebugStringA("Initialising altstrm NTDllFuncs");
-	// in vista and above, we can use a documented feature!
-	OSVERSIONINFO vi;
-	ZeroMemory(&vi, sizeof(vi));
-	vi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
-	GetVersionEx(&vi);
-	std::stringstream ss;
-	bool bVistaOrHigher = vi.dwMajorVersion >= 6;
+    constexpr size_t InitialBufferSize = 4096;
+    constexpr size_t MaxBufferSize = 4 * 1024 * 1024;
+    constexpr size_t StreamInfoHeaderSize = offsetof(FILE_STREAM_INFO, StreamName);
 
-	ss << "Windows version " << vi.dwMajorVersion << "." << vi.dwMinorVersion << " Using API " << (bVistaOrHigher ? "Y" : "N");
-	OutputDebugStringA(ss.str().c_str());
+    bool QueryStreamInfo(HANDLE file, std::vector<BYTE>& buffer)
+    {
+        buffer.resize(InitialBufferSize);
 
-	if (bVistaOrHigher) {
-		inner = new NTInnerAPI();
-	} else {
-		inner = new NTInnerXP();
-	}
+        for (;;)
+        {
+            if (GetFileInformationByHandleEx(file, FileStreamInfo,
+                                             buffer.data(),
+                                             static_cast<DWORD>(buffer.size())))
+                return true;
+
+            const DWORD error = GetLastError();
+            if (error != ERROR_MORE_DATA && error != ERROR_INSUFFICIENT_BUFFER)
+                return false;
+
+            if (buffer.size() >= MaxBufferSize)
+                return false;
+
+            buffer.resize(buffer.size() * 2);
+        }
+    }
 }
 
-NTDllFuncs::~NTDllFuncs()
+std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(HANDLE file) const
 {
-	delete inner;
-	inner = 0;
+    std::vector<std::wstring> streams;
+    if (file == nullptr || file == INVALID_HANDLE_VALUE)
+        return streams;
+
+    std::vector<BYTE> buffer;
+    if (!QueryStreamInfo(file, buffer))
+        return streams;
+
+    size_t offset = 0;
+    for (;;)
+    {
+        const size_t remaining = buffer.size() - offset;
+        if (remaining < StreamInfoHeaderSize)
+            return {};
+
+        const auto* entry =
+            reinterpret_cast<const FILE_STREAM_INFO*>(buffer.data() + offset);
+        const size_t nameBytes = entry->StreamNameLength;
+        const size_t next = entry->NextEntryOffset;
+
+        if (nameBytes == 0 ||
+            nameBytes % sizeof(WCHAR) != 0 ||
+            nameBytes > remaining - StreamInfoHeaderSize)
+            return {};
+
+        if (next != 0 &&
+            (next < StreamInfoHeaderSize ||
+             next > remaining ||
+             nameBytes > next - StreamInfoHeaderSize))
+            return {};
+
+        streams.emplace_back(entry->StreamName, nameBytes / sizeof(WCHAR));
+
+        if (next == 0)
+            return streams;
+
+        offset += next;
+    }
 }
 
-
-bool NTDllFuncs::HasAlternateStreams(HANDLE hFile)
+std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(LPCWSTR filename) const
 {
-	// Enough space for all streams.
-	BYTE infoBlock[64 * 1024];
-	PFILE_STREAM_INFO pStreamInfo = (PFILE_STREAM_INFO)infoBlock;
-	if (!inner->GetInformationByHandle(hFile, pStreamInfo, sizeof(infoBlock))) {
-		return false;
-	}
-	
-	/* 
-	 * And we also need to check if this file is a directory.
-	 */
-	BY_HANDLE_FILE_INFORMATION fileInformation;
-	if (!GetFileInformationByHandle(hFile, &fileInformation)) {
-		return false;
-	}
-	bool isDirectory = 0 != (fileInformation.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
-	//if (!bVistaOrHigher) {
-	//	// can't do directories.
-	//	if (isDirectory) return false;
-	//}
+    HandleW file(CreateFileW(filename, 0,
+                             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                             nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS,
+                             nullptr));
+    if (file.get() == INVALID_HANDLE_VALUE)
+        return {};
 
-	/*
-	 * For a directory, we don't expect any StreamNameLength (0 name) normally, so if there is one,
-	 * alternate streams are present.  
-	 * (i.e. we don't require 2 names).
-	 */
-	if (pStreamInfo->StreamNameLength == 0) return false;
-	if (pStreamInfo->NextEntryOffset == 0 && !isDirectory) return false;
-
-	return true;
+    return ListAlternateStreams(file.get());
 }
 
-bool NTDllFuncs::HasAlternateStreams(LPCWSTR fname)
+bool AlternateStreamReader::HasAlternateStreams(HANDLE file) const
 {
-	HandleW hFile = ::CreateFile(fname, 0, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
-	if (hFile == INVALID_HANDLE_VALUE) {
-		return false; 
-	}
+    BY_HANDLE_FILE_INFORMATION info = {};
+    if (!GetFileInformationByHandle(file, &info))
+        return false;
 
-	return HasAlternateStreams(hFile);
+    const bool isDirectory =
+        (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+    const size_t defaultStreams = isDirectory ? 0u : 1u;
+
+    return ListAlternateStreams(file).size() > defaultStreams;
 }
 
-std::vector<std::wstring> NTDllFuncs::ListAlternateStreams(HANDLE hFile)
+bool AlternateStreamReader::HasAlternateStreams(LPCWSTR filename) const
 {
-	// Enough space for all streams.
-	BYTE infoBlock[64 * 1024];
-	PFILE_STREAM_INFO pStreamInfo = (PFILE_STREAM_INFO)infoBlock;
-	if (!inner->GetInformationByHandle(hFile, pStreamInfo, sizeof(infoBlock))) {
-		return std::vector<std::wstring>();
-	}
+    HandleW file(CreateFileW(filename, 0,
+                             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                             nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS,
+                             nullptr));
+    if (file.get() == INVALID_HANDLE_VALUE)
+        return false;
 
-	WCHAR wszStreamName[MAX_PATH];
-	int count = 0;
-	std::vector<std::wstring> result;
-	for (;;)
-	{
-		if (pStreamInfo->StreamNameLength == 0) break;
-
-		++count;
-		memcpy(wszStreamName, pStreamInfo->StreamName, pStreamInfo->StreamNameLength);
-		wszStreamName[pStreamInfo->StreamNameLength / sizeof(WCHAR)] = L'\0';
-		result.push_back(std::wstring(wszStreamName));
-
-		if (pStreamInfo->NextEntryOffset == 0) break;
-		pStreamInfo = (PFILE_STREAM_INFO)((LPBYTE)pStreamInfo + pStreamInfo->NextEntryOffset);
-	}
-	return result;
-}
-
-std::vector<std::wstring> NTDllFuncs::ListAlternateStreams(LPCWSTR fname)
-{
-	HandleW hFile = ::CreateFile(fname, 0, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
-	if (hFile == INVALID_HANDLE_VALUE) 
-	{
-		return std::vector<std::wstring>();
-	}
-
-	std::vector<std::wstring> result = ListAlternateStreams(hFile);
-
-	return result;
+    return HasAlternateStreams(file.get());
 }
