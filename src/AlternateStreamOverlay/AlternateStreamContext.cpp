@@ -79,6 +79,96 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST pidlFolder, IData
     return hr;
 }
 
+STDMETHODIMP CAlternateStreamContext::QueryContextMenu(
+    HMENU hmenu,
+    UINT indexMenu,
+    UINT idCmdFirst,
+    UINT idCmdLast,
+    UINT uFlags)
+{
+    if ((uFlags & CMF_DEFAULTONLY) || m_streams.empty())
+        return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, 0);
+
+    if (hmenu == nullptr)
+        return E_INVALIDARG;
+    if (idCmdFirst > idCmdLast)
+        return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
+
+    MENUITEMINFOW item = { sizeof(item) };
+    item.fMask = MIIM_ID | MIIM_STRING;
+    item.wID = idCmdFirst;
+    // Alt+A when the classic context menu is open. Explorer chooses
+    // whether a mnemonic is available when other commands use the same key.
+    item.dwTypeData = const_cast<LPWSTR>(L"&Alternate Streams...");
+    if (!InsertMenuItemW(hmenu, indexMenu, TRUE, &item))
+        return HRESULT_FROM_WIN32(GetLastError());
+
+    return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, 1);
+}
+
+STDMETHODIMP CAlternateStreamContext::InvokeCommand(
+    CMINVOKECOMMANDINFO* pCmdInfo)
+{
+    if (pCmdInfo == nullptr)
+        return E_INVALIDARG;
+    if (m_path.empty() || m_streams.empty())
+        return E_FAIL;
+
+    bool invoked = false;
+    if (HIWORD(pCmdInfo->lpVerb) == 0)
+    {
+        invoked = LOWORD(pCmdInfo->lpVerb) == 0;
+    }
+    else if (pCmdInfo->cbSize >= sizeof(CMINVOKECOMMANDINFOEX) &&
+             (pCmdInfo->fMask & CMIC_MASK_UNICODE))
+    {
+        const auto* info = reinterpret_cast<const CMINVOKECOMMANDINFOEX*>(pCmdInfo);
+        if (info->lpVerbW != nullptr && HIWORD(info->lpVerbW) != 0)
+            invoked = _wcsicmp(info->lpVerbW, L"alternatestreams") == 0;
+    }
+    if (!invoked && HIWORD(pCmdInfo->lpVerb) != 0)
+        invoked = _stricmp(pCmdInfo->lpVerb, "alternatestreams") == 0;
+    if (!invoked)
+        return E_INVALIDARG;
+
+    // Request our property page by its PSP_USETITLE name. Shell versions
+    // may fall back to the default tab if they cannot activate the page.
+    if (!SHObjectProperties(pCmdInfo->hwnd, SHOP_FILEPATH,
+                            m_path.c_str(), L"AlternateStreams"))
+        return HRESULT_FROM_WIN32(GetLastError());
+
+    return S_OK;
+}
+
+STDMETHODIMP CAlternateStreamContext::GetCommandString(
+    UINT_PTR idCmd,
+    UINT uFlags,
+    UINT* pReserved,
+    LPSTR pszName,
+    UINT cchMax)
+{
+    if (idCmd != 0)
+        return E_INVALIDARG;
+
+    const UINT kind = uFlags & 0x00000007;
+    if (kind == GCS_VALIDATEA)
+        return S_OK;
+    if (pszName == nullptr || cchMax == 0)
+        return E_INVALIDARG;
+
+    if (kind == GCS_HELPTEXTA)
+        return StringCchCopyA(pszName, cchMax, "Inspect alternate data streams");
+    if (kind == GCS_HELPTEXTW)
+        return StringCchCopyW(reinterpret_cast<LPWSTR>(pszName), cchMax,
+                              L"Inspect alternate data streams");
+    if (kind == GCS_VERBA)
+        return StringCchCopyA(pszName, cchMax, "alternatestreams");
+    if (kind == GCS_VERBW)
+        return StringCchCopyW(reinterpret_cast<LPWSTR>(pszName), cchMax,
+                              L"alternatestreams");
+    return E_INVALIDARG;
+}
+
 const std::vector<std::wstring>& CAlternateStreamContext::get_streams() const
 {
     return m_streams;

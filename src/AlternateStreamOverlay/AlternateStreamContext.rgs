@@ -4,6 +4,10 @@ HKCR
 	{
 		NoRemove ShellEx
 		{
+			NoRemove ContextMenuHandlers
+			{
+				ForceRemove AlternateStreams = s '{4A26024B-5499-45BE-A23F-4A65E88888D0}'
+			}
 			NoRemove PropertySheetHandlers
 			{
 				{4A26024B-5499-45BE-A23F-4A65E88888D0}
@@ -14,6 +18,10 @@ HKCR
 	{
 		NoRemove ShellEx
 		{
+			NoRemove ContextMenuHandlers
+			{
+				ForceRemove AlternateStreams = s '{4A26024B-5499-45BE-A23F-4A65E88888D0}'
+			}
 			NoRemove PropertySheetHandlers
 			{
 				{4A26024B-5499-45BE-A23F-4A65E88888D0}
