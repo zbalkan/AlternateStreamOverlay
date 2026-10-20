@@ -40,6 +40,29 @@ jobs:
             throw "MSBuild failed with exit code $LASTEXITCODE"
           }
 
+
+      - name: Run native C++ MSTest
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path $env:ProgramFiles 'Microsoft Visual Studio\Installer\vswhere.exe'
+          if (-not (Test-Path -LiteralPath $vswhere)) { $vswhere = Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Microsoft Visual Studio\Installer\vswhere.exe' }
+          $vsPath = & $vswhere -latest -products * -property installationPath
+          if ($LASTEXITCODE -ne 0 -or -not $vsPath) { throw 'Visual Studio installation not found' }
+          $vstest = Join-Path $vsPath 'Common7\IDE\CommonExtensions\Microsoft\TestWindow\vstest.console.exe'
+          if (-not (Test-Path -LiteralPath $vstest)) { throw "VSTest executable not found: $vstest" }
+          $testDll = '.\src\x64\${{ matrix.configuration }}\AlternateStreamTests.dll'
+          if (-not (Test-Path -LiteralPath $testDll)) { throw "MSTest assembly not built: $testDll" }
+          & $vstest $testDll '/Platform:x64' '/Logger:console;verbosity=normal'
+          if ($LASTEXITCODE -ne 0) { throw "MSTest failed with exit code $LASTEXITCODE" }
+
+      - name: Run NTFS ADS smoke tests
+        shell: pwsh
+        run: |
+          $exe = '.\src\x64\${{ matrix.configuration }}\altstrm.exe'
+          if (-not (Test-Path -LiteralPath $exe)) { throw "CLI executable not built: $exe" }
+          & .\src\tests\Smoke-AlternateStreams.ps1 -ExePath $exe
+          if (-not $?) { throw 'ADS smoke tests failed' }
+
   analyze:
     name: MSVC and clang-tidy (Release x64)
     runs-on: windows-2025
