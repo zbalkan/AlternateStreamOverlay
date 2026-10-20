@@ -288,8 +288,14 @@ void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND tex
 
 BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
 {
-    PROPSHEETPAGE* ppsp = (PROPSHEETPAGE*)lParam;
+    if (lParam == 0)
+        return FALSE;
+
+    PROPSHEETPAGE* ppsp = reinterpret_cast<PROPSHEETPAGE*>(lParam);
     CAlternateStreamContext* pthis = reinterpret_cast<CAlternateStreamContext*>(ppsp->lParam);
+    if (pthis == nullptr)
+        return FALSE;
+
     SetWindowLongPtr(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(pthis));
 
     HWND comboBox = GetDlgItem(hWnd, IDC_COMBO1);
@@ -327,13 +333,18 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
 
 UINT CALLBACK PropPageCallbackProc(HWND hWnd, UINT uMsg, LPPROPSHEETPAGE ppsp)
 {
-    CAlternateStreamContext* pthis = reinterpret_cast<CAlternateStreamContext*>(ppsp->lParam);
+    if (ppsp == nullptr)
+        return 0;
 
     if (uMsg == PSPCB_RELEASE)
     {
-        // The dialog releases its own font in WM_DESTROY.
-        pthis->Release();
+        CAlternateStreamContext* pthis = reinterpret_cast<CAlternateStreamContext*>(ppsp->lParam);
         ppsp->lParam = 0;
+        if (pthis != nullptr)
+        {
+            // The dialog releases its own font in WM_DESTROY.
+            pthis->Release();
+        }
     }
 
     return 1;
@@ -395,6 +406,9 @@ STDMETHODIMP CAlternateStreamContext::AddPages(
     LPFNSVADDPROPSHEETPAGE pfnAddPage,
     LPARAM lParam)
 {
+    if (pfnAddPage == nullptr)
+        return E_POINTER;
+
     PROPSHEETPAGE psp = {};
     HPROPSHEETPAGE hPage = nullptr;
     LPCWSTR szPageTitle = L"AlternateStreams";
