@@ -78,6 +78,6 @@ $RECYCLE.BIN/
 .DS_Store
 
 # Generated stubs
-/AlternateStreamOverlay/AlternateStreamOverlay_i.c
-/AlternateStreamOverlay/AlternateStreamOverlay_i.h
+/src/AlternateStreamOverlay/AlternateStreamOverlay_i.c
+/src/AlternateStreamOverlay/AlternateStreamOverlay_i.h
 /AlternateStreamOverlay/AlternateStreamOverlay_p.c
