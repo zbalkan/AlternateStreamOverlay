@@ -213,15 +213,15 @@ void DumpHex(BYTE* buf, DWORD size, std::stringstream& tgt)
 
 void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND textBox)
 {
-    const std::vector<std::wstring>& streams = pthis->get_streams();
-    const std::wstring& fname = pthis->get_path();
-
     if (textBox == nullptr || pthis == nullptr)
         return;
 
     SetWindowTextW(textBox, L"");
+    const std::vector<std::wstring>& streams = pthis->get_streams();
     if (idx >= streams.size())
         return;
+
+    const std::wstring& fname = pthis->get_path();
 
     std::wstringstream ss;
     ss << fname << streams[idx];
@@ -245,31 +245,40 @@ void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND tex
         return;
     }
 
-    if (asHex)
+    // Treat the byte stream as UTF-8 text only when conversion is valid.
+    // An edit control cannot display embedded NUL characters.
+    if (!asHex && bytesRead == 0)
+        return;
+
+    if (!asHex &&
+        std::find(buffer.begin(), buffer.begin() + bytesRead, static_cast<BYTE>(0)) ==
+            buffer.begin() + bytesRead)
     {
-        std::stringstream output;
-        DumpHex(buffer.data(), bytesRead, output);
-        const std::string formatted = output.str();
-        SetWindowTextA(textBox, formatted.c_str());
-    }
-    else
-    {
-        // Text preview uses the active ANSI code page. Binary data containing
-        // NULs cannot be displayed faithfully by an edit control, so show hex.
-        const auto end = buffer.begin() + bytesRead;
-        if (std::find(buffer.begin(), end, static_cast<BYTE>(0)) != end)
+        const int byteCount = static_cast<int>(bytesRead);
+        const int charCount = MultiByteToWideChar(
+            CP_UTF8, MB_ERR_INVALID_CHARS,
+            reinterpret_cast<const char*>(buffer.data()), byteCount,
+            nullptr, 0);
+        if (charCount > 0)
         {
-            std::stringstream output;
-            DumpHex(buffer.data(), bytesRead, output);
-            const std::string formatted = output.str();
-            SetWindowTextA(textBox, formatted.c_str());
-        }
-        else
-        {
-            buffer[bytesRead] = 0;
-            SetWindowTextA(textBox, reinterpret_cast<const char*>(buffer.data()));
+            std::wstring text(static_cast<size_t>(charCount), L'\0');
+            const int converted = MultiByteToWideChar(
+                CP_UTF8, MB_ERR_INVALID_CHARS,
+                reinterpret_cast<const char*>(buffer.data()), byteCount,
+                &text[0], charCount);
+            if (converted == charCount)
+            {
+                SetWindowTextW(textBox, text.c_str());
+                return;
+            }
         }
     }
+
+    // Binary, non-UTF-8, or explicitly requested hexadecimal preview.
+    std::stringstream output;
+    DumpHex(buffer.data(), bytesRead, output);
+    const std::string formatted = output.str();
+    SetWindowTextA(textBox, formatted.c_str());
 }
 } // namespace
 
