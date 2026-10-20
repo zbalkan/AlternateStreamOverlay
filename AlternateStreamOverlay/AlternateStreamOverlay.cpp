@@ -17,7 +17,6 @@ STDAPI DllCanUnloadNow(void)
     return _AtlModule.DllCanUnloadNow();
 }
 
-
 // Returns a class factory to create an object of the requested type
 STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv)
 {
@@ -27,7 +26,6 @@ STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv)
 #endif
     return _AtlModule.DllGetClassObject(rclsid, riid, ppv);
 }
-
 
 // DllRegisterServer - Adds entries to the system registry
 STDAPI DllRegisterServer(void)
@@ -39,14 +37,13 @@ STDAPI DllRegisterServer(void)
         return hr;
     hr = PrxDllRegisterServer();
 #endif
-	return hr;
+    return hr;
 }
-
 
 // DllUnregisterServer - Removes entries from the system registry
 STDAPI DllUnregisterServer(void)
 {
-	HRESULT hr = _AtlModule.DllUnregisterServer();
+    HRESULT hr = _AtlModule.DllUnregisterServer();
 #ifdef _MERGE_PROXYSTUB
     if (FAILED(hr))
         return hr;
@@ -55,11 +52,11 @@ STDAPI DllUnregisterServer(void)
         return hr;
     hr = PrxDllUnregisterServer();
 #endif
-	return hr;
+    return hr;
 }
 
 // DllInstall - Adds/Removes entries to the system registry per user
-//              per machine.	
+//              per machine.
 STDAPI DllInstall(BOOL bInstall, LPCWSTR pszCmdLine)
 {
     HRESULT hr = E_FAIL;
@@ -67,26 +64,24 @@ STDAPI DllInstall(BOOL bInstall, LPCWSTR pszCmdLine)
 
     if (pszCmdLine != NULL)
     {
-    	if (_wcsnicmp(pszCmdLine, szUserSwitch, _countof(szUserSwitch)) == 0)
-    	{
-    		AtlSetPerUserRegistration(true);
-    	}
+        if (_wcsnicmp(pszCmdLine, szUserSwitch, _countof(szUserSwitch)) == 0)
+        {
+            AtlSetPerUserRegistration(true);
+        }
     }
 
     if (bInstall)
-    {	
-    	hr = DllRegisterServer();
-    	if (FAILED(hr))
-    	{	
-    		DllUnregisterServer();
-    	}
+    {
+        hr = DllRegisterServer();
+        if (FAILED(hr))
+        {
+            DllUnregisterServer();
+        }
     }
     else
     {
-    	hr = DllUnregisterServer();
+        hr = DllUnregisterServer();
     }
 
     return hr;
 }
-
-

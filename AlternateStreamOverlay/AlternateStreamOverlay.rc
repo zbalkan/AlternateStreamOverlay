@@ -30,28 +30,27 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 // TEXTINCLUDE
 //
 
-1 TEXTINCLUDE 
+1 TEXTINCLUDE
 BEGIN
-    "resource.h\0"
+"resource.h\0"
 END
 
-2 TEXTINCLUDE 
+2 TEXTINCLUDE
 BEGIN
-    "#ifndef APSTUDIO_INVOKED\r\n"
-    "#include ""targetver.h""\r\n"
-    "#endif\r\n"
-    "#include ""winres.h""\r\n"
-    "\0"
+"#ifndef APSTUDIO_INVOKED\r\n"
+"#include ""targetver.h""\r\n"
+"#endif\r\n"
+"#include ""winres.h""\r\n"
+"\0"
 END
 
-3 TEXTINCLUDE 
+3 TEXTINCLUDE
 BEGIN
-    "1 TYPELIB ""AlternateStreamOverlay.tlb""\r\n"
-    "\0"
+"1 TYPELIB ""AlternateStreamOverlay.tlb""\r\n"
+"\0"
 END
 
 #endif    // APSTUDIO_INVOKED
-
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -59,38 +58,37 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,0,0,6
- PRODUCTVERSION 1,0,0,6
- FILEFLAGSMASK 0x3fL
+FILEVERSION 1, 0, 0, 6
+PRODUCTVERSION 1, 0, 0, 6
+FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
- FILEFLAGS 0x1L
+FILEFLAGS 0x1L
 #else
- FILEFLAGS 0x0L
+FILEFLAGS 0x0L
 #endif
- FILEOS 0x4L
- FILETYPE 0x2L
- FILESUBTYPE 0x0L
+FILEOS 0x4L
+FILETYPE 0x2L
+FILESUBTYPE 0x0L
 BEGIN
-    BLOCK "StringFileInfo"
-    BEGIN
-        BLOCK "040904e4"
-        BEGIN
-            VALUE "CompanyName", "www.benf.org"
-            VALUE "FileDescription", "Explorer plugin for Alternate stream info"
-            VALUE "FileVersion", "1.0.0.6"
-            VALUE "InternalName", "AlternateStreamOverlay.dll"
-            VALUE "LegalCopyright", "(c) 2013 benf.org"
-            VALUE "OriginalFilename", "AlternateStreamOverlay.dll"
-            VALUE "ProductName", "AlternateStreamOverlay.dll"
-            VALUE "ProductVersion", "1.0.0.6"
-        END
-    END
-    BLOCK "VarFileInfo"
-    BEGIN
-        VALUE "Translation", 0x409, 1252
-    END
+BLOCK "StringFileInfo"
+BEGIN
+BLOCK "040904e4"
+BEGIN
+VALUE "CompanyName", "www.benf.org"
+VALUE "FileDescription", "Explorer plugin for Alternate stream info"
+VALUE "FileVersion", "1.0.0.6"
+VALUE "InternalName", "AlternateStreamOverlay.dll"
+VALUE "LegalCopyright", "(c) 2013 benf.org"
+VALUE "OriginalFilename", "AlternateStreamOverlay.dll"
+VALUE "ProductName", "AlternateStreamOverlay.dll"
+VALUE "ProductVersion", "1.0.0.6"
 END
-
+END
+BLOCK "VarFileInfo"
+BEGIN
+VALUE "Translation", 0x409, 1252
+END
+END
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -109,11 +107,10 @@ STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD | WS_DISABLED | WS_CAPTION
 CAPTION "Alternate Streams"
 FONT 8, "MS Shell Dlg", 400, 0, 0x0
 BEGIN
-    COMBOBOX        IDC_COMBO1,7,7,168,67,CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
-    CONTROL         "Show as hex",IDC_CHECK1,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,186,7,59,10
-    EDITTEXT        IDC_EDIT1,7,22,238,199,ES_MULTILINE | ES_AUTOHSCROLL | ES_READONLY | WS_VSCROLL
+COMBOBOX        IDC_COMBO1, 7, 7, 168, 67, CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+CONTROL         "Show as hex", IDC_CHECK1, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 186, 7, 59, 10
+EDITTEXT        IDC_EDIT1, 7, 22, 238, 199, ES_MULTILINE | ES_AUTOHSCROLL | ES_READONLY | WS_VSCROLL
 END
-
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -121,32 +118,30 @@ END
 //
 
 #ifdef APSTUDIO_INVOKED
-GUIDELINES DESIGNINFO 
+GUIDELINES DESIGNINFO
 BEGIN
-    IDD_PROPPAGE_MEDIUM, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 245
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 221
-    END
+IDD_PROPPAGE_MEDIUM, DIALOG
+BEGIN
+LEFTMARGIN, 7
+RIGHTMARGIN, 245
+TOPMARGIN, 7
+BOTTOMMARGIN, 221
+END
 END
 #endif    // APSTUDIO_INVOKED
-
 
 /////////////////////////////////////////////////////////////////////////////
 //
 // String Table
 //
 
-STRINGTABLE 
+STRINGTABLE
 BEGIN
-    IDS_PROJNAME            "AlternateStreamOverlay"
+IDS_PROJNAME            "AlternateStreamOverlay"
 END
 
 #endif    // English (U.S.) resources
 /////////////////////////////////////////////////////////////////////////////
-
 
 /////////////////////////////////////////////////////////////////////////////
 // English (U.K.) resources
@@ -176,8 +171,6 @@ IDI_ICON1               ICON                    "ASO.ico"
 #endif    // English (U.K.) resources
 /////////////////////////////////////////////////////////////////////////////
 
-
-
 #ifndef APSTUDIO_INVOKED
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -187,4 +180,3 @@ IDI_ICON1               ICON                    "ASO.ico"
 
 /////////////////////////////////////////////////////////////////////////////
 #endif    // not APSTUDIO_INVOKED
-

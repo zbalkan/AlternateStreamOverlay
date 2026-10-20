@@ -9,7 +9,7 @@
  * Updated to use functions now natively avaiable in vs2008.
  *
  * Helper utilities to extract a vector of (or test for presence of)
- * alternate streams.  
+ * alternate streams.
  *
  * I could check if the FS is NTFS, but that'd require caching to not be awful,
  * so I'd need to figure out removable drive notifications.... Manyana!
@@ -33,8 +33,8 @@ namespace
         for (;;)
         {
             if (GetFileInformationByHandleEx(file, FileStreamInfo,
-                                             buffer.data(),
-                                             static_cast<DWORD>(buffer.size())))
+                buffer.data(),
+                static_cast<DWORD>(buffer.size())))
                 return true;
 
             const DWORD error = GetLastError();
@@ -78,8 +78,8 @@ std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(HANDLE fil
 
         if (next != 0 &&
             (next < StreamInfoHeaderSize ||
-             next > remaining ||
-             nameBytes > next - StreamInfoHeaderSize))
+                next > remaining ||
+                nameBytes > next - StreamInfoHeaderSize))
             return {};
 
         streams.emplace_back(entry->StreamName, nameBytes / sizeof(WCHAR));
@@ -94,9 +94,9 @@ std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(HANDLE fil
 std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(LPCWSTR filename) const
 {
     HandleW file(CreateFileW(filename, 0,
-                             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                             nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS,
-                             nullptr));
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS,
+        nullptr));
     if (file.get() == INVALID_HANDLE_VALUE)
         return {};
 
@@ -119,9 +119,9 @@ bool AlternateStreamReader::HasAlternateStreams(HANDLE file) const
 bool AlternateStreamReader::HasAlternateStreams(LPCWSTR filename) const
 {
     HandleW file(CreateFileW(filename, 0,
-                             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                             nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS,
-                             nullptr));
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS,
+        nullptr));
     if (file.get() == INVALID_HANDLE_VALUE)
         return false;
 
