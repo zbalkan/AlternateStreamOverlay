@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "AlternateStreamContext.h"
+#include <algorithm>
 #include <strsafe.h>
 #include <vector>
 #include <sstream>
@@ -7,8 +8,11 @@
 #include <ios>
 #include "Common.h"
 
+namespace
+{
 constexpr auto START_OF_HEX_TEXT = 10;
 constexpr auto START_OF_ASCII_TEXT = 36;
+
 
 STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST pidlFolder, IDataObject* pDataObj, HKEY hkeyProgId)
 {
@@ -143,9 +147,11 @@ const std::wstring& CAlternateStreamContext::get_path() const
     return m_path;
 }
 
+namespace
+{
 char asciificate(BYTE b)
 {
-    if (b >= 32 && b <= 127) return (char)b;
+    if (b >= 32 && b <= 126) return (char)b;
     return '.';
 }
 
@@ -212,11 +218,12 @@ void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND tex
     const std::vector<std::wstring>& streams = pthis->get_streams();
     const std::wstring& fname = pthis->get_path();
 
-    if (idx >= streams.size())
-    {
-        OutputDebugStringA("Invalid index");
+    if (textBox == nullptr || pthis == nullptr)
         return;
-    }
+
+    SetWindowTextW(textBox, L"");
+    if (idx >= streams.size())
+        return;
 
     std::wstringstream ss;
     ss << fname << streams[idx];
@@ -226,9 +233,7 @@ void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND tex
 
     if (hFile == INVALID_HANDLE_VALUE)
     {
-        // Shouldn't be called for this file, so dbgerror
-        OutputDebugStringA("Asked to get properties for invalid path");
-        OutputDebugString(full_path.c_str());
+        SetWindowTextW(textBox, L"Unable to open alternate stream.");
         return;
     }
 
@@ -251,10 +256,24 @@ void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND tex
     }
     else
     {
-        buffer[bytesRead] = 0;
-        SetWindowTextA(textBox, reinterpret_cast<const char*>(buffer.data()));
+        // Text preview uses the active ANSI code page. Binary data containing
+        // NULs cannot be displayed faithfully by an edit control, so show hex.
+        const auto end = buffer.begin() + bytesRead;
+        if (std::find(buffer.begin(), end, static_cast<BYTE>(0)) != end)
+        {
+            std::stringstream output;
+            DumpHex(buffer.data(), bytesRead, output);
+            const std::string formatted = output.str();
+            SetWindowTextA(textBox, formatted.c_str());
+        }
+        else
+        {
+            buffer[bytesRead] = 0;
+            SetWindowTextA(textBox, reinterpret_cast<const char*>(buffer.data()));
+        }
     }
 }
+} // namespace
 
 void CAlternateStreamContext::attach_font_resource(HFONT font)
 {
@@ -282,10 +301,13 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     pthis->attach_font_resource(font);
     SendMessage(textBox, WM_SETFONT, (WPARAM)font, MAKELPARAM(TRUE, 0));
 
-    SendMessage(comboBox, CB_SETCURSEL, 0, 0);
-    SendMessage(checkBox, BM_SETCHECK, 0, 0);
-    SelectText(pthis, 0, false, textBox);
-    return FALSE;
+    SendMessage(checkBox, BM_SETCHECK, BST_UNCHECKED, 0);
+    if (!streams.empty())
+    {
+        SendMessage(comboBox, CB_SETCURSEL, 0, 0);
+        SelectText(pthis, 0, false, textBox);
+    }
+    return TRUE;
 }
 
 UINT CALLBACK PropPageCallbackProc(HWND hWnd, UINT uMsg, LPPROPSHEETPAGE ppsp)
@@ -306,46 +328,33 @@ typedef INT_PTR DLGRETURN;
 
 DLGRETURN CALLBACK PropPageDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    DLGRETURN bRet = FALSE;
+    if (uMsg == WM_INITDIALOG)
+        return OnInitDialog(hWnd, lParam);
 
-    switch (uMsg)
-    {
-    case WM_INITDIALOG:
-        bRet = OnInitDialog(hWnd, lParam);
-        break;
-    case WM_NOTIFY:
-        break;
-    case WM_COMMAND:
-    {
-        HWND comboBox = GetDlgItem(hWnd, IDC_COMBO1);
-        HWND checkBox = GetDlgItem(hWnd, IDC_CHECK1);
-        HWND textBox = GetDlgItem(hWnd, IDC_EDIT1);
+    if (uMsg != WM_COMMAND)
+        return FALSE;
 
-        int wmid = LOWORD(wParam);
-        int wmEvent = HIWORD(wParam);
-        switch (wmid)
-        {
-        case IDC_COMBO1:
-            if (wmEvent == CBN_SELCHANGE)
-            { // sue me ;)
-        case IDC_CHECK1:
-        {
-            CAlternateStreamContext* pthis = reinterpret_cast<CAlternateStreamContext*>(
-                GetWindowLongPtr(hWnd, GWLP_USERDATA));
-            LRESULT idx = SendMessage(comboBox, CB_GETCURSEL, 0, 0);
-            bool checked = (SendMessage(checkBox, BM_GETCHECK, 0, 0) == BST_CHECKED);
-            if (idx >= 0)
-            {
-                SelectText(pthis, (size_t)idx, checked, textBox);
-            }
-        }
-            }
-            break;
-        }
-    }
-    break;
-    }
-    return bRet;
+    const UINT controlId = LOWORD(wParam);
+    const UINT notification = HIWORD(wParam);
+    if ((controlId != IDC_COMBO1 || notification != CBN_SELCHANGE) &&
+        (controlId != IDC_CHECK1 || notification != BN_CLICKED))
+        return FALSE;
+
+    auto* context = reinterpret_cast<CAlternateStreamContext*>(
+        GetWindowLongPtr(hWnd, GWLP_USERDATA));
+    if (context == nullptr)
+        return FALSE;
+
+    HWND comboBox = GetDlgItem(hWnd, IDC_COMBO1);
+    HWND checkBox = GetDlgItem(hWnd, IDC_CHECK1);
+    HWND textBox = GetDlgItem(hWnd, IDC_EDIT1);
+    const LRESULT selected = SendMessage(comboBox, CB_GETCURSEL, 0, 0);
+    if (selected == CB_ERR)
+        return TRUE;
+
+    const bool hex = SendMessage(checkBox, BM_GETCHECK, 0, 0) == BST_CHECKED;
+    SelectText(context, static_cast<size_t>(selected), hex, textBox);
+    return TRUE;
 }
 
 STDMETHODIMP CAlternateStreamContext::AddPages(
