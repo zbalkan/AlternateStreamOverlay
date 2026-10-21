@@ -28,6 +28,7 @@
 namespace
 {
     constexpr size_t InitialBufferSize = 4096;
+    constexpr size_t InvalidParameterRetrySize = 65536;
     constexpr size_t MaxBufferSize = 4 * 1024 * 1024;
     constexpr size_t StreamInfoHeaderSize = offsetof(FILE_STREAM_INFO, StreamName);
 
@@ -48,6 +49,14 @@ namespace
                 buffer.clear();
                 error = ERROR_SUCCESS;
                 return StreamStatus::Ok;
+            }
+            // Retry once with a larger buffer when a long stream name
+            // triggers ERROR_INVALID_PARAMETER on the initial query.
+            if (error == ERROR_INVALID_PARAMETER &&
+                buffer.size() < InvalidParameterRetrySize)
+            {
+                buffer.resize(InvalidParameterRetrySize);
+                continue;
             }
             if (error != ERROR_MORE_DATA && error != ERROR_INSUFFICIENT_BUFFER)
                 return StreamStatus::Error;
@@ -135,7 +144,7 @@ StreamEnumeration AlternateStreamReader::EnumerateStreams(HANDLE file) const
 
 StreamEnumeration AlternateStreamReader::EnumerateStreams(LPCWSTR filename) const
 {
-    if (filename == nullptr || *filename == L'\\0')
+    if (filename == nullptr || *filename == L'\0')
     {
         StreamEnumeration result;
         result.error = ERROR_INVALID_PARAMETER;
