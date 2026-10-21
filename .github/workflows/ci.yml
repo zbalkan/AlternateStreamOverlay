@@ -109,8 +109,17 @@ jobs:
           cppcheck --version
           # Linux Cppcheck cannot expand Windows MIDL proxy or MSTest macros.
           # Analyze production code; generated proxy and test harness are built on Windows CI.
+          # ATL registration metadata is irrelevant to the source-level analysis.
           cppcheck --enable=warning,performance,portability --error-exitcode=0 \
             --suppress=missingIncludeSystem \
+            '-DDECLARE_REGISTRY_RESOURCEID(x)=' \
+            '-DDECLARE_REGISTRY_APPID_RESOURCEID(x,y)=' \
+            '-DDECLARE_NOT_AGGREGATABLE(x)=' \
+            '-DBEGIN_COM_MAP(x)=' \
+            '-DCOM_INTERFACE_ENTRY(x)=' \
+            '-DEND_COM_MAP()=' \
+            '-DDECLARE_PROTECT_FINAL_CONSTRUCT()=' \
+            '-DOBJECT_ENTRY_AUTO(x,y)=' \
             -isrc/AlternateStreamOverlay/dlldata.c \
             -isrc/AlternateStreamTests \
             --xml --xml-version=2 src 2> cppcheck-results.xml
@@ -167,11 +176,16 @@ jobs:
               print(f"  {path}")
           if parser_failures:
               print("WARNING: Cppcheck analysis coverage is incomplete.")
-          # Parser/configuration failures are not actionable source defects.
-          # Keep them visible in the summary; gate only analyzable error IDs.
+          # Parser failures indicate incomplete coverage and must fail CI.
+          # Keep them visible in the summary alongside other diagnostics.
           errors = [item for item in findings
                     if item.get("severity") == "error"
                     and item.get("id") not in parser_ids]
+          if parser_failures:
+              raise SystemExit(
+                  f"Cppcheck reported {len(parser_failures)} parser/configuration "
+                  "failure(s) in the analyzed source; see Analysis coverage"
+              )
           if errors:
               raise SystemExit(f"Cppcheck reported {len(errors)} error-severity finding(s)")
           PY
