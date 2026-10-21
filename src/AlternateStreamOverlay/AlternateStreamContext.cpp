@@ -5,7 +5,6 @@
 #include <vector>
 #include <string>
 #include <memory>
-#include <mutex>
 #include <new>
 #include "Common.h"
 
@@ -214,9 +213,29 @@ namespace
 {
 constexpr UINT WM_PREVIEW_READY = WM_APP + 42;
 
+class ExclusiveSrwLock
+{
+public:
+    explicit ExclusiveSrwLock(SRWLOCK& lock) : lock_(lock)
+    {
+        AcquireSRWLockExclusive(&lock_);
+    }
+
+    ~ExclusiveSrwLock()
+    {
+        ReleaseSRWLockExclusive(&lock_);
+    }
+
+    ExclusiveSrwLock(const ExclusiveSrwLock&) = delete;
+    ExclusiveSrwLock& operator=(const ExclusiveSrwLock&) = delete;
+
+private:
+    SRWLOCK& lock_;
+};
+
 struct PreviewGate
 {
-    std::mutex mutex;
+    SRWLOCK lock = SRWLOCK_INIT;
     bool alive = true;
     HWND window = nullptr;
     bool workerActive = false;
@@ -299,7 +318,7 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
         size_t generation = 0;
         bool asHex = false;
         {
-            std::lock_guard<std::mutex> lock(request->gate->mutex);
+            ExclusiveSrwLock lock(request->gate->lock);
             if (!request->gate->alive)
             {
                 request->gate->workerActive = false;
@@ -322,7 +341,7 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
         std::unique_ptr<PreviewResult> result(new (std::nothrow) PreviewResult);
         if (!result)
         {
-            std::lock_guard<std::mutex> lock(request->gate->mutex);
+            ExclusiveSrwLock lock(request->gate->lock);
             request->gate->workerActive = false;
             return;
         }
@@ -337,7 +356,7 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
             result->text = L"Unable to read alternate stream.";
         }
 
-        std::lock_guard<std::mutex> lock(request->gate->mutex);
+        ExclusiveSrwLock lock(request->gate->lock);
         if (!request->gate->alive)
         {
             request->gate->workerActive = false;
@@ -367,7 +386,7 @@ void SelectText(DialogState* state, size_t idx, bool asHex, HWND textBox)
     }
 
     SetWindowTextW(textBox, L"Loading alternate stream...");
-    std::lock_guard<std::mutex> lock(state->gate->mutex);
+    ExclusiveSrwLock lock(state->gate->lock);
     state->gate->generation = state->generation;
     state->gate->asHex = asHex;
     state->gate->path = state->context->get_path() + streams[idx];
@@ -505,7 +524,7 @@ DLGRETURN CALLBACK PropPageDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
             GetWindowLongPtr(hWnd, GWLP_USERDATA)));
         if (state != nullptr)
         {
-            std::lock_guard<std::mutex> lock(state->gate->mutex);
+            ExclusiveSrwLock lock(state->gate->lock);
             state->gate->alive = false;
             MSG pending = {};
             while (PeekMessageW(&pending, hWnd, WM_PREVIEW_READY,
