@@ -118,6 +118,7 @@ jobs:
             '-DCOM_INTERFACE_ENTRY(x)=' \
             '-DEND_COM_MAP()=' \
             '-DDECLARE_PROTECT_FINAL_CONSTRUCT=' \
+            '-DOBJECT_ENTRY_AUTO(x,y)=' \
             -isrc/AlternateStreamOverlay/dlldata.c \
             -isrc/AlternateStreamTests \
             --xml --xml-version=2 src 2> cppcheck-results.xml
