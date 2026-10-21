@@ -102,6 +102,16 @@ namespace AlternateStreamTests
 
             const BYTE malformed[] = { 'A', 0xF0, 0x80 };
             Assert::IsFalse(TryDecodeUtf8Preview(malformed, sizeof(malformed), true, text));
+            const BYTE fourByteSplit[] = { 'A', 0xF0, 0x9F, 0x98 };
+            Assert::IsTrue(TryDecodeUtf8Preview(fourByteSplit, sizeof(fourByteSplit), true, text));
+            Assert::AreEqual(L"A", text.c_str());
+            const BYTE loneContinuation[] = { 'A', 0x80 };
+            Assert::IsFalse(TryDecodeUtf8Preview(loneContinuation, sizeof(loneContinuation), true, text));
+            const BYTE invalidSecond[] = { 'A', 0xE0, 0x80 };
+            Assert::IsFalse(TryDecodeUtf8Preview(invalidSecond, sizeof(invalidSecond), true, text));
+            const BYTE complete[] = { 'A', 0xE2, 0x82, 0xAC };
+            Assert::IsTrue(TryDecodeUtf8Preview(complete, sizeof(complete), true, text));
+            Assert::AreEqual(L"A\u20AC", text.c_str());
             const BYTE invalidInside[] = { 0xFF, 'A', 0xE2 };
             Assert::IsFalse(TryDecodeUtf8Preview(invalidInside, sizeof(invalidInside), true, text));
         }
