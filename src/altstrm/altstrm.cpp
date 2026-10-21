@@ -61,38 +61,51 @@ namespace
         }
         return true;
     }
-}
 
-int wmain(int argc, wchar_t* argv[])
-{
-    if (argc != 2)
+    void PrintUsage(int argc, wchar_t* argv[])
     {
         const std::wstring program = argc > 0 ? argv[0] : L"altstrm";
         WriteOutput(program + L" [file path/spec]\r\n");
-        return 1;
     }
 
-    // Treat a directory argument as the directory itself, so its named
-    // streams are reported (rather than enumerating its children).
-    const std::wstring pattern(argv[1]);
+    std::wstring SearchDirectory(const std::wstring& pattern)
+    {
+        const size_t separator = pattern.find_last_of(L"\\/");
+        if (separator != std::wstring::npos)
+            return pattern.substr(0, separator + 1);
 
-    const size_t separator = pattern.find_last_of(L"\\/");
-    // A drive-relative spec such as C:sample.txt is resolved relative to
-    // drive C's current directory, not the process current directory.
-    const bool driveRelative = pattern.size() >= 2 &&
-        ((pattern[0] >= L'A' && pattern[0] <= L'Z') ||
-         (pattern[0] >= L'a' && pattern[0] <= L'z')) &&
-        pattern[1] == L':' && separator == std::wstring::npos;
-    const std::wstring directory = separator != std::wstring::npos
-        ? pattern.substr(0, separator + 1)
-        : (driveRelative ? pattern.substr(0, 2) : L".\\");
+        // Drive-relative paths use the drive's current directory.
+        if (pattern.size() >= 2 &&
+            ((pattern[0] >= L'A' && pattern[0] <= L'Z') ||
+             (pattern[0] >= L'a' && pattern[0] <= L'z')) &&
+            pattern[1] == L':')
+            return pattern.substr(0, 2);
 
-    if (!WriteOutput(L"Files with alternate streams matching " +
-                     std::wstring(argv[1]) + L"\r\n"))
-        return 1;
+        return L".\\";
+    }
 
-    AlternateStreamReader reader;
-    auto reportStreams = [&](const std::wstring& fullPath) -> bool
+    bool IsDirectory(const std::wstring& path)
+    {
+        const DWORD attributes = GetFileAttributesW(path.c_str());
+        return attributes != INVALID_FILE_ATTRIBUTES &&
+               (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+    }
+
+    void WriteSearchError(DWORD error)
+    {
+        WriteOutput(L"File search failed (Win32 error " +
+            std::to_wstring(error) + L")\r\n");
+    }
+
+    void ReportFindFirstFailure(DWORD error)
+    {
+        if (error == ERROR_FILE_NOT_FOUND)
+            WriteOutput(L"No files to check.\r\n");
+        else
+            WriteSearchError(error);
+    }
+
+    bool ReportStreams(AlternateStreamReader& reader, const std::wstring& fullPath)
     {
         const StreamEnumeration enumeration = reader.EnumerateStreams(fullPath.c_str());
         if (enumeration.status != StreamStatus::Ok)
@@ -115,43 +128,56 @@ int wmain(int argc, wchar_t* argv[])
         for (const auto& name : names)
             result += L" " + name + L"\r\n";
         return WriteOutput(result);
-    };
+    }
 
-    // FindFirstFileW cannot enumerate a volume root (for example, C:\\).
-    // Exact directory arguments should be inspected directly, including roots.
-    const DWORD attributes = GetFileAttributesW(pattern.c_str());
-    if (attributes != INVALID_FILE_ATTRIBUTES &&
-        (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0)
-        return reportStreams(pattern) ? 0 : 1;
+    // The caller closes the search handle. Capture the terminal error before
+    // FindClose; an early reporting failure has already been handled.
+    bool ReportMatches(AlternateStreamReader& reader, HANDLE search,
+                       WIN32_FIND_DATAW& findData, const std::wstring& directory)
+    {
+        do
+        {
+            if (!ReportStreams(reader, directory + findData.cFileName))
+                return false;
+        } while (FindNextFileW(search, &findData) != 0);
+
+        const DWORD lastError = GetLastError();
+        if (lastError == ERROR_NO_MORE_FILES)
+            return true;
+
+        WriteSearchError(lastError);
+        return false;
+    }
+}
+
+int wmain(int argc, wchar_t* argv[])
+{
+    if (argc != 2)
+    {
+        PrintUsage(argc, argv);
+        return 1;
+    }
+
+    // Exact directory arguments enumerate their own streams, not children.
+    const std::wstring pattern(argv[1]);
+    const std::wstring directory = SearchDirectory(pattern);
+    if (!WriteOutput(L"Files with alternate streams matching " + pattern + L"\r\n"))
+        return 1;
+
+    AlternateStreamReader reader;
+    // FindFirstFileW cannot enumerate a volume root (for example, C:\).
+    if (IsDirectory(pattern))
+        return ReportStreams(reader, pattern) ? 0 : 1;
 
     WIN32_FIND_DATAW findData = {};
     const HANDLE search = FindFirstFileW(pattern.c_str(), &findData);
     if (search == INVALID_HANDLE_VALUE)
     {
-        const DWORD error = GetLastError();
-        if (error == ERROR_FILE_NOT_FOUND)
-            WriteOutput(L"No files to check.\r\n");
-        else
-            WriteOutput(L"File search failed (Win32 error " +
-                std::to_wstring(error) + L")\r\n");
+        ReportFindFirstFailure(GetLastError());
         return 1;
     }
 
-    bool success = true;
-    do
-    {
-        success = reportStreams(directory + findData.cFileName);
-        if (!success)
-            break;
-    } while (FindNextFileW(search, &findData) != 0);
-
-    const DWORD lastError = GetLastError();
+    const bool success = ReportMatches(reader, search, findData, directory);
     FindClose(search);
-    if (success && lastError != ERROR_NO_MORE_FILES)
-    {
-        WriteOutput(L"File search failed (Win32 error " +
-            std::to_wstring(lastError) + L")\r\n");
-        success = false;
-    }
     return success ? 0 : 1;
 }
