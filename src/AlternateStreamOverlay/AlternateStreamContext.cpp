@@ -8,6 +8,7 @@
 #include <ios>
 #include "Common.h"
 
+// IShellExtInit fixes this signature. Keep unused arguments unnamed to avoid C4100.
 STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDataObj, HKEY)
 {
     FORMATETC fmt = { CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
@@ -136,6 +137,7 @@ STDMETHODIMP CAlternateStreamContext::InvokeCommand(
     return S_OK;
 }
 
+// IContextMenu fixes this signature; the reserved argument is intentionally unnamed.
 STDMETHODIMP CAlternateStreamContext::GetCommandString(
     UINT_PTR idCmd,
     UINT uFlags,
@@ -343,6 +345,7 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     return TRUE;
 }
 
+// PSP callback signature requires HWND even though only the release notification is used.
 UINT CALLBACK PropPageCallbackProc(HWND, UINT uMsg, LPPROPSHEETPAGE ppsp)
 {
     if (ppsp == nullptr)
@@ -453,6 +456,7 @@ STDMETHODIMP CAlternateStreamContext::AddPages(
     return S_OK;
 }
 
+// IShellPropSheetExt requires this method; it is unsupported, so all arguments are unnamed.
 STDMETHODIMP CAlternateStreamContext::ReplacePage(
     EXPPS,
     LPFNSVADDPROPSHEETPAGE,
