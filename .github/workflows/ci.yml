@@ -134,9 +134,14 @@ jobs:
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
               summary.write("\n".join(lines) + "\n")
           print("Cppcheck finding counts:", dict(counts))
-          # Enforce only confirmed high-severity Cppcheck errors.
+          # Enforce error-severity findings except parser/configuration failures.
           # Warning, performance and portability findings remain informational.
-          errors = [item for item in findings if item.get("severity") == "error"]
+          # Parser/configuration failures are not actionable source defects.
+          # Keep them visible in the summary; gate only analyzable error IDs.
+          parser_ids = {"unknownMacro", "syntaxError"}
+          errors = [item for item in findings
+                    if item.get("severity") == "error"
+                    and item.get("id") not in parser_ids]
           if errors:
               raise SystemExit(f"Cppcheck reported {len(errors)} error-severity finding(s)")
           PY
