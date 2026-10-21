@@ -132,8 +132,8 @@ jobs:
         with:
           sarif_file: flawfinder-results.sarif
 
-  analyze:
-    name: MSVC and clang-tidy (Release x64)
+  analyze-msvc:
+    name: MSVC Code Analysis (Release x64)
     runs-on: windows-2025
 
     steps:
@@ -151,6 +151,21 @@ jobs:
         run: |
           msbuild .\src\AlternateStreamOverlay.sln /t:Rebuild /m /nologo /verbosity:normal /p:Configuration=Release /p:Platform=x64 /p:RegisterOutput=false /p:RunCodeAnalysis=true
           if ($LASTEXITCODE -ne 0) { throw "MSVC static-analysis build failed with exit code $LASTEXITCODE" }
+
+
+  analyze-clang-tidy:
+    name: clang-tidy (Release x64)
+    runs-on: windows-2025
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Visual Studio 2026 MSBuild
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
+        with:
+          vs-version: '[18.0,19.0)'
+          msbuild-architecture: x64
 
       - name: Analyze C++ Core Guidelines with clang-tidy
         shell: pwsh
