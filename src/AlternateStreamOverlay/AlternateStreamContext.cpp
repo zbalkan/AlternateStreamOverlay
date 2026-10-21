@@ -8,7 +8,7 @@
 #include <ios>
 #include "Common.h"
 
-STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST pidlFolder, IDataObject* pDataObj, HKEY hkeyProgId)
+STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDataObj, HKEY)
 {
     FORMATETC fmt = { CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
     STGMEDIUM stg = { TYMED_HGLOBAL };
@@ -139,7 +139,7 @@ STDMETHODIMP CAlternateStreamContext::InvokeCommand(
 STDMETHODIMP CAlternateStreamContext::GetCommandString(
     UINT_PTR idCmd,
     UINT uFlags,
-    UINT* pReserved,
+    UINT*,
     LPSTR pszName,
     UINT cchMax)
 {
@@ -343,7 +343,7 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     return TRUE;
 }
 
-UINT CALLBACK PropPageCallbackProc(HWND hWnd, UINT uMsg, LPPROPSHEETPAGE ppsp)
+UINT CALLBACK PropPageCallbackProc(HWND, UINT uMsg, LPPROPSHEETPAGE ppsp)
 {
     if (ppsp == nullptr)
         return 0;
@@ -454,9 +454,9 @@ STDMETHODIMP CAlternateStreamContext::AddPages(
 }
 
 STDMETHODIMP CAlternateStreamContext::ReplacePage(
-    EXPPS uPageID,
-    LPFNSVADDPROPSHEETPAGE pfnReplaceWith,
-    LPARAM lParam)
+    EXPPS,
+    LPFNSVADDPROPSHEETPAGE,
+    LPARAM)
 {
     return E_NOTIMPL;
 }
