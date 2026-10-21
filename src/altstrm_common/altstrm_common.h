@@ -20,7 +20,6 @@ public:
     HandleW& operator=(const HandleW&) = delete;
 
     HANDLE get() const { return handle_; }
-    operator HANDLE() const { return handle_; }
 
 private:
     HANDLE handle_;
