@@ -136,8 +136,6 @@
     <ClCompile Include="AlternateStreamOverlay.cpp" />
     <ClCompile Include="AlternateStreamOverlayIcon.cpp" />
     <ClCompile Include="AlternateStreamOverlay_i.c">
-      <!-- MIDL-generated code (directly or through includes); do not run clang-tidy on it. -->
-      <EnableClangTidyCodeAnalysis>false</EnableClangTidyCodeAnalysis>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
       </PrecompiledHeader>
       <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</CompileAsManaged>
@@ -147,8 +145,6 @@
     </ClCompile>
     <ClCompile Include="Common.cpp" />
     <ClCompile Include="dlldatax.c">
-      <!-- MIDL-generated code (directly or through includes); do not run clang-tidy on it. -->
-      <EnableClangTidyCodeAnalysis>false</EnableClangTidyCodeAnalysis>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
       </PrecompiledHeader>
       <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</CompileAsManaged>
