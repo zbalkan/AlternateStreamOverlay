@@ -49,11 +49,16 @@ class ScopedDropMedium
 {
 public:
     explicit ScopedDropMedium(STGMEDIUM& medium) : medium_(medium) {}
-    ~ScopedDropMedium()
+    ~ScopedDropMedium() { Release(); }
+
+    void Release()
     {
+        if (released_)
+            return;
         if (locked_)
             GlobalUnlock(medium_.hGlobal);
         ReleaseStgMedium(&medium_);
+        released_ = true;
     }
 
     ScopedDropMedium(const ScopedDropMedium&) = delete;
@@ -64,6 +69,7 @@ public:
 private:
     STGMEDIUM& medium_;
     bool locked_ = false;
+    bool released_ = false;
 };
 }
 
@@ -145,6 +151,8 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
             filePath.assign(path.data(), pathLength);
     }
 
+    // Do not hold the shell data object's storage during filesystem I/O.
+    mediumGuard.Release();
 
     if (FAILED(hr)) return hr;
     if (!CanEnumerateSynchronously(filePath))
