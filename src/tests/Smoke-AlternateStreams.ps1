@@ -182,47 +182,72 @@ function Test-BasicEnumeration {
     Write-Host 'PASS: basic, directory, hostile-content, and missing-path cases'
 }
 
+function New-CliPathFixture {
+    param([string] $Directory)
+
+    [System.IO.Directory]::CreateDirectory($Directory) | Out-Null
+    foreach ($name in @('first.txt', 'second.txt')) {
+        $file = Join-Path $Directory $name
+        [System.IO.File]::WriteAllText($file, 'base')
+        [System.IO.File]::WriteAllBytes($file + ':pathcheck', [byte[]](1))
+    }
+}
+
+function Assert-CliPathCase {
+    param([hashtable] $Case)
+
+    $output = & $exe $Case.Argument 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0) {
+        throw "CLI path case $($Case.Name) failed: $output"
+    }
+
+    $matchCount = [regex]::Matches($output, ':pathcheck:\$DATA').Count
+    if ($matchCount -ne $Case.ExpectedPaths.Count) {
+        throw "CLI path case $($Case.Name) expected $($Case.ExpectedPaths.Count) streams, found $matchCount; $output"
+    }
+
+    # Assert exact result-path lines, not substrings in the introductory banner.
+    $lines = $output -split '\r?\n'
+    foreach ($expectedPath in $Case.ExpectedPaths) {
+        $found = $false
+        for ($index = 0; $index -lt $lines.Length - 1; $index++) {
+            if ($lines[$index] -ceq $expectedPath -and
+                $lines[$index + 1] -ceq ' :pathcheck:$DATA') {
+                $found = $true
+                break
+            }
+        }
+        if (-not $found) {
+            throw "CLI path case $($Case.Name) omitted exact result $expectedPath; $output"
+        }
+    }
+}
+
 function Test-CliPathForms {
     param([string] $Root)
 
     $pathDirectory = Join-Path $Root 'path-forms'
-    [System.IO.Directory]::CreateDirectory($pathDirectory) | Out-Null
-    foreach ($name in @('first.txt', 'second.txt')) {
-        $file = Join-Path $pathDirectory $name
-        [System.IO.File]::WriteAllText($file, 'base')
-        [System.IO.File]::WriteAllBytes($file + ':pathcheck', [byte[]](1))
-    }
+    New-CliPathFixture -Directory $pathDirectory
 
     Push-Location -LiteralPath $pathDirectory
     try {
         $drive = [System.IO.Path]::GetPathRoot($pathDirectory).Substring(0, 2)
         $cases = @(
-            @{ Name = 'bare relative file'; Argument = 'first.txt'; Expected = @('first.txt') },
-            @{ Name = 'explicit relative file'; Argument = '.\first.txt'; Expected = @('first.txt') },
-            @{ Name = 'drive-relative file'; Argument = ($drive + 'first.txt'); Expected = @('first.txt') },
-            @{ Name = 'relative wildcard'; Argument = '*.txt'; Expected = @('first.txt', 'second.txt') },
-            @{ Name = 'drive-relative wildcard'; Argument = ($drive + '*.txt'); Expected = @('first.txt', 'second.txt') }
+            @{ Name = 'bare relative file'; Argument = 'first.txt'; ExpectedPaths = @('.\first.txt') },
+            @{ Name = 'explicit relative file'; Argument = '.\first.txt'; ExpectedPaths = @('.\first.txt') },
+            @{ Name = 'drive-relative file'; Argument = ($drive + 'first.txt'); ExpectedPaths = @(($drive + 'first.txt')) },
+            @{ Name = 'relative wildcard'; Argument = '*.txt'; ExpectedPaths = @('.\first.txt', '.\second.txt') },
+            @{ Name = 'drive-relative wildcard'; Argument = ($drive + '*.txt'); ExpectedPaths = @(($drive + 'first.txt'), ($drive + 'second.txt')) },
+            @{ Name = 'absolute wildcard'; Argument = (Join-Path $pathDirectory '*.txt'); ExpectedPaths = @((Join-Path $pathDirectory 'first.txt'), (Join-Path $pathDirectory 'second.txt')) }
         )
         foreach ($case in $cases) {
-            $output = & $exe $case.Argument 2>&1 | Out-String
-            if ($LASTEXITCODE -ne 0) {
-                throw "CLI path case $($case.Name) failed: $output"
-            }
-            $matchCount = [regex]::Matches($output, ':pathcheck:\$DATA').Count
-            if ($matchCount -ne $case.Expected.Count) {
-                throw "CLI path case $($case.Name) expected $($case.Expected.Count) streams, found $matchCount; $output"
-            }
-            foreach ($name in $case.Expected) {
-                if (-not $output.Contains($name)) {
-                    throw "CLI path case $($case.Name) omitted $name; $output"
-                }
-            }
+            Assert-CliPathCase -Case $case
         }
     }
     finally {
         Pop-Location
     }
-    Write-Host 'PASS: bare, explicit, drive-relative, and wildcard CLI paths'
+    Write-Host 'PASS: exact CLI result paths for relative, drive-relative, and wildcard inputs'
 }
 
 function Test-FilesystemLifecycle {
