@@ -130,23 +130,30 @@ namespace
         return WriteOutput(result);
     }
 
-    // The caller closes the search handle. Capture the terminal error before
-    // FindClose; an early reporting failure has already been handled.
+    // Continue after individual enumeration failures, but retain a failing
+    // exit status for an incomplete scan. The caller owns the search handle.
     bool ReportMatches(const AlternateStreamReader& reader, HANDLE search,
                        WIN32_FIND_DATAW& findData, const std::wstring& directory)
     {
+        bool anyFailed = false;
         do
         {
+            // Wildcard directory searches may include these synthetic entries.
+            if (wcscmp(findData.cFileName, L".") == 0 ||
+                wcscmp(findData.cFileName, L"..") == 0)
+                continue;
+
             if (!ReportStreams(reader, directory + findData.cFileName))
-                return false;
+                anyFailed = true;
         } while (FindNextFileW(search, &findData) != 0);
 
         const DWORD lastError = GetLastError();
-        if (lastError == ERROR_NO_MORE_FILES)
-            return true;
-
-        WriteSearchError(lastError);
-        return false;
+        if (lastError != ERROR_NO_MORE_FILES)
+        {
+            WriteSearchError(lastError);
+            anyFailed = true;
+        }
+        return !anyFailed;
     }
 }
 
