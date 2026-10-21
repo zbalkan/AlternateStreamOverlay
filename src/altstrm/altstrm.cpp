@@ -97,20 +97,31 @@ int wmain(int argc, wchar_t* argv[])
     do
     {
         const std::wstring fullPath = directory + findData.cFileName;
-        std::vector<std::wstring> names = reader.ListAlternateStreams(fullPath.c_str());
-        // The unnamed default stream is not an alternate data stream.
-        names.erase(std::remove(names.begin(), names.end(), L"::$DATA"), names.end());
-        if (!names.empty())
+        const StreamEnumeration enumeration = reader.EnumerateStreams(fullPath.c_str());
+        if (enumeration.status != StreamStatus::Ok)
         {
-            std::wstring result = fullPath + L"\r\n";
-            for (const auto& name : names)
-                result += L" " + name + L"\r\n";
-            if (!WriteOutput(result))
+            const std::wstring reason = enumeration.status == StreamStatus::Truncated
+                ? L"Incomplete stream enumeration"
+                : L"Stream enumeration failed";
+            WriteOutput(reason + L" for " + fullPath + L" (Win32 error " +
+                std::to_wstring(enumeration.error) + L")\r\n");
+            success = false;
+        }
+        else
+        {
+            std::vector<std::wstring> names = enumeration.streams;
+            // The unnamed default stream is not an alternate data stream.
+            names.erase(std::remove(names.begin(), names.end(), L"::$DATA"), names.end());
+            if (!names.empty())
             {
-                success = false;
-                break;
+                std::wstring result = fullPath + L"\r\n";
+                for (const auto& name : names)
+                    result += L" " + name + L"\r\n";
+                success = WriteOutput(result);
             }
         }
+        if (!success)
+            break;
     } while (FindNextFileW(search, &findData) != 0);
 
     const DWORD lastError = GetLastError();

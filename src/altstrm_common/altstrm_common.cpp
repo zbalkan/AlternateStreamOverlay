@@ -23,31 +23,52 @@
 #include <cstddef>
 #include <cwchar>
 #include <vector>
+#include <utility>
 
 namespace
 {
     constexpr size_t InitialBufferSize = 4096;
+    constexpr size_t InvalidParameterRetrySize = 65536;
     constexpr size_t MaxBufferSize = 4 * 1024 * 1024;
     constexpr size_t StreamInfoHeaderSize = offsetof(FILE_STREAM_INFO, StreamName);
 
-    bool QueryStreamInfo(HANDLE file, std::vector<BYTE>& buffer)
+    StreamStatus QueryStreamInfo(HANDLE file, std::vector<BYTE>& buffer, DWORD& error)
     {
+        error = ERROR_SUCCESS;
         buffer.resize(InitialBufferSize);
-
         for (;;)
         {
             if (GetFileInformationByHandleEx(file, FileStreamInfo,
-                buffer.data(),
-                static_cast<DWORD>(buffer.size())))
-                return true;
+                buffer.data(), static_cast<DWORD>(buffer.size())))
+            {
+                error = ERROR_SUCCESS;
+                return StreamStatus::Ok;
+            }
 
-            const DWORD error = GetLastError();
+            error = GetLastError();
+            // No streams can be reported as EOF by FileStreamInfo.
+            if (error == ERROR_HANDLE_EOF)
+            {
+                buffer.clear();
+                error = ERROR_SUCCESS;
+                return StreamStatus::Ok;
+            }
+            // Retry once with a larger buffer when a long stream name
+            // triggers ERROR_INVALID_PARAMETER on the initial query.
+            if (error == ERROR_INVALID_PARAMETER &&
+                buffer.size() < InvalidParameterRetrySize)
+            {
+                buffer.resize(InvalidParameterRetrySize);
+                continue;
+            }
             if (error != ERROR_MORE_DATA && error != ERROR_INSUFFICIENT_BUFFER)
-                return false;
-
+                return StreamStatus::Error;
             if (buffer.size() >= MaxBufferSize)
-                return false;
-
+            {
+                // Failed calls do not guarantee a valid, parseable output buffer.
+                buffer.clear();
+                return StreamStatus::Truncated;
+            }
             buffer.resize(buffer.size() * 2);
         }
     }
@@ -86,99 +107,104 @@ bool stream_info_detail::ReadRecord(
     return true;
 }
 
-std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(HANDLE file) const
+StreamEnumeration AlternateStreamReader::EnumerateStreams(HANDLE file) const
 {
-    std::vector<std::wstring> streams;
+    return EnumerateStreams(file, true);
+}
+
+StreamEnumeration AlternateStreamReader::EnumerateStreams(HANDLE file, bool collectNames) const
+{
+    StreamEnumeration result;
     if (file == nullptr || file == INVALID_HANDLE_VALUE)
-        return streams;
+    {
+        result.error = ERROR_INVALID_HANDLE;
+        return result;
+    }
 
     std::vector<BYTE> buffer;
-    if (!QueryStreamInfo(file, buffer))
-        return streams;
+    result.status = QueryStreamInfo(file, buffer, result.error);
+    if (result.status == StreamStatus::Error)
+        return result;
+    if (buffer.empty())
+        return result;
 
     size_t offset = 0;
     for (;;)
     {
         stream_info_detail::Record record = {};
-        if (!stream_info_detail::ReadRecord(
-                buffer.data(), buffer.size(), offset, record))
-            return {};
+        if (!stream_info_detail::ReadRecord(buffer.data(), buffer.size(), offset, record))
+        {
+            result.status = StreamStatus::Error;
+            result.error = ERROR_INVALID_DATA;
+            return result;
+        }
 
-        streams.emplace_back(record.name, record.nameBytes / sizeof(WCHAR));
+        constexpr WCHAR DefaultStream[] = L"::$DATA";
+        if (record.nameBytes != sizeof(DefaultStream) - sizeof(WCHAR) ||
+            wmemcmp(record.name, DefaultStream, (sizeof(DefaultStream) / sizeof(WCHAR)) - 1) != 0)
+            result.hasNamedStreams = true;
+        if (collectNames)
+            result.streams.emplace_back(record.name, record.nameBytes / sizeof(WCHAR));
 
         if (record.nextOffset == 0)
-            return streams;
-
+            return result;
         offset += record.nextOffset;
     }
+}
+
+StreamEnumeration AlternateStreamReader::EnumerateStreams(LPCWSTR filename) const
+{
+    return EnumerateStreams(filename, true);
+}
+
+StreamEnumeration AlternateStreamReader::EnumerateStreams(LPCWSTR filename, bool collectNames) const
+{
+    if (filename == nullptr || *filename == L'\0')
+    {
+        StreamEnumeration result;
+        result.error = ERROR_INVALID_PARAMETER;
+        return result;
+    }
+
+    HandleW file(CreateFileW(filename, 0,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr));
+    if (file.get() == INVALID_HANDLE_VALUE)
+    {
+        StreamEnumeration result;
+        result.error = GetLastError();
+        return result;
+    }
+    return EnumerateStreams(file.get(), collectNames);
+}
+
+std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(HANDLE file) const
+{
+    auto result = EnumerateStreams(file);
+    if (result.status != StreamStatus::Ok)
+        return {};
+    return std::move(result.streams);
 }
 
 std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(LPCWSTR filename) const
 {
-    if (filename == nullptr || *filename == L'\0')
+    auto result = EnumerateStreams(filename);
+    if (result.status != StreamStatus::Ok)
         return {};
-
-    HandleW file(CreateFileW(filename, 0,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-        nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS,
-        nullptr));
-    if (file.get() == INVALID_HANDLE_VALUE)
-        return {};
-
-    return ListAlternateStreams(file.get());
+    return std::move(result.streams);
 }
 
 bool AlternateStreamReader::HasAlternateStreams(HANDLE file) const
 {
-    if (file == nullptr || file == INVALID_HANDLE_VALUE)
-        return false;
-
-    // Explorer asks about many files while painting a directory. Avoid
-    // allocating a vector of stream names and querying attributes for each
-    // overlay decision; only a named stream can qualify.
-    std::vector<BYTE> buffer;
-    if (!QueryStreamInfo(file, buffer))
-        return false;
-
-    size_t offset = 0;
-    for (;;)
-    {
-        stream_info_detail::Record record = {};
-        if (!stream_info_detail::ReadRecord(
-                buffer.data(), buffer.size(), offset, record))
-            return false;
-
-        // FileStreamInfo uses "::$DATA" for the unnamed default stream.
-        // Directories may have no unnamed stream at all. Both cases are
-        // handled by inspecting names rather than counting entries.
-        constexpr WCHAR defaultName[] = L"::$DATA";
-        if (record.nameBytes != (sizeof(defaultName) - sizeof(WCHAR)) ||
-            wmemcmp(record.name, defaultName,
-                (sizeof(defaultName) / sizeof(WCHAR)) - 1) != 0)
-            return true;
-
-        if (record.nextOffset == 0)
-            return false;
-
-        offset += record.nextOffset;
-    }
+    const auto result = EnumerateStreams(file, false);
+    return result.status == StreamStatus::Ok && result.hasNamedStreams;
 }
 
 bool AlternateStreamReader::HasAlternateStreams(LPCWSTR filename) const
 {
-    if (filename == nullptr || *filename == L'\0')
-        return false;
-
-    HandleW file(CreateFileW(filename, 0,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-        nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS,
-        nullptr));
-    if (file.get() == INVALID_HANDLE_VALUE)
-        return false;
-
-    return HasAlternateStreams(file.get());
+    const auto result = EnumerateStreams(filename, false);
+    return result.status == StreamStatus::Ok && result.hasNamedStreams;
 }
-
 
 namespace
 {
