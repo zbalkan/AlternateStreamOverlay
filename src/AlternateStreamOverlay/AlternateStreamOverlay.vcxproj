@@ -67,6 +67,7 @@
       <ProxyFileName>AlternateStreamOverlay_p.c</ProxyFileName>
     </Midl>
     <ClCompile>
+      <LanguageStandard>stdcpp14</LanguageStandard>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>..\altstrm_common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_WIN32_WINNT=0x0A00;WINVER=0x0A00;_WINDOWS;_DEBUG;_USRDLL;_MERGE_PROXYSTUB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -103,6 +104,7 @@
       <ProxyFileName>AlternateStreamOverlay_p.c</ProxyFileName>
     </Midl>
     <ClCompile>
+      <LanguageStandard>stdcpp14</LanguageStandard>
       <SDLCheck>true</SDLCheck>
       <AdditionalOptions>/guard:cf %(AdditionalOptions)</AdditionalOptions>
       <Optimization>MaxSpeed</Optimization>
