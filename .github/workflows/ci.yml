@@ -109,6 +109,32 @@ jobs:
           cppcheck --version
           cppcheck --enable=warning,performance,portability --error-exitcode=0 --suppress=missingIncludeSystem --xml --xml-version=2 src 2> cppcheck-results.xml
           cat cppcheck-results.xml
+          python3 - <<'PY'
+          import collections
+          import os
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse("cppcheck-results.xml").getroot()
+          findings = root.findall(".//errors/error")
+          counts = collections.Counter(item.get("severity", "unknown") for item in findings)
+          lines = ["### Cppcheck findings", "", "| Severity | Count |", "|---|---:|"]
+          for severity in ("error", "warning", "performance", "portability", "style", "information", "unknown"):
+              if counts[severity]:
+                  lines.append(f"| {severity} | {counts[severity]} |")
+          if not findings:
+              lines.append("| None | 0 |")
+          lines.extend(["", "#### Findings", "", "| Severity | Rule | Location | Message |", "|---|---|---|---|"])
+          for item in sorted(findings, key=lambda e: (e.get("severity", ""), e.get("id", ""), e.get("msg", ""))):
+              loc = item.find("location")
+              location = f"{loc.get('file', '')}:{loc.get('line', '')}" if loc is not None else "—"
+              values = (item.get("severity", ""), item.get("id", ""), location, item.get("msg", ""))
+              lines.append("| " + " | ".join(value.replace("|", "\\|").replace("\n", " ") for value in values) + " |")
+          if not findings:
+              lines.append("| — | — | — | No findings |")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("\n".join(lines) + "\n")
+          print("Cppcheck finding counts:", dict(counts))
+          PY
 
   flawfinder:
     name: Flawfinder (Linux)
