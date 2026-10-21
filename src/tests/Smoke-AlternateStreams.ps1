@@ -301,8 +301,8 @@ function Test-FilesystemLifecycle {
     $lock = [System.IO.File]::Open($path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
     try {
         $lockedOutput = & $exe $path 2>&1 | Out-String
-        if ($LASTEXITCODE -ne 0) {
-            throw "CLI returned failure under exclusive lock: $lockedOutput"
+        if ($LASTEXITCODE -eq 0 -or $lockedOutput -notmatch 'Stream enumeration failed') {
+            throw "Exclusive lock was not reported as an enumeration failure: $lockedOutput"
         }
     }
     finally {
@@ -313,6 +313,42 @@ function Test-FilesystemLifecycle {
         throw "Stream discovery did not recover after unlock: $afterUnlock"
     }
     Write-Host 'PASS: directory negatives, ADS lifecycle, large stream, repeatability and sharing'
+}
+
+function Test-WildcardContinuesAfterFailure {
+    param([string] $Root)
+
+    $scanDirectory = Join-Path $Root 'mixed-results'
+    [System.IO.Directory]::CreateDirectory($scanDirectory) | Out-Null
+    $blocked = Join-Path $scanDirectory '00-blocked.txt'
+    $following = Join-Path $scanDirectory 'zz-following.txt'
+    [System.IO.File]::WriteAllText($blocked, 'blocked')
+    [System.IO.File]::WriteAllText($following, 'valid')
+    [System.IO.File]::WriteAllBytes($following + ':afterfailure', [byte[]](65))
+
+    # The wildcard enumerates directory entries, but the exclusive lock
+    # makes FileStreamInfo for the first matching file fail with sharing violation.
+    $lock = [System.IO.File]::Open($blocked,
+        [System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite,
+        [System.IO.FileShare]::None)
+    try {
+        $output = & $exe (Join-Path $scanDirectory '*.txt') 2>&1 | Out-String
+        $status = $LASTEXITCODE
+        if ($status -eq 0) {
+            throw "Wildcard scan did not report partial failure: $output"
+        }
+        if (-not $output.Contains('Stream enumeration failed for ' + $blocked)) {
+            throw "Wildcard scan omitted the locked-file error: $output"
+        }
+        if (-not $output.Contains($following) -or -not $output.Contains(':afterfailure:$DATA')) {
+            throw "Wildcard scan stopped before the valid later file: $output"
+        }
+    }
+    finally {
+        $lock.Dispose()
+    }
+
+    Write-Host 'PASS: wildcard scan continues after an item failure and exits nonzero'
 }
 
 function Test-RedirectedUnicodeOutput {
@@ -416,6 +452,7 @@ try {
     Test-BasicEnumeration -Root $directory
     Test-CliPathForms -Root $directory
     Test-FilesystemLifecycle -Root $directory
+    Test-WildcardContinuesAfterFailure -Root $directory
     Test-RedirectedUnicodeOutput -Root $directory
     Test-UnicodeNames -Root $directory
     Write-Host 'PASS: all NTFS ADS integration tests'
