@@ -10,18 +10,31 @@
 STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDataObj, HKEY)
 {
     FORMATETC fmt = { CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+    if (pDataObj == nullptr)
+        return E_INVALIDARG;
+
     STGMEDIUM stg = {};
-    stg.tymed = TYMED_HGLOBAL;
-    if (pDataObj == nullptr) return E_INVALIDARG;
-
-    HDROP hDrop = nullptr;
-
     if (FAILED(pDataObj->GetData(&fmt, &stg)))
+        return E_INVALIDARG;
+
+    // IDataObject::GetData must return a usable CF_HDROP HGLOBAL.
+    // Always release a successfully returned medium, including malformed ones.
+    if (stg.tymed != TYMED_HGLOBAL || stg.hGlobal == nullptr)
     {
+        // A malformed data object may return an interface/file medium with
+        // a null payload. Do not let ReleaseStgMedium dereference it; retain
+        // pUnkForRelease so the provider's release hook is still invoked.
+        if ((stg.tymed == TYMED_ISTREAM && stg.pstm == nullptr) ||
+            (stg.tymed == TYMED_ISTORAGE && stg.pstg == nullptr) ||
+            (stg.tymed == TYMED_FILE && stg.lpszFileName == nullptr) ||
+            (stg.tymed == TYMED_MFPICT && stg.hMetaFilePict == nullptr))
+            stg.tymed = TYMED_NULL;
+
+        ReleaseStgMedium(&stg);
         return E_INVALIDARG;
     }
 
-    hDrop = (HDROP)GlobalLock(stg.hGlobal);
+    auto hDrop = static_cast<HDROP>(GlobalLock(stg.hGlobal));
 
     if (hDrop == nullptr)
     {
@@ -179,7 +192,7 @@ const std::wstring& CAlternateStreamContext::get_path() const
 
 namespace
 {
-void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND textBox)
+void SelectText(const CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND textBox)
 {
     if (textBox == nullptr || pthis == nullptr)
         return;
@@ -193,7 +206,10 @@ void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND tex
 
     const std::wstring full_path = fname + streams[idx];
 
-    HandleW hFile(::CreateFile(full_path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL));
+    // Preview reads should coexist with writers, rename and delete operations.
+    HandleW hFile(::CreateFileW(full_path.c_str(), GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr));
 
     if (hFile == INVALID_HANDLE_VALUE)
     {
