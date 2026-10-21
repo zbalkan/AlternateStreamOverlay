@@ -175,8 +175,35 @@ jobs:
       - name: Analyze native C++ projects
         shell: pwsh
         run: |
-          msbuild .\src\AlternateStreamOverlay.sln /t:Rebuild /m /nologo /verbosity:normal /p:Configuration=Release /p:Platform=x64 /p:RegisterOutput=false /p:RunCodeAnalysis=true
+          msbuild .\src\AlternateStreamOverlay.sln /t:Rebuild /m /nologo /verbosity:normal '/flp:logfile=msvc-analysis.log;verbosity=normal' /p:Configuration=Release /p:Platform=x64 /p:RegisterOutput=false /p:RunCodeAnalysis=true
           if ($LASTEXITCODE -ne 0) { throw "MSVC static-analysis build failed with exit code $LASTEXITCODE" }
+
+      - name: Summarize MSVC analysis diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -LiteralPath 'msvc-analysis.log')) {
+            Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value '### MSVC analysis diagnostics: build log unavailable'
+            exit 0
+          }
+          $diagnostics = @(Get-Content -LiteralPath 'msvc-analysis.log' | Where-Object {
+            $_ -match ': warning (C\d+|D\d+):'
+          } | Sort-Object -Unique)
+          $counts = @{}
+          foreach ($entry in $diagnostics) {
+            if ($entry -match ': warning (?<rule>[CD]\d+):') {
+              $rule = $Matches.rule
+              if (-not $counts.ContainsKey($rule)) { $counts[$rule] = 0 }
+              $counts[$rule]++
+            }
+          }
+          $summary = @('### MSVC analysis diagnostics', '', "Unique diagnostic lines: $($diagnostics.Count)", '', '| Rule | Count |', '|---|---:|')
+          foreach ($rule in @($counts.Keys | Sort-Object)) { $summary += "| $rule | $($counts[$rule]) |" }
+          if (-not $counts.Count) { $summary += '| None | 0 |' }
+          $summary += @('', '#### Findings', '', '| Diagnostic |', '|---|')
+          foreach ($entry in $diagnostics) { $summary += '| ' + $entry.Trim().Replace('|', '\|') + ' |' }
+          if (-not $diagnostics.Count) { $summary += '| No matching diagnostics |' }
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ($summary -join "`n")
 
 
   analyze-clang-tidy:
