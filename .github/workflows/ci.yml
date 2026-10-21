@@ -271,5 +271,49 @@ jobs:
       - name: Analyze C++ Core Guidelines with clang-tidy
         shell: pwsh
         run: |
-          msbuild .\src\AlternateStreamOverlay.sln /t:Rebuild /m /nologo /verbosity:normal /p:Configuration=Release /p:Platform=x64 /p:RegisterOutput=false /p:RunCodeAnalysis=true /p:EnableMicrosoftCodeAnalysis=false /p:EnableClangTidyCodeAnalysis=true
+          msbuild .\src\AlternateStreamOverlay.sln /t:Rebuild /m /nologo /verbosity:normal '/flp:logfile=clang-tidy-analysis.log;verbosity=normal' /p:Configuration=Release /p:Platform=x64 /p:RegisterOutput=false /p:RunCodeAnalysis=true /p:EnableMicrosoftCodeAnalysis=false /p:EnableClangTidyCodeAnalysis=true
           if ($LASTEXITCODE -ne 0) { throw "clang-tidy analysis build failed with exit code $LASTEXITCODE" }
+
+      - name: Summarize clang-tidy diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          $log = 'clang-tidy-analysis.log'
+          if (-not (Test-Path -LiteralPath $log)) {
+            Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value '### clang-tidy diagnostics: build log unavailable'
+            exit 0
+          }
+          $diagnostics = @(Get-Content -LiteralPath $log | Where-Object {
+            $_ -match 'warning\s*:.*\[[a-zA-Z][a-zA-Z0-9_.-]+\]'
+          } | Sort-Object -Unique)
+          $counts = @{}
+          foreach ($entry in $diagnostics) {
+            if ($entry -match '\[(?<rule>[a-zA-Z][a-zA-Z0-9_.-]+)\]') {
+              $rule = $Matches.rule
+              if (-not $counts.ContainsKey($rule)) { $counts[$rule] = 0 }
+              $counts[$rule]++
+            }
+          }
+          $summary = @('### clang-tidy diagnostics', '', "Unique diagnostic lines: $($diagnostics.Count)", '', '| Check | Count |', '|---|---:|')
+          foreach ($rule in @($counts.Keys | Sort-Object)) { $summary += "| $rule | $($counts[$rule]) |" }
+          if (-not $counts.Count) { $summary += '| None | 0 |' }
+          $summary += @('', '#### Findings', '', '| Diagnostic |', '|---|')
+          $maxFindings = 100
+          foreach ($entry in @($diagnostics | Select-Object -First $maxFindings)) {
+            $line = $entry.Trim()
+            if ($line.Length -gt 500) { $line = $line.Substring(0, 497) + '...' }
+            $summary += '| ' + $line.Replace('|', '\|') + ' |'
+          }
+          if ($diagnostics.Count -gt $maxFindings) {
+            $summary += "Showing first $maxFindings of $($diagnostics.Count) unique diagnostic lines. See the full build log artifact."
+          }
+          if (-not $diagnostics.Count) { $summary += '| No matching diagnostics |' }
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ($summary -join "`n")
+
+      - name: Upload complete clang-tidy analysis log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: clang-tidy-analysis-log
+          path: clang-tidy-analysis.log
+          if-no-files-found: warn
