@@ -3,7 +3,6 @@
 #include "stream_info_detail.h"
 #include <algorithm>
 #include <cstddef>
-#include <cstring>
 #include <string>
 #include <stdexcept>
 #include <vector>
@@ -81,6 +80,11 @@ namespace
             if (format->cfFormat != CF_HDROP || format->tymed != TYMED_HGLOBAL)
                 return DV_E_FORMATETC;
 
+            // Reserve space for the path terminator and the second NUL
+            // required by CF_HDROP, checking arithmetic before allocation.
+            const size_t maxCharacters = (SIZE_MAX - sizeof(DROPFILES)) / sizeof(WCHAR);
+            if (path_.size() > maxCharacters - 2)
+                return E_OUTOFMEMORY;
             const size_t bytes = sizeof(DROPFILES) +
                 (path_.size() + 2) * sizeof(WCHAR);
             HGLOBAL storage = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, bytes);
@@ -94,8 +98,10 @@ namespace
             auto* drop = static_cast<DROPFILES*>(memory);
             drop->pFiles = sizeof(DROPFILES);
             drop->fWide = TRUE;
-            memcpy(static_cast<BYTE*>(memory) + sizeof(DROPFILES),
-                   path_.c_str(), (path_.size() + 1) * sizeof(WCHAR));
+            auto* name = reinterpret_cast<WCHAR*>(
+                static_cast<BYTE*>(memory) + sizeof(DROPFILES));
+            std::copy(path_.begin(), path_.end(), name);
+            // GMEM_ZEROINIT supplies the terminating double NUL.
             GlobalUnlock(storage);
 
             *medium = {};
@@ -118,6 +124,49 @@ namespace
         ULONG references_ = 1;
     };
 
+    std::wstring GetOverlayDllPath()
+    {
+        // CI can provide an explicit build artifact. Test Explorer does not
+        // inherit the workflow environment, so resolve the solution layout.
+        std::vector<WCHAR> buffer(32768);
+        const DWORD overrideLength = GetEnvironmentVariableW(
+            L"ASO_OVERLAY_DLL", buffer.data(), static_cast<DWORD>(buffer.size()));
+        if (overrideLength != 0)
+        {
+            if (overrideLength >= buffer.size())
+                throw std::runtime_error("ASO_OVERLAY_DLL exceeds the path buffer");
+            return std::wstring(buffer.data(), overrideLength);
+        }
+
+        HMODULE testModule = nullptr;
+        if (!GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(&CreateStream), &testModule))
+            throw std::runtime_error("Unable to locate the test module");
+
+        const DWORD length = GetModuleFileNameW(
+            testModule, buffer.data(), static_cast<DWORD>(buffer.size()));
+        if (length == 0 || length >= buffer.size())
+            throw std::runtime_error("Unable to retrieve the test module path");
+
+        const std::wstring testPath(buffer.data(), length);
+        const size_t lastSlash = testPath.find_last_of(L"\\/");
+        const size_t configSlash = lastSlash == std::wstring::npos
+            ? std::wstring::npos : testPath.find_last_of(L"\\/", lastSlash - 1);
+        if (configSlash == std::wstring::npos)
+            throw std::runtime_error("Unexpected MSTest output directory");
+
+        // Default solution layout:
+        // src\x64\Debug\AlternateStreamTests.dll
+        // src\AlternateStreamOverlay\x64\Debug\AlternateStreamOverlay.dll
+        const std::wstring config = testPath.substr(
+            configSlash + 1, lastSlash - configSlash - 1);
+        const std::wstring testDirectory = testPath.substr(0, lastSlash + 1);
+        return testDirectory + L"..\\..\\AlternateStreamOverlay\\x64\\" +
+            config + L"\\AlternateStreamOverlay.dll";
+    }
+
     struct ScopedModule
     {
         explicit ScopedModule(LPCWSTR path) : handle(LoadLibraryW(path)) {}
@@ -136,13 +185,8 @@ namespace AlternateStreamTests
     public:
         TEST_METHOD(FailedReinitializationDiscardsPreviousSelection)
         {
-            WCHAR dllPath[MAX_PATH] = {};
-            const DWORD pathLength = GetEnvironmentVariableW(
-                L"ASO_OVERLAY_DLL", dllPath, _countof(dllPath));
-            Assert::IsTrue(pathLength > 0 && pathLength < _countof(dllPath),
-                L"ASO_OVERLAY_DLL must identify the built overlay DLL");
-
-            ScopedModule module(dllPath);
+            const std::wstring dllPath = GetOverlayDllPath();
+            ScopedModule module(dllPath.c_str());
             Assert::IsTrue(module.handle != nullptr, L"Unable to load overlay DLL");
             using GetClassObject = HRESULT (STDAPICALLTYPE*)(REFCLSID, REFIID, void**);
             const auto getClassObject = reinterpret_cast<GetClassObject>(
