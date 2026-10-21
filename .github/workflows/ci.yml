@@ -107,7 +107,13 @@ jobs:
         shell: bash
         run: |
           cppcheck --version
-          cppcheck --enable=warning,performance,portability --error-exitcode=0 --suppress=missingIncludeSystem --xml --xml-version=2 src 2> cppcheck-results.xml
+          # Linux Cppcheck cannot expand Windows MIDL proxy or MSTest macros.
+          # Analyze production code; generated proxy and test harness are built on Windows CI.
+          cppcheck --enable=warning,performance,portability --error-exitcode=0 \
+            --suppress=missingIncludeSystem \
+            -isrc/AlternateStreamOverlay/dlldata.c \
+            -isrc/AlternateStreamTests \
+            --xml --xml-version=2 src 2> cppcheck-results.xml
           cat cppcheck-results.xml
           python3 - <<'PY'
           import collections
