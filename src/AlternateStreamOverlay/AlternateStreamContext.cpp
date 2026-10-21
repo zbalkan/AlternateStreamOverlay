@@ -21,6 +21,15 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
     // Always release a successfully returned medium, including malformed ones.
     if (stg.tymed != TYMED_HGLOBAL || stg.hGlobal == nullptr)
     {
+        // A malformed data object may return an interface/file medium with
+        // a null payload. Do not let ReleaseStgMedium dereference it; retain
+        // pUnkForRelease so the provider's release hook is still invoked.
+        if ((stg.tymed == TYMED_ISTREAM && stg.pstm == nullptr) ||
+            (stg.tymed == TYMED_ISTORAGE && stg.pstg == nullptr) ||
+            (stg.tymed == TYMED_FILE && stg.lpszFileName == nullptr) ||
+            (stg.tymed == TYMED_MFPICT && stg.hMetaFilePict == nullptr))
+            stg.tymed = TYMED_NULL;
+
         ReleaseStgMedium(&stg);
         return E_INVALIDARG;
     }
