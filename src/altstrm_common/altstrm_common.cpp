@@ -101,6 +101,11 @@ bool stream_info_detail::ReadRecord(
          nameBytes > next - StreamInfoHeaderSize))
         return false;
 
+    // Names are length-delimited UTF-16, but embedded NULs cannot be
+    // represented safely by downstream NUL-terminated Win32 path APIs.
+    if (wmemchr(entry->StreamName, L'\0', nameBytes / sizeof(WCHAR)) != nullptr)
+        return false;
+
     record.name = entry->StreamName;
     record.nameBytes = nameBytes;
     record.nextOffset = next;
