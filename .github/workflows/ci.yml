@@ -241,8 +241,35 @@ jobs:
           vs-version: '[18.0,19.0)'
           msbuild-architecture: x64
 
+      - name: Reject NULL in hand-written C++ sources
+        shell: pwsh
+        run: |
+          # MSBuild's clang-tidy warnings may not fail the build.
+          $pattern = '\bNULL\b'
+          if (-not ('void* p = NULL;' -match $pattern)) {
+            throw 'NULL regression guard failed its control input.'
+          }
+          $folders = @(
+            'src/AlternateStreamOverlay',
+            'src/altstrm_common',
+            'src/altstrm',
+            'src/AlternateStreamTests'
+          )
+          $violations = @(
+            foreach ($folder in $folders) {
+              Get-ChildItem -LiteralPath $folder -File |
+                Where-Object { $_.Extension -in '.cpp', '.h', '.hpp' } |
+                Select-String -Pattern $pattern -CaseSensitive |
+                ForEach-Object { "$($_.Path):$($_.LineNumber): $($_.Line.Trim())" }
+            }
+          )
+          if ($violations.Count -gt 0) {
+            $violations | ForEach-Object { Write-Error $_ }
+            throw "Found $($violations.Count) NULL occurrence(s) in C++ sources."
+          }
+
       - name: Analyze C++ Core Guidelines with clang-tidy
         shell: pwsh
         run: |
-          msbuild .\src\AlternateStreamOverlay.sln /t:Rebuild /m /nologo /verbosity:normal /p:Configuration=Release /p:Platform=x64 /p:RegisterOutput=false /p:RunCodeAnalysis=true /p:EnableMicrosoftCodeAnalysis=false /p:EnableClangTidyCodeAnalysis=true /p:ClangTidyChecks=cppcoreguidelines-*
+          msbuild .\src\AlternateStreamOverlay.sln /t:Rebuild /m /nologo /verbosity:normal /p:Configuration=Release /p:Platform=x64 /p:RegisterOutput=false /p:RunCodeAnalysis=true /p:EnableMicrosoftCodeAnalysis=false /p:EnableClangTidyCodeAnalysis=true
           if ($LASTEXITCODE -ne 0) { throw "clang-tidy analysis build failed with exit code $LASTEXITCODE" }
