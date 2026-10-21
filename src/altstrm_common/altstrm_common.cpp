@@ -106,6 +106,11 @@ bool stream_info_detail::ReadRecord(
 
 StreamEnumeration AlternateStreamReader::EnumerateStreams(HANDLE file) const
 {
+    return EnumerateStreams(file, true);
+}
+
+StreamEnumeration AlternateStreamReader::EnumerateStreams(HANDLE file, bool collectNames) const
+{
     StreamEnumeration result;
     if (file == nullptr || file == INVALID_HANDLE_VALUE)
     {
@@ -131,10 +136,12 @@ StreamEnumeration AlternateStreamReader::EnumerateStreams(HANDLE file) const
             return result;
         }
 
-        std::wstring name(record.name, record.nameBytes / sizeof(WCHAR));
-        if (name != L"::$DATA")
+        constexpr WCHAR DefaultStream[] = L"::$DATA";
+        if (record.nameBytes != sizeof(DefaultStream) - sizeof(WCHAR) ||
+            wmemcmp(record.name, DefaultStream, (sizeof(DefaultStream) / sizeof(WCHAR)) - 1) != 0)
             result.hasNamedStreams = true;
-        result.streams.push_back(std::move(name));
+        if (collectNames)
+            result.streams.emplace_back(record.name, record.nameBytes / sizeof(WCHAR));
 
         if (record.nextOffset == 0)
             return result;
@@ -143,6 +150,11 @@ StreamEnumeration AlternateStreamReader::EnumerateStreams(HANDLE file) const
 }
 
 StreamEnumeration AlternateStreamReader::EnumerateStreams(LPCWSTR filename) const
+{
+    return EnumerateStreams(filename, true);
+}
+
+StreamEnumeration AlternateStreamReader::EnumerateStreams(LPCWSTR filename, bool collectNames) const
 {
     if (filename == nullptr || *filename == L'\0')
     {
@@ -160,30 +172,34 @@ StreamEnumeration AlternateStreamReader::EnumerateStreams(LPCWSTR filename) cons
         result.error = GetLastError();
         return result;
     }
-    return EnumerateStreams(file.get());
+    return EnumerateStreams(file.get(), collectNames);
 }
 
 std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(HANDLE file) const
 {
-    const auto result = EnumerateStreams(file);
-    return result.status == StreamStatus::Ok ? result.streams : std::vector<std::wstring>{};
+    auto result = EnumerateStreams(file);
+    if (result.status != StreamStatus::Ok)
+        return {};
+    return std::move(result.streams);
 }
 
 std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(LPCWSTR filename) const
 {
-    const auto result = EnumerateStreams(filename);
-    return result.status == StreamStatus::Ok ? result.streams : std::vector<std::wstring>{};
+    auto result = EnumerateStreams(filename);
+    if (result.status != StreamStatus::Ok)
+        return {};
+    return std::move(result.streams);
 }
 
 bool AlternateStreamReader::HasAlternateStreams(HANDLE file) const
 {
-    const auto result = EnumerateStreams(file);
+    const auto result = EnumerateStreams(file, false);
     return result.status == StreamStatus::Ok && result.hasNamedStreams;
 }
 
 bool AlternateStreamReader::HasAlternateStreams(LPCWSTR filename) const
 {
-    const auto result = EnumerateStreams(filename);
+    const auto result = EnumerateStreams(filename, false);
     return result.status == StreamStatus::Ok && result.hasNamedStreams;
 }
 
