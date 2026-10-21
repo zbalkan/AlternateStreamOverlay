@@ -135,20 +135,20 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
         return E_FAIL;
 
     const bool directory = PathIsDirectoryW(filePath.c_str()) != FALSE;
-    m_path = filePath;
-    m_isDirectory = directory;
-    m_streams = listAlternateStreams(filePath.c_str());
+    auto streams = listAlternateStreams(filePath.c_str());
     // FILE_STREAM_INFO includes the unnamed default stream for ordinary files.
     // The property page should present only named alternate data streams.
-    m_streams.erase(
-        std::remove(m_streams.begin(), m_streams.end(), L"::$DATA"),
-        m_streams.end());
-    if (m_streams.empty())
-    {
-        hr = E_FAIL;
-    }
+    streams.erase(std::remove(streams.begin(), streams.end(), L"::$DATA"),
+                  streams.end());
+    if (streams.empty())
+        return E_FAIL;
 
-    return hr;
+    // Commit the new selection only after validation succeeds. Swapping also
+    // avoids allocating while updating the COM object's stored state.
+    m_path.swap(filePath);
+    m_streams.swap(streams);
+    m_isDirectory = directory;
+    return S_OK;
 }
 
 STDMETHODIMP CAlternateStreamContext::QueryContextMenu(
