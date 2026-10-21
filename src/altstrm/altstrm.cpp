@@ -91,19 +91,9 @@ int wmain(int argc, wchar_t* argv[])
                      std::wstring(argv[1]) + L"\r\n"))
         return 1;
 
-    WIN32_FIND_DATAW findData = {};
-    const HANDLE search = FindFirstFileW(pattern.c_str(), &findData);
-    if (search == INVALID_HANDLE_VALUE)
-    {
-        WriteOutput(L"No files to check.\r\n");
-        return 1;
-    }
-
     AlternateStreamReader reader;
-    bool success = true;
-    do
+    auto reportStreams = [&](const std::wstring& fullPath) -> bool
     {
-        const std::wstring fullPath = directory + findData.cFileName;
         const StreamEnumeration enumeration = reader.EnumerateStreams(fullPath.c_str());
         if (enumeration.status != StreamStatus::Ok)
         {
@@ -112,21 +102,40 @@ int wmain(int argc, wchar_t* argv[])
                 : L"Stream enumeration failed";
             WriteOutput(reason + L" for " + fullPath + L" (Win32 error " +
                 std::to_wstring(enumeration.error) + L")\r\n");
-            success = false;
+            return false;
         }
-        else
-        {
-            std::vector<std::wstring> names = enumeration.streams;
-            // The unnamed default stream is not an alternate data stream.
-            names.erase(std::remove(names.begin(), names.end(), L"::$DATA"), names.end());
-            if (!names.empty())
-            {
-                std::wstring result = fullPath + L"\r\n";
-                for (const auto& name : names)
-                    result += L" " + name + L"\r\n";
-                success = WriteOutput(result);
-            }
-        }
+
+        std::vector<std::wstring> names = enumeration.streams;
+        // The unnamed default stream is not an alternate data stream.
+        names.erase(std::remove(names.begin(), names.end(), L"::$DATA"), names.end());
+        if (names.empty())
+            return true;
+
+        std::wstring result = fullPath + L"\r\n";
+        for (const auto& name : names)
+            result += L" " + name + L"\r\n";
+        return WriteOutput(result);
+    };
+
+    // FindFirstFileW cannot enumerate a volume root (for example, C:\\).
+    // Exact directory arguments should be inspected directly, including roots.
+    const DWORD attributes = GetFileAttributesW(pattern.c_str());
+    if (attributes != INVALID_FILE_ATTRIBUTES &&
+        (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0)
+        return reportStreams(pattern) ? 0 : 1;
+
+    WIN32_FIND_DATAW findData = {};
+    const HANDLE search = FindFirstFileW(pattern.c_str(), &findData);
+    if (search == INVALID_HANDLE_VALUE)
+    {
+        WriteOutput(L"No files to check.\r\n");
+        return 1;
+    }
+
+    bool success = true;
+    do
+    {
+        success = reportStreams(directory + findData.cFileName);
         if (!success)
             break;
     } while (FindNextFileW(search, &findData) != 0);
