@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <string>
 #include <stdexcept>
+#include <vector>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
@@ -10,19 +11,23 @@ namespace
 {
     struct TemporaryFile
     {
-        wchar_t path[MAX_PATH] = {};
+        // GetTempFileNameW requires a MAX_PATH-sized output buffer.
+        // Use dynamically managed storage and validate the temporary directory length.
+        std::vector<wchar_t> path = std::vector<wchar_t>(MAX_PATH);
 
         TemporaryFile()
         {
-            wchar_t directory[MAX_PATH] = {};
-            if (!GetTempPathW(MAX_PATH, directory) ||
-                !GetTempFileNameW(directory, L"ads", 0, path))
+            std::vector<wchar_t> directory(MAX_PATH);
+            const DWORD length = GetTempPathW(
+                static_cast<DWORD>(directory.size()), directory.data());
+            if (length == 0 || length >= directory.size() ||
+                !GetTempFileNameW(directory.data(), L"ads", 0, path.data()))
                 throw std::runtime_error("Unable to create temporary file");
         }
 
         ~TemporaryFile()
         {
-            DeleteFileW(path);
+            DeleteFileW(path.data());
         }
 
         TemporaryFile(const TemporaryFile&) = delete;
@@ -61,18 +66,18 @@ namespace AlternateStreamTests
         {
             TemporaryFile fixture;
             AlternateStreamReader reader;
-            Assert::IsFalse(reader.HasAlternateStreams(fixture.path));
+            Assert::IsFalse(reader.HasAlternateStreams(fixture.path.data()));
 
-            const std::wstring namedPath = std::wstring(fixture.path) + L":unit_test";
+            const std::wstring namedPath = std::wstring(fixture.path.data()) + L":unit_test";
             CreateStream(namedPath);
-            Assert::IsTrue(reader.HasAlternateStreams(fixture.path));
+            Assert::IsTrue(reader.HasAlternateStreams(fixture.path.data()));
 
-            const auto names = reader.ListAlternateStreams(fixture.path);
+            const auto names = reader.ListAlternateStreams(fixture.path.data());
             Assert::IsTrue(std::find(names.begin(), names.end(),
                 L":unit_test:$DATA") != names.end());
 
             Assert::IsTrue(DeleteFileW(namedPath.c_str()) != FALSE);
-            Assert::IsFalse(reader.HasAlternateStreams(fixture.path));
+            Assert::IsFalse(reader.HasAlternateStreams(fixture.path.data()));
         }
     };
 
