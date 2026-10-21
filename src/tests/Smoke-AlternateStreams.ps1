@@ -208,9 +208,9 @@ function Test-CliPathForms {
             if ($LASTEXITCODE -ne 0) {
                 throw "CLI path case $($case.Name) failed: $output"
             }
-            $matches = [regex]::Matches($output, ':pathcheck:\$DATA').Count
-            if ($matches -ne $case.Expected.Count) {
-                throw "CLI path case $($case.Name) expected $($case.Expected.Count) streams, found $matches; $output"
+            $matchCount = [regex]::Matches($output, ':pathcheck:\$DATA').Count
+            if ($matchCount -ne $case.Expected.Count) {
+                throw "CLI path case $($case.Name) expected $($case.Expected.Count) streams, found $matchCount; $output"
             }
             foreach ($name in $case.Expected) {
                 if (-not $output.Contains($name)) {
