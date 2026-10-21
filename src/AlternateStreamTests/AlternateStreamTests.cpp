@@ -256,6 +256,29 @@ namespace AlternateStreamTests
             Assert::IsFalse(stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 0, record));
         }
 
+        TEST_METHOD(RejectsEmbeddedNulButAllowsUnpairedSurrogates)
+        {
+            std::vector<BYTE> buffer(64, 0);
+            auto* entry = reinterpret_cast<FILE_STREAM_INFO*>(buffer.data());
+            entry->NextEntryOffset = 0;
+            entry->StreamNameLength = 4 * sizeof(WCHAR);
+            entry->StreamName[0] = L':';
+            entry->StreamName[1] = L'A';
+            entry->StreamName[2] = L'\0';
+            entry->StreamName[3] = L'B';
+
+            stream_info_detail::Record record = {};
+            Assert::IsFalse(stream_info_detail::ReadRecord(
+                buffer.data(), buffer.size(), 0, record));
+
+            // NTFS can return isolated UTF-16 surrogates; do not enforce
+            // Unicode scalar-value validity on raw stream names.
+            entry->StreamName[2] = static_cast<WCHAR>(0xD800);
+            Assert::IsTrue(stream_info_detail::ReadRecord(
+                buffer.data(), buffer.size(), 0, record));
+            Assert::AreEqual(static_cast<size_t>(4 * sizeof(WCHAR)), record.nameBytes);
+        }
+
         TEST_METHOD(ReadsAlignedChainedRecords)
         {
             std::vector<BYTE> buffer(64, 0);
