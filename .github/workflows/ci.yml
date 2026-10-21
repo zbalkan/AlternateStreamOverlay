@@ -149,10 +149,15 @@ jobs:
           # The explicit ATL registry macro definition must eliminate its
           # previously observed parser errors. Keep unrelated ATL failures
           # visible until their configurations are verified individually.
+          registry_declarations = {
+              ("src/AlternateStreamOverlay/AlternateStreamContext.h", "30"),
+              ("src/AlternateStreamOverlay/AlternateStreamOverlayIcon.h", "19"),
+          }
           registry_failures = [
               item for item in parser_failures
-              if item.get("id") == "unknownMacro"
-              and "DECLARE_REGISTRY_RESOURCEID" in item.get("msg", "")
+              if "DECLARE_REGISTRY_RESOURCEID" in item.get("msg", "")
+              or any((loc.get("file"), loc.get("line")) in registry_declarations
+                     for loc in item.findall("location"))
           ]
           affected_files = sorted(
               {item.get("file0") for item in parser_failures if item.get("file0")}
