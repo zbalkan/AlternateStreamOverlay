@@ -405,8 +405,9 @@ void PostPreviewFailure(PreviewGate& gate, size_t generation)
     gate.pending.reset();
     gate.failedGeneration = generation;
     gate.pendingFailure = true;
-    if (!PostMessageW(gate.window, PreviewMessageId(),
-                      static_cast<WPARAM>(generation), 0))
+    const UINT messageId = PreviewMessageId();
+    if (messageId == 0 || !PostMessageW(gate.window, messageId,
+                                        static_cast<WPARAM>(generation), 0))
         gate.pendingFailure = false;
 }
 
@@ -486,7 +487,9 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
         // untrusted lParam. A failed post relinquishes the result immediately.
         request->gate->pending.swap(result);
         request->gate->pendingFailure = false;
-        if (!PostMessageW(request->gate->window, PreviewMessageId(),
+        const UINT messageId = PreviewMessageId();
+        if (messageId == 0 ||
+            !PostMessageW(request->gate->window, messageId,
                           static_cast<WPARAM>(generation), 0))
             request->gate->pending.reset();
         // A failed post usually means the dialog is gone; do not keep a
@@ -511,6 +514,12 @@ void SelectTextImpl(DialogState* state, size_t idx, bool asHex, HWND textBox)
     // Construct before changing the generation: allocation failure must not
     // make an existing worker's previous path appear to be a new selection.
     std::wstring path = state->context->get_path() + streams[idx];
+    if (PreviewMessageId() == 0)
+    {
+        // No completion notification can be delivered without registration.
+        SetWindowTextW(textBox, L"Unable to start alternate stream preview.");
+        return;
+    }
     SetWindowTextW(textBox, L"Loading alternate stream...");
     ExclusiveSrwLock lock(state->gate->lock);
     state->gate->path.swap(path);
@@ -652,21 +661,36 @@ void OnPreviewReady(HWND hWnd, WPARAM wParam)
 {
     const auto* state = reinterpret_cast<const DialogState*>(
         GetWindowLongPtr(hWnd, GWLP_USERDATA));
-    if (state == nullptr || static_cast<size_t>(wParam) != state->generation)
+    if (state == nullptr)
         return;
 
+    const size_t notificationGeneration = static_cast<size_t>(wParam);
     std::unique_ptr<PreviewResult> result;
     bool failed = false;
     {
         ExclusiveSrwLock lock(state->gate->lock);
-        if (!state->gate->alive || state->gate->generation != state->generation)
+        if (!state->gate->alive)
             return;
 
+        if (notificationGeneration != state->generation ||
+            state->gate->generation != state->generation)
+        {
+            // A stale notification can only discard its own completion.
+            // Never clear a newer generation's pending result or failure.
+            if (state->gate->pending &&
+                state->gate->pending->generation == notificationGeneration)
+                state->gate->pending.reset();
+            if (state->gate->pendingFailure &&
+                state->gate->failedGeneration == notificationGeneration)
+                state->gate->pendingFailure = false;
+            return;
+        }
+
         if (state->gate->pending &&
-            state->gate->pending->generation == state->generation)
+            state->gate->pending->generation == notificationGeneration)
             result.swap(state->gate->pending);
         else if (state->gate->pendingFailure &&
-                 state->gate->failedGeneration == state->generation)
+                 state->gate->failedGeneration == notificationGeneration)
         {
             failed = true;
             state->gate->pendingFailure = false;
