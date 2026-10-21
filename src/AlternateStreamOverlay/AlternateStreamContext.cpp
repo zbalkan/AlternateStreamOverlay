@@ -584,7 +584,7 @@ void OnPreviewReady(HWND hWnd, WPARAM wParam, LPARAM lParam)
 {
     // Each completion message owns its result, even when the dialog is gone.
     std::unique_ptr<PreviewResult> result(reinterpret_cast<PreviewResult*>(lParam));
-    auto* state = reinterpret_cast<DialogState*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+    const auto* state = reinterpret_cast<const DialogState*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
     if (state == nullptr)
         return;
 
@@ -619,7 +619,7 @@ void ReleaseEditFont(HWND hWnd)
     if (textBox == nullptr)
         return;
 
-    HFONT font = reinterpret_cast<HFONT>(GetWindowLongPtr(textBox, GWLP_USERDATA));
+    auto font = reinterpret_cast<HFONT>(GetWindowLongPtr(textBox, GWLP_USERDATA));
     if (font == nullptr)
         return;
 
