@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'src/AlternateStreamOverlay/**'
+      - 'src/AlternateStreamOverlay.sln'
       - 'src/altstrm_common/**'
       - 'src/tests/*.ps1'
       - '.github/workflows/shell-registration.yml'
@@ -12,6 +13,7 @@ on:
     branches: [main]
     paths:
       - 'src/AlternateStreamOverlay/**'
+      - 'src/AlternateStreamOverlay.sln'
       - 'src/altstrm_common/**'
       - 'src/tests/*.ps1'
       - '.github/workflows/shell-registration.yml'
