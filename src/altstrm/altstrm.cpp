@@ -77,8 +77,15 @@ int wmain(int argc, wchar_t* argv[])
     const std::wstring pattern(argv[1]);
 
     const size_t separator = pattern.find_last_of(L"\\/");
-    const std::wstring directory = separator == std::wstring::npos
-        ? L".\\" : pattern.substr(0, separator + 1);
+    // A drive-relative spec such as C:sample.txt is resolved relative to
+    // drive C's current directory, not the process current directory.
+    const bool driveRelative = pattern.size() >= 2 &&
+        ((pattern[0] >= L'A' && pattern[0] <= L'Z') ||
+         (pattern[0] >= L'a' && pattern[0] <= L'z')) &&
+        pattern[1] == L':' && separator == std::wstring::npos;
+    const std::wstring directory = separator != std::wstring::npos
+        ? pattern.substr(0, separator + 1)
+        : (driveRelative ? pattern.substr(0, 2) : L".\\");
 
     if (!WriteOutput(L"Files with alternate streams matching " +
                      std::wstring(argv[1]) + L"\r\n"))
