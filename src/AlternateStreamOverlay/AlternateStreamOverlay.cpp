@@ -4,6 +4,41 @@
 #include "dllmain.h"
 #include "dlldatax.h"
 
+namespace
+{
+    constexpr LPCWSTR OverlayKey =
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\"
+        L"ShellIconOverlayIdentifiers\\AlternateStreamOverlayIcon";
+    constexpr WCHAR OverlayClsid[] = L"{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}";
+
+    HRESULT UpdateOverlayRegistration(bool install)
+    {
+        bool perUser = false;
+        const HRESULT scopeResult = AtlGetPerUserRegistration(&perUser);
+        if (FAILED(scopeResult))
+            return scopeResult;
+
+        const HKEY root = perUser ? HKEY_CURRENT_USER : HKEY_LOCAL_MACHINE;
+        if (!install)
+        {
+            const LONG status = RegDeleteKeyW(root, OverlayKey);
+            return status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND
+                ? S_OK : HRESULT_FROM_WIN32(status);
+        }
+
+        HKEY key = nullptr;
+        const LONG status = RegCreateKeyExW(root, OverlayKey, 0, nullptr,
+            REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, nullptr, &key, nullptr);
+        if (status != ERROR_SUCCESS)
+            return HRESULT_FROM_WIN32(status);
+
+        const LONG valueStatus = RegSetValueExW(key, nullptr, 0, REG_SZ,
+            reinterpret_cast<const BYTE*>(OverlayClsid), sizeof(OverlayClsid));
+        RegCloseKey(key);
+        return HRESULT_FROM_WIN32(valueStatus);
+    }
+}
+
 // Boilerplate guff
 
 // Used to determine whether the DLL can be unloaded by OLE
@@ -38,19 +73,21 @@ STDAPI DllRegisterServer(void)
         return hr;
     hr = PrxDllRegisterServer();
 #endif
+    if (SUCCEEDED(hr))
+        hr = UpdateOverlayRegistration(true);
     return hr;
 }
 
 // DllUnregisterServer - Removes entries from the system registry
 STDAPI DllUnregisterServer(void)
 {
+    const HRESULT overlayResult = UpdateOverlayRegistration(false);
     HRESULT hr = _AtlModule.DllUnregisterServer();
 #ifdef _MERGE_PROXYSTUB
-    if (FAILED(hr))
-        return hr;
-    hr = PrxDllUnregisterServer();
+    if (SUCCEEDED(hr))
+        hr = PrxDllUnregisterServer();
 #endif
-    return hr;
+    return FAILED(hr) ? hr : overlayResult;
 }
 
 // DllInstall - Adds/Removes entries to the system registry per user

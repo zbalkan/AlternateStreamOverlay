@@ -23,27 +23,3 @@ HKCR
 		}
 	}
 }
-
-HKLM
-{
-	NoRemove SOFTWARE
-	{
-		NoRemove Microsoft
-		{
-			NoRemove Windows
-			{
-				NoRemove CurrentVersion
-				{
-					NoRemove Explorer
-					{
-						NoRemove ShellIconOverlayIdentifiers
-						{
-							ForceRemove AlternateStreamOverlayIcon = s '{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}'
-						}
-					}
-				}
-			}
-		}
-	}
-}
-

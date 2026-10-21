@@ -28,6 +28,31 @@ msbuild .\src\AlternateStreamOverlay.sln /t:Rebuild /m /p:Configuration=Release 
 
 Debug builds use `/p:Configuration=Debug`. The GitHub Actions workflow builds both configurations.
 
+## Registration scope
+
+Machine-wide registration requires elevation and remains the default:
+
+```powershell
+regsvr32.exe .\\src\\AlternateStreamOverlay\\x64\\Release\\AlternateStreamOverlay.dll
+```
+
+To register for the current user without writing the overlay identifier to HKLM,
+use `DllInstall("user")` through `regsvr32` with `/n` (which suppresses a
+separate machine-wide `DllRegisterServer` call):
+
+```powershell
+regsvr32.exe /n /i:user .\\src\\AlternateStreamOverlay\\x64\\Release\\AlternateStreamOverlay.dll
+```
+
+For current-user removal, use `regsvr32.exe /u /n /i:user` with the same DLL
+path. Default `regsvr32.exe /u` removes machine-wide registration. Run the
+appropriate command for the scope originally installed.
+
+ATL redirects per-user COM registrations into `HKCU\\Software\\Classes`;
+the Explorer overlay identifier is registered independently beneath
+`HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ShellIconOverlayIdentifiers`.
+Machine-wide overlay identifiers remain under the corresponding `HKLM` key.
+
 ## Shell handler registration validation
 
 Run `./src/tests/Test-ShellHandlerRegistration.ps1` on the target Windows
