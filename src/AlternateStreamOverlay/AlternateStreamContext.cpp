@@ -466,18 +466,22 @@ void SelectTextImpl(DialogState* state, size_t idx, bool asHex, HWND textBox)
     if (textBox == nullptr || state == nullptr)
         return;
     const auto& streams = state->context->get_streams();
-    ++state->generation;
     if (idx >= streams.size())
     {
+        ++state->generation;
         SetWindowTextW(textBox, L"");
         return;
     }
 
+    // Construct before changing the generation: allocation failure must not
+    // make an existing worker's previous path appear to be a new selection.
+    std::wstring path = state->context->get_path() + streams[idx];
     SetWindowTextW(textBox, L"Loading alternate stream...");
     ExclusiveSrwLock lock(state->gate->lock);
+    state->gate->path.swap(path);
+    ++state->generation;
     state->gate->generation = state->generation;
     state->gate->asHex = asHex;
-    state->gate->path = state->context->get_path() + streams[idx];
     if (state->gate->workerActive)
         return; // Coalesce changes into the most recent pending selection.
 
