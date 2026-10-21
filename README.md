@@ -28,6 +28,21 @@ msbuild .\src\AlternateStreamOverlay.sln /t:Rebuild /m /p:Configuration=Release 
 
 Debug builds use `/p:Configuration=Debug`. The GitHub Actions workflow builds both configurations.
 
+## Shell handler registration validation
+
+Run `./src/tests/Test-ShellHandlerRegistration.ps1` on the target Windows
+machine to check effective context-menu and property-sheet registrations for
+files and directories, the associated COM server path and its threading model.
+The script is read-only. A successful registration check does not prove that
+Explorer loaded the extension or displayed its menu and property page.
+
+The `shell-registration.yml` CI workflow builds and temporarily registers the
+extension on an isolated Windows runner, then runs both registration diagnostics
+with strict assertions. It unregisters the DLL during cleanup. The scripts
+remain warning-only when run manually without `-FailOnIssues` or
+`-RequireRegistration`. The existing main CI workflow already runs the ADS
+smoke tests.
+
 ## Explorer overlay registration diagnostics
 
 Run `./src/tests/Get-OverlayRegistration.ps1` on the target Windows machine to
