@@ -32,7 +32,7 @@ jobs:
       - name: Build solution
         shell: pwsh
         run: |
-          msbuild .\src\AlternateStreamOverlay.sln /t:Rebuild /m /nologo /verbosity:minimal `
+          msbuild .\src\AlternateStreamOverlay.sln /t:Rebuild /m /nologo /verbosity:normal `
             /p:Configuration=${{ matrix.configuration }} `
             /p:Platform=x64 `
             /p:RegisterOutput=false
