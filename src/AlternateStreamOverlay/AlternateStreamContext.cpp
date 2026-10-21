@@ -183,7 +183,9 @@ STDMETHODIMP CAlternateStreamContext::InvokeCommand(
         return E_FAIL;
 
     bool invoked = false;
-    if (HIWORD(pCmdInfo->lpVerb) == 0)
+    // Numeric command identifiers use MAKEINTRESOURCE-style pointer values.
+    // IS_INTRESOURCE examines the full pointer width (including on x64).
+    if (IS_INTRESOURCE(pCmdInfo->lpVerb))
     {
         invoked = LOWORD(pCmdInfo->lpVerb) == 0;
     }
@@ -191,10 +193,10 @@ STDMETHODIMP CAlternateStreamContext::InvokeCommand(
              (pCmdInfo->fMask & CMIC_MASK_UNICODE))
     {
         const auto* info = reinterpret_cast<const CMINVOKECOMMANDINFOEX*>(pCmdInfo);
-        if (info->lpVerbW != nullptr && HIWORD(info->lpVerbW) != 0)
+        if (info->lpVerbW != nullptr && !IS_INTRESOURCE(info->lpVerbW))
             invoked = _wcsicmp(info->lpVerbW, L"alternatestreams") == 0;
     }
-    if (!invoked && HIWORD(pCmdInfo->lpVerb) != 0)
+    if (!invoked && !IS_INTRESOURCE(pCmdInfo->lpVerb))
         invoked = _stricmp(pCmdInfo->lpVerb, "alternatestreams") == 0;
     if (!invoked)
         return E_INVALIDARG;
