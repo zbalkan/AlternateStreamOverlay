@@ -252,12 +252,14 @@ bool TryDecodeUtf8Preview(const BYTE* data, size_t size, bool truncated,
     // capacity in WCHAR elements (cchWideChar). Query the required character
     // count first, then allocate exactly that many wchar_t elements.
     const auto byteCount = static_cast<int>(length);
+    // Flawfinder: ignore
     const auto count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
         reinterpret_cast<const char*>(data), byteCount, nullptr, 0);
     if (count <= 0)
         return false;
 
     std::wstring decoded(static_cast<size_t>(count), L'\0');
+    // Flawfinder: ignore
     if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
         reinterpret_cast<const char*>(data), byteCount, &decoded[0], count) != count)
         return false;
