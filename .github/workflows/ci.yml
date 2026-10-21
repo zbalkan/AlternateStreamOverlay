@@ -80,6 +80,9 @@ jobs:
           if (-not (Test-Path -LiteralPath $vstest)) { throw "VSTest executable not found: $vstest" }
           $testDll = '.\src\x64\${{ matrix.configuration }}\AlternateStreamTests.dll'
           if (-not (Test-Path -LiteralPath $testDll)) { throw "MSTest assembly not built: $testDll" }
+          $overlayDll = '.\src\AlternateStreamOverlay\x64\${{ matrix.configuration }}\AlternateStreamOverlay.dll'
+          if (-not (Test-Path -LiteralPath $overlayDll)) { throw "Overlay DLL not built: $overlayDll" }
+          $env:ASO_OVERLAY_DLL = (Resolve-Path -LiteralPath $overlayDll).Path
           & $vstest $testDll '/Platform:x64' '/Logger:console;verbosity=normal'
           if ($LASTEXITCODE -ne 0) { throw "MSTest failed with exit code $LASTEXITCODE" }
 
