@@ -52,7 +52,11 @@ namespace
     class DropDataObject final : public IDataObject
     {
     public:
-        explicit DropDataObject(const std::wstring& path) : path_(path) {}
+        enum class MediumCase { Valid, NullGlobal, WrongMedium };
+
+        explicit DropDataObject(const std::wstring& path,
+            MediumCase mediumCase = MediumCase::Valid)
+            : path_(path), mediumCase_(mediumCase) {}
 
         HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** object) override
         {
@@ -80,6 +84,20 @@ namespace
             if (format == nullptr || medium == nullptr) return E_POINTER;
             if (format->cfFormat != CF_HDROP || format->tymed != TYMED_HGLOBAL)
                 return DV_E_FORMATETC;
+
+            *medium = {};
+            if (mediumCase_ == MediumCase::NullGlobal)
+            {
+                medium->tymed = TYMED_HGLOBAL;
+                return S_OK;
+            }
+            if (mediumCase_ == MediumCase::WrongMedium)
+            {
+                // Wrong representation and missing interface payload.
+                medium->tymed = TYMED_ISTREAM;
+                medium->pstm = nullptr;
+                return S_OK;
+            }
 
             // Reserve space for the path terminator and the second NUL
             // required by CF_HDROP, checking arithmetic before allocation.
@@ -123,6 +141,7 @@ namespace
 
     private:
         std::wstring path_;
+        MediumCase mediumCase_;
         ULONG references_ = 1;
     };
 
@@ -231,6 +250,32 @@ namespace AlternateStreamTests
                 initializer->Initialize(nullptr, nullptr, nullptr));
             Assert::AreEqual(static_cast<HRESULT>(E_FAIL),
                 menu->InvokeCommand(&command));
+
+            // A successful GetData call may still supply a malformed medium.
+            // Each malformed reinitialization must discard a valid selection.
+            Microsoft::WRL::ComPtr<IDataObject> nullGlobal;
+            nullGlobal.Attach(new DropDataObject(fixture.path.data(),
+                DropDataObject::MediumCase::NullGlobal));
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                initializer->Initialize(nullptr, data.Get(), nullptr));
+            Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG),
+                initializer->Initialize(nullptr, nullGlobal.Get(), nullptr));
+            Assert::AreEqual(static_cast<HRESULT>(E_FAIL),
+                menu->InvokeCommand(&command));
+
+            Microsoft::WRL::ComPtr<IDataObject> wrongMedium;
+            wrongMedium.Attach(new DropDataObject(fixture.path.data(),
+                DropDataObject::MediumCase::WrongMedium));
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                initializer->Initialize(nullptr, data.Get(), nullptr));
+            Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG),
+                initializer->Initialize(nullptr, wrongMedium.Get(), nullptr));
+            Assert::AreEqual(static_cast<HRESULT>(E_FAIL),
+                menu->InvokeCommand(&command));
+
+            // The same COM instance must remain reusable after those failures.
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                initializer->Initialize(nullptr, data.Get(), nullptr));
 
             menu.Reset();
             initializer.Reset();
