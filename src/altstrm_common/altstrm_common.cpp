@@ -40,7 +40,10 @@ namespace
         {
             if (GetFileInformationByHandleEx(file, FileStreamInfo,
                 buffer.data(), static_cast<DWORD>(buffer.size())))
+            {
+                error = ERROR_SUCCESS;
                 return StreamStatus::Ok;
+            }
 
             error = GetLastError();
             // No streams can be reported as EOF by FileStreamInfo.
