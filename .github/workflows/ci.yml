@@ -21,10 +21,10 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Visual Studio 2026 MSBuild
-        uses: microsoft/setup-msbuild@v3
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
         with:
           vs-version: '[18.0,19.0)'
           msbuild-architecture: x64
@@ -91,16 +91,57 @@ jobs:
           & .\src\tests\Smoke-AlternateStreams.ps1 -ExePath $exe
           if (-not $?) { throw 'ADS smoke tests failed' }
 
-  analyze:
-    name: MSVC and clang-tidy (Release x64)
+  cppcheck:
+    name: Cppcheck (Linux)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install Cppcheck
+        run: sudo apt-get update && sudo apt-get install -y cppcheck
+
+      - name: Analyze native source
+        shell: bash
+        run: |
+          cppcheck --version
+          cppcheck --enable=warning,performance,portability --error-exitcode=0 --suppress=missingIncludeSystem --xml --xml-version=2 src 2> cppcheck-results.xml
+          cat cppcheck-results.xml
+
+  flawfinder:
+    name: Flawfinder (Linux)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Scan native source
+        uses: david-a-wheeler/flawfinder@c4216b74cf2639ffa98503768bd6e4299b5440c9 # 2.0.20
+        with:
+          arguments: '--sarif src/'
+          output: flawfinder-results.sarif
+
+      - name: Upload Flawfinder SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@ce5e7eeac396d720fe2d802714996c8ce561e311 # v3
+        with:
+          sarif_file: flawfinder-results.sarif
+
+  analyze-msvc:
+    name: MSVC Code Analysis (Release x64)
     runs-on: windows-2025
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Visual Studio 2026 MSBuild
-        uses: microsoft/setup-msbuild@v3
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
         with:
           vs-version: '[18.0,19.0)'
           msbuild-architecture: x64
@@ -110,6 +151,21 @@ jobs:
         run: |
           msbuild .\src\AlternateStreamOverlay.sln /t:Rebuild /m /nologo /verbosity:normal /p:Configuration=Release /p:Platform=x64 /p:RegisterOutput=false /p:RunCodeAnalysis=true
           if ($LASTEXITCODE -ne 0) { throw "MSVC static-analysis build failed with exit code $LASTEXITCODE" }
+
+
+  analyze-clang-tidy:
+    name: clang-tidy (Release x64)
+    runs-on: windows-2025
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Visual Studio 2026 MSBuild
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
+        with:
+          vs-version: '[18.0,19.0)'
+          msbuild-architecture: x64
 
       - name: Analyze C++ Core Guidelines with clang-tidy
         shell: pwsh
