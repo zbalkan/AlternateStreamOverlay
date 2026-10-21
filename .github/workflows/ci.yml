@@ -41,6 +41,34 @@ jobs:
           }
 
 
+      - name: Verify Release PE mitigations
+        if: matrix.configuration == 'Release'
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Microsoft Visual Studio\Installer\vswhere.exe'
+          if (-not (Test-Path -LiteralPath $vswhere)) { throw 'vswhere.exe not found' }
+          $vsPath = & $vswhere -latest -products * -property installationPath
+          if ($LASTEXITCODE -ne 0 -or -not $vsPath) { throw 'Visual Studio installation not found' }
+          $tools = @(Get-ChildItem -LiteralPath (Join-Path $vsPath 'VC\Tools\MSVC') -Directory | Sort-Object Name -Descending)
+          $dumpbin = $null
+          foreach ($tool in $tools) {
+            $candidate = Join-Path $tool.FullName 'bin\Hostx64\x64\dumpbin.exe'
+            if (Test-Path -LiteralPath $candidate) { $dumpbin = $candidate; break }
+          }
+          if (-not $dumpbin) { throw 'x64 dumpbin.exe not found' }
+          foreach ($binary in @('.\src\AlternateStreamOverlay\x64\Release\AlternateStreamOverlay.dll', '.\src\x64\Release\altstrm.exe')) {
+            if (-not (Test-Path -LiteralPath $binary)) { throw "Missing Release binary: $binary" }
+            $lines = & $dumpbin /headers /loadconfig $binary 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "dumpbin failed for $binary" }
+            $details = $lines -join [Environment]::NewLine
+            Write-Host "--- $binary ---"
+            $lines | Select-String -Pattern 'Guard', 'CF Instrumented', 'FID table present', 'CET compatible' | ForEach-Object { Write-Host $_.Line }
+            if ($details -notmatch '(?im)^\s*Control Flow Guard\s*$') { throw "Missing CFG PE characteristic in $binary" }
+            if ($details -notmatch '(?im)^\s*CF Instrumented\b') { throw "Missing CFG instrumentation in $binary" }
+            if ($details -notmatch '(?im)^\s*FID table present\b') { throw "Missing CFG function table in $binary" }
+            if ($details -notmatch '(?im)\bCET compatible\b') { throw "Missing CET compatibility marker in $binary" }
+          }
+
       - name: Run native C++ MSTest
         shell: pwsh
         run: |
