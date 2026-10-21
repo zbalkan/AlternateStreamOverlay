@@ -128,7 +128,12 @@ int wmain(int argc, wchar_t* argv[])
     const HANDLE search = FindFirstFileW(pattern.c_str(), &findData);
     if (search == INVALID_HANDLE_VALUE)
     {
-        WriteOutput(L"No files to check.\r\n");
+        const DWORD error = GetLastError();
+        if (error == ERROR_FILE_NOT_FOUND)
+            WriteOutput(L"No files to check.\r\n");
+        else
+            WriteOutput(L"File search failed (Win32 error " +
+                std::to_wstring(error) + L")\r\n");
         return 1;
     }
 
@@ -143,6 +148,10 @@ int wmain(int argc, wchar_t* argv[])
     const DWORD lastError = GetLastError();
     FindClose(search);
     if (success && lastError != ERROR_NO_MORE_FILES)
+    {
+        WriteOutput(L"File search failed (Win32 error " +
+            std::to_wstring(lastError) + L")\r\n");
         success = false;
+    }
     return success ? 0 : 1;
 }
