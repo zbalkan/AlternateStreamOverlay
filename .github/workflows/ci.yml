@@ -259,7 +259,7 @@ jobs:
             foreach ($folder in $folders) {
               Get-ChildItem -LiteralPath $folder -File |
                 Where-Object { $_.Extension -in '.cpp', '.h', '.hpp' } |
-                Select-String -Pattern $pattern |
+                Select-String -Pattern $pattern -CaseSensitive |
                 ForEach-Object { "$($_.Path):$($_.LineNumber): $($_.Line.Trim())" }
             }
           )
