@@ -9,6 +9,27 @@ CAlternateStreamOverlayIcon::CAlternateStreamOverlayIcon()
 {
 }
 
+namespace
+{
+bool IsLocalDrivePath(LPCWSTR path)
+{
+    // Mapped drives look like local paths; classify their drive root before
+    // opening any file. Skip unsupported path forms on this Explorer hot path.
+    if (wcsncmp(path, L"\\\\?\\", 4) == 0)
+        path += 4;
+
+    if (!((path[0] >= L'A' && path[0] <= L'Z') ||
+          (path[0] >= L'a' && path[0] <= L'z')) ||
+        path[1] != L':' || path[2] != L'\\')
+        return false;
+
+    const WCHAR root[] = { path[0], L':', L'\\', L'\0' };
+    const UINT type = GetDriveTypeW(root);
+    return type != DRIVE_REMOTE && type != DRIVE_UNKNOWN &&
+           type != DRIVE_NO_ROOT_DIR;
+}
+}
+
 // Does this overlay apply?
 STDMETHODIMP CAlternateStreamOverlayIcon::IsMemberOf(LPCWSTR pwszPath, DWORD dwAttrib)
 {
@@ -25,7 +46,7 @@ STDMETHODIMP CAlternateStreamOverlayIcon::IsMemberOf(LPCWSTR pwszPath, DWORD dwA
         return S_FALSE;
 
     // Avoid synchronous SMB/UNC I/O on Explorer's overlay callback path.
-    if (PathIsUNCW(pwszPath))
+    if (PathIsUNCW(pwszPath) || !IsLocalDrivePath(pwszPath))
         return S_FALSE;
 
     return hasAlternateStreams(pwszPath) ? S_OK : S_FALSE;
