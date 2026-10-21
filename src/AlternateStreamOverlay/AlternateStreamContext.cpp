@@ -306,6 +306,15 @@ std::wstring ReadPreview(const std::wstring& path, bool asHex)
     return formatted;
 }
 
+// A null result signals failure without allocating on an exhausted heap.
+// The generation prevents a stale worker failure from replacing newer content.
+void PostPreviewFailure(PreviewGate& gate, size_t generation)
+{
+    if (gate.alive && gate.generation == generation)
+        PostMessageW(gate.window, WM_PREVIEW_READY,
+                     static_cast<WPARAM>(generation), 0);
+}
+
 VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP_WORK work)
 {
     std::unique_ptr<PreviewRequest> request(static_cast<PreviewRequest*>(parameter));
@@ -333,7 +342,8 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
             }
             catch (const std::bad_alloc&)
             {
-                // A failed snapshot must not escape the Win32 callback.
+                // Report a terminal error for the currently displayed request.
+                PostPreviewFailure(*request->gate, generation);
                 request->gate->workerActive = false;
                 return;
             }
@@ -343,6 +353,7 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
         if (!result)
         {
             ExclusiveSrwLock lock(request->gate->lock);
+            PostPreviewFailure(*request->gate, generation);
             request->gate->workerActive = false;
             return;
         }
@@ -353,8 +364,12 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
         }
         catch (...)
         {
-            // Never propagate exceptions across the Win32 thread-pool boundary.
-            result->text = L"Unable to read alternate stream.";
+            // An error-string allocation can also fail. Use an allocation-free
+            // completion message instead of attempting another string write.
+            ExclusiveSrwLock lock(request->gate->lock);
+            PostPreviewFailure(*request->gate, generation);
+            request->gate->workerActive = false;
+            return;
         }
 
         ExclusiveSrwLock lock(request->gate->lock);
@@ -369,6 +384,8 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
         if (PostMessageW(request->gate->window, WM_PREVIEW_READY, 0,
                          reinterpret_cast<LPARAM>(result.get())))
             result.release();
+        // A failed post usually means the dialog is gone; do not keep a
+        // worker marked active when delivery was unsuccessful.
         request->gate->workerActive = false;
         return;
     }
@@ -529,8 +546,14 @@ DLGRETURN CALLBACK PropPageDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
     {
         std::unique_ptr<PreviewResult> result(reinterpret_cast<PreviewResult*>(lParam));
         auto* state = reinterpret_cast<DialogState*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
-        if (state != nullptr && result && result->generation == state->generation)
-            SetWindowTextW(GetDlgItem(hWnd, IDC_EDIT1), result->text.c_str());
+        if (state != nullptr)
+        {
+            if (result && result->generation == state->generation)
+                SetWindowTextW(GetDlgItem(hWnd, IDC_EDIT1), result->text.c_str());
+            else if (!result && static_cast<size_t>(wParam) == state->generation)
+                SetWindowTextW(GetDlgItem(hWnd, IDC_EDIT1),
+                               L"Unable to read alternate stream.");
+        }
         return TRUE;
     }
 
