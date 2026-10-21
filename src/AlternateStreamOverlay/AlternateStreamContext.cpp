@@ -219,6 +219,10 @@ struct PreviewGate
     std::mutex mutex;
     bool alive = true;
     HWND window = nullptr;
+    bool workerActive = false;
+    size_t generation = 0;
+    std::wstring path;
+    bool asHex = false;
 };
 
 struct DialogState
@@ -231,9 +235,7 @@ struct DialogState
 struct PreviewRequest
 {
     std::shared_ptr<PreviewGate> gate;
-    std::wstring path;
-    size_t generation;
-    bool asHex;
+    HMODULE module = nullptr;
 };
 
 struct PreviewResult
@@ -284,30 +286,63 @@ std::wstring ReadPreview(const std::wstring& path, bool asHex)
     return formatted;
 }
 
-DWORD WINAPI PreviewWorker(LPVOID parameter)
+VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP_WORK work)
 {
     std::unique_ptr<PreviewRequest> request(static_cast<PreviewRequest*>(parameter));
-    std::unique_ptr<PreviewResult> result(new (std::nothrow) PreviewResult);
-    if (!result)
-        return 0;
-    result->generation = request->generation;
-    try
-    {
-        result->text = ReadPreview(request->path, request->asHex);
-    }
-    catch (...)
-    {
-        result->text = L"Unable to read alternate stream.";
-    }
+    // Windows releases the DLL only after this callback has completely returned.
+    FreeLibraryWhenCallbackReturns(instance, request->module);
+    CloseThreadpoolWork(work);
 
-    // The Windows thread-pool callback must not allow exceptions to escape.
-    // Serialize posting with destruction. WM_DESTROY drains posted completions.
-    std::lock_guard<std::mutex> lock(request->gate->mutex);
-    if (request->gate->alive &&
-        PostMessageW(request->gate->window, WM_PREVIEW_READY, 0,
-                     reinterpret_cast<LPARAM>(result.get())))
-        result.release();
-    return 0;
+    for (;;)
+    {
+        std::wstring path;
+        size_t generation = 0;
+        bool asHex = false;
+        {
+            std::lock_guard<std::mutex> lock(request->gate->mutex);
+            if (!request->gate->alive)
+            {
+                request->gate->workerActive = false;
+                return;
+            }
+            generation = request->gate->generation;
+            asHex = request->gate->asHex;
+            path = request->gate->path;
+        }
+
+        std::unique_ptr<PreviewResult> result(new (std::nothrow) PreviewResult);
+        if (!result)
+        {
+            std::lock_guard<std::mutex> lock(request->gate->mutex);
+            request->gate->workerActive = false;
+            return;
+        }
+        result->generation = generation;
+        try
+        {
+            result->text = ReadPreview(path, asHex);
+        }
+        catch (...)
+        {
+            // Never propagate exceptions across the Win32 thread-pool boundary.
+            result->text = L"Unable to read alternate stream.";
+        }
+
+        std::lock_guard<std::mutex> lock(request->gate->mutex);
+        if (!request->gate->alive)
+        {
+            request->gate->workerActive = false;
+            return;
+        }
+        if (generation != request->gate->generation)
+            continue; // Skip superseded results; read only the latest selection.
+
+        if (PostMessageW(request->gate->window, WM_PREVIEW_READY, 0,
+                         reinterpret_cast<LPARAM>(result.get())))
+            result.release();
+        request->gate->workerActive = false;
+        return;
+    }
 }
 
 void SelectText(DialogState* state, size_t idx, bool asHex, HWND textBox)
@@ -315,7 +350,7 @@ void SelectText(DialogState* state, size_t idx, bool asHex, HWND textBox)
     if (textBox == nullptr || state == nullptr)
         return;
     const auto& streams = state->context->get_streams();
-    ++state->generation; // Invalidate all earlier requests, including invalid selections.
+    ++state->generation;
     if (idx >= streams.size())
     {
         SetWindowTextW(textBox, L"");
@@ -323,6 +358,13 @@ void SelectText(DialogState* state, size_t idx, bool asHex, HWND textBox)
     }
 
     SetWindowTextW(textBox, L"Loading alternate stream...");
+    std::lock_guard<std::mutex> lock(state->gate->mutex);
+    state->gate->generation = state->generation;
+    state->gate->asHex = asHex;
+    state->gate->path = state->context->get_path() + streams[idx];
+    if (state->gate->workerActive)
+        return; // Coalesce changes into the most recent pending selection.
+
     std::unique_ptr<PreviewRequest> request(new (std::nothrow) PreviewRequest);
     if (!request)
     {
@@ -330,15 +372,24 @@ void SelectText(DialogState* state, size_t idx, bool asHex, HWND textBox)
         return;
     }
     request->gate = state->gate;
-    request->path = state->context->get_path() + streams[idx];
-    request->generation = state->generation;
-    request->asHex = asHex;
-    if (!QueueUserWorkItem(PreviewWorker, request.get(), WT_EXECUTEDEFAULT))
+    HMODULE module = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+        reinterpret_cast<LPCWSTR>(&PreviewWorker), &module))
     {
         SetWindowTextW(textBox, L"Unable to start alternate stream preview.");
         return;
     }
-    request.release(); // Worker owns the request from this point forward.
+    request->module = module;
+    PTP_WORK work = CreateThreadpoolWork(PreviewWorker, request.get(), nullptr);
+    if (work == nullptr)
+    {
+        FreeLibrary(module);
+        SetWindowTextW(textBox, L"Unable to start alternate stream preview.");
+        return;
+    }
+    state->gate->workerActive = true;
+    SubmitThreadpoolWork(work);
+    request.release();
 }
 
 } // namespace
@@ -357,9 +408,17 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     if (!state)
         return FALSE;
     state->context = pthis;
-    state->gate = std::make_shared<PreviewGate>();
+    try
+    {
+        state->gate = std::make_shared<PreviewGate>();
+    }
+    catch (const std::bad_alloc&)
+    {
+        return FALSE;
+    }
     state->gate->window = hWnd;
-    SetWindowLongPtr(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state.get()));
+    DialogState* dialogState = state.get();
+    SetWindowLongPtr(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(dialogState));
     state.release();
 
     HWND comboBox = GetDlgItem(hWnd, IDC_COMBO1);
@@ -390,7 +449,7 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     if (!streams.empty())
     {
         SendMessage(comboBox, CB_SETCURSEL, 0, 0);
-        SelectText(state.get(), 0, false, textBox);
+        SelectText(dialogState, 0, false, textBox);
     }
     return TRUE;
 }
