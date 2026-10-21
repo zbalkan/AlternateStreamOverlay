@@ -10,18 +10,22 @@
 STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDataObj, HKEY)
 {
     FORMATETC fmt = { CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+    if (pDataObj == nullptr)
+        return E_INVALIDARG;
+
     STGMEDIUM stg = {};
-    stg.tymed = TYMED_HGLOBAL;
-    if (pDataObj == nullptr) return E_INVALIDARG;
-
-    HDROP hDrop = nullptr;
-
     if (FAILED(pDataObj->GetData(&fmt, &stg)))
+        return E_INVALIDARG;
+
+    // IDataObject::GetData must return a usable CF_HDROP HGLOBAL.
+    // Always release a successfully returned medium, including malformed ones.
+    if (stg.tymed != TYMED_HGLOBAL || stg.hGlobal == nullptr)
     {
+        ReleaseStgMedium(&stg);
         return E_INVALIDARG;
     }
 
-    hDrop = (HDROP)GlobalLock(stg.hGlobal);
+    HDROP hDrop = reinterpret_cast<HDROP>(GlobalLock(stg.hGlobal));
 
     if (hDrop == nullptr)
     {
@@ -193,7 +197,10 @@ void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND tex
 
     const std::wstring full_path = fname + streams[idx];
 
-    HandleW hFile(::CreateFile(full_path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL));
+    // Preview reads should coexist with writers, rename and delete operations.
+    HandleW hFile(::CreateFileW(full_path.c_str(), GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr));
 
     if (hFile == INVALID_HANDLE_VALUE)
     {
