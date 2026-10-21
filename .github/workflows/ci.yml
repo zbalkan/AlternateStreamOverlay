@@ -113,6 +113,7 @@ jobs:
           cppcheck --enable=warning,performance,portability --error-exitcode=0 \
             --suppress=missingIncludeSystem \
             '-DDECLARE_REGISTRY_RESOURCEID(x)=' \
+            '-DDECLARE_NOT_AGGREGATABLE(x)=' \
             -isrc/AlternateStreamOverlay/dlldata.c \
             -isrc/AlternateStreamTests \
             --xml --xml-version=2 src 2> cppcheck-results.xml
