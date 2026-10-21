@@ -178,6 +178,61 @@ bool AlternateStreamReader::HasAlternateStreams(LPCWSTR filename) const
 }
 
 
+namespace
+{
+    // Windows uses BYTE for ReadFile buffers. Keep that API boundary and
+    // classify individual octets without introducing a C++17 requirement.
+    bool IsContinuation(BYTE value)
+    {
+        return (value & 0xC0) == 0x80;
+    }
+
+    size_t Utf8SequenceLength(BYTE lead)
+    {
+        if (lead >= 0xC2 && lead <= 0xDF) return 2;
+        if (lead >= 0xE0 && lead <= 0xEF) return 3;
+        if (lead >= 0xF0 && lead <= 0xF4) return 4;
+        return 0;
+    }
+
+    bool IsValidInitialContinuation(BYTE lead, BYTE second)
+    {
+        if (!IsContinuation(second)) return false;
+        if (lead == 0xE0 && second < 0xA0) return false;
+        if (lead == 0xED && second > 0x9F) return false;
+        if (lead == 0xF0 && second < 0x90) return false;
+        if (lead == 0xF4 && second > 0x8F) return false;
+        return true;
+    }
+
+    size_t CompleteUtf8PrefixLength(const BYTE* data, size_t length)
+    {
+        // At most three trailing continuation bytes can belong to a UTF-8
+        // sequence cut by the preview limit.
+        size_t lead = length;
+        while (lead > 0 && length - lead < 3 && IsContinuation(data[lead - 1]))
+            --lead;
+        if (lead == 0)
+            return length;
+        --lead;
+
+        const size_t required = Utf8SequenceLength(data[lead]);
+        const size_t available = length - lead;
+        if (required == 0 || available >= required)
+            return length;
+        if (available >= 2 &&
+            !IsValidInitialContinuation(data[lead], data[lead + 1]))
+            return length;
+
+        for (size_t i = lead + 2; i < length; ++i)
+        {
+            if (!IsContinuation(data[i]))
+                return length;
+        }
+        return lead;
+    }
+}
+
 bool TryDecodeUtf8Preview(const BYTE* data, size_t size, bool truncated,
                           std::wstring& text)
 {
@@ -187,47 +242,14 @@ bool TryDecodeUtf8Preview(const BYTE* data, size_t size, bool truncated,
     if (data == nullptr || size > static_cast<size_t>(INT_MAX))
         return false;
 
-    size_t length = size;
-    if (truncated)
-    {
-        // Only remove an incomplete final code point. Never forgive malformed
-        // UTF-8 elsewhere in the preview (or a genuinely incomplete file).
-        size_t lead = length;
-        while (lead > 0 && length - lead < 3 &&
-               (data[lead - 1] & 0xC0) == 0x80)
-            --lead;
-        if (lead > 0)
-        {
-            --lead;
-            const BYTE first = data[lead];
-            const size_t available = length - lead;
-            const size_t required = first >= 0xF0 && first <= 0xF4 ? 4 :
-                                    first >= 0xE0 && first <= 0xEF ? 3 :
-                                    first >= 0xC2 && first <= 0xDF ? 2 : 0;
-            bool validPrefix = required != 0 && available < required;
-            for (size_t i = lead + 1; validPrefix && i < length; ++i)
-                validPrefix = (data[i] & 0xC0) == 0x80;
-            if (validPrefix && available >= 2)
-            {
-                const BYTE second = data[lead + 1];
-                if ((first == 0xE0 && second < 0xA0) ||
-                    (first == 0xED && second > 0x9F) ||
-                    (first == 0xF0 && second < 0x90) ||
-                    (first == 0xF4 && second > 0x8F))
-                    validPrefix = false;
-            }
-            if (validPrefix)
-                length = lead;
-        }
-    }
-
+    const auto length = truncated ? CompleteUtf8PrefixLength(data, size) : size;
     if (std::find(data, data + length, static_cast<BYTE>(0)) != data + length)
         return false;
     if (length == 0)
         return true;
 
-    const int byteCount = static_cast<int>(length);
-    const int count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+    const auto byteCount = static_cast<int>(length);
+    const auto count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
         reinterpret_cast<const char*>(data), byteCount, nullptr, 0);
     if (count <= 0)
         return false;
