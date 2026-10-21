@@ -68,7 +68,7 @@ int wmain(int argc, wchar_t* argv[])
     if (argc != 2)
     {
         const std::wstring program = argc > 0 ? argv[0] : L"altstrm";
-        WriteOutput(program + L" [file path/spec]\n");
+        WriteOutput(program + L" [file path/spec]\r\n");
         return 1;
     }
 
@@ -81,14 +81,14 @@ int wmain(int argc, wchar_t* argv[])
         ? L".\\" : pattern.substr(0, separator + 1);
 
     if (!WriteOutput(L"Files with alternate streams matching " +
-                     std::wstring(argv[1]) + L"\n"))
+                     std::wstring(argv[1]) + L"\r\n"))
         return 1;
 
     WIN32_FIND_DATAW findData = {};
     const HANDLE search = FindFirstFileW(pattern.c_str(), &findData);
     if (search == INVALID_HANDLE_VALUE)
     {
-        WriteOutput(L"No files to check.\n");
+        WriteOutput(L"No files to check.\r\n");
         return 1;
     }
 
@@ -102,9 +102,9 @@ int wmain(int argc, wchar_t* argv[])
         names.erase(std::remove(names.begin(), names.end(), L"::$DATA"), names.end());
         if (!names.empty())
         {
-            std::wstring result = fullPath + L"\n";
+            std::wstring result = fullPath + L"\r\n";
             for (const auto& name : names)
-                result += L" " + name + L"\n";
+                result += L" " + name + L"\r\n";
             if (!WriteOutput(result))
             {
                 success = false;
