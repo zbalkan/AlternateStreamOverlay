@@ -146,19 +146,6 @@ jobs:
           # Warning, performance and portability findings remain informational.
           parser_ids = {"unknownMacro", "syntaxError"}
           parser_failures = [item for item in findings if item.get("id") in parser_ids]
-          # The explicit ATL registry macro definition must eliminate its
-          # previously observed parser errors. Keep unrelated ATL failures
-          # visible until their configurations are verified individually.
-          registry_declarations = {
-              ("src/AlternateStreamOverlay/AlternateStreamContext.h", "30"),
-              ("src/AlternateStreamOverlay/AlternateStreamOverlayIcon.h", "19"),
-          }
-          registry_failures = [
-              item for item in parser_failures
-              if "DECLARE_REGISTRY_RESOURCEID" in item.get("msg", "")
-              or any((loc.get("file"), loc.get("line")) in registry_declarations
-                     for loc in item.findall("location"))
-          ]
           affected_files = sorted(
               {item.get("file0") for item in parser_failures if item.get("file0")}
               | {loc.get("file") for item in parser_failures
@@ -182,15 +169,15 @@ jobs:
               print(f"  {path}")
           if parser_failures:
               print("WARNING: Cppcheck analysis coverage is incomplete.")
-          # Parser/configuration failures are not actionable source defects.
-          # Keep them visible in the summary; gate only analyzable error IDs.
+          # Parser failures indicate incomplete coverage and must fail CI.
+          # Keep them visible in the summary alongside other diagnostics.
           errors = [item for item in findings
                     if item.get("severity") == "error"
                     and item.get("id") not in parser_ids]
-          if registry_failures:
+          if parser_failures:
               raise SystemExit(
-                  f"Cppcheck still cannot parse DECLARE_REGISTRY_RESOURCEID "
-                  f"({len(registry_failures)} finding(s))"
+                  f"Cppcheck reported {len(parser_failures)} parser/configuration "
+                  "failure(s) in the analyzed source; see Analysis coverage"
               )
           if errors:
               raise SystemExit(f"Cppcheck reported {len(errors)} error-severity finding(s)")
