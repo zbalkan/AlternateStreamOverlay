@@ -1,5 +1,6 @@
 #include "CppUnitTest.h"
 #include "altstrm_common.h"
+#include "stream_info_detail.h"
 #include <algorithm>
 #include <cstddef>
 #include <cstring>

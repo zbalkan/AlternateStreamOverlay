@@ -1,4 +1,5 @@
 #include "altstrm_common.h"
+#include "stream_info_detail.h"
 
 /*
  * 08/2011 lee@benf.org
