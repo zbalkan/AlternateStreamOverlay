@@ -146,6 +146,14 @@ jobs:
           # Warning, performance and portability findings remain informational.
           parser_ids = {"unknownMacro", "syntaxError"}
           parser_failures = [item for item in findings if item.get("id") in parser_ids]
+          # The explicit ATL registry macro definition must eliminate its
+          # previously observed parser errors. Keep unrelated ATL failures
+          # visible until their configurations are verified individually.
+          registry_failures = [
+              item for item in parser_failures
+              if item.get("id") == "unknownMacro"
+              and "DECLARE_REGISTRY_RESOURCEID" in item.get("msg", "")
+          ]
           affected_files = sorted(
               {item.get("file0") for item in parser_failures if item.get("file0")}
               | {loc.get("file") for item in parser_failures
@@ -174,6 +182,11 @@ jobs:
           errors = [item for item in findings
                     if item.get("severity") == "error"
                     and item.get("id") not in parser_ids]
+          if registry_failures:
+              raise SystemExit(
+                  f"Cppcheck still cannot parse DECLARE_REGISTRY_RESOURCEID "
+                  f"({len(registry_failures)} finding(s))"
+              )
           if errors:
               raise SystemExit(f"Cppcheck reported {len(errors)} error-severity finding(s)")
           PY
