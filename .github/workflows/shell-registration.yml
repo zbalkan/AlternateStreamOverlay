@@ -61,17 +61,29 @@ jobs:
         run: |
           $dll = (Resolve-Path -LiteralPath './src/AlternateStreamOverlay/x64/Release/AlternateStreamOverlay.dll').Path
           $regsvr32 = Join-Path $env:WINDIR 'System32/regsvr32.exe'
+          $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+          $principal = [Security.Principal.WindowsPrincipal]::new($identity)
+          if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+            throw 'Machine-wide COM registration requires an elevated administrator token.'
+          }
+
+          $registered = $false
           try {
-            & $regsvr32 /s $dll
-            if ($LASTEXITCODE -ne 0) { throw "regsvr32 registration failed: $LASTEXITCODE" }
+            # regsvr32 is a GUI-subsystem executable. Use Start-Process -Wait to
+            # capture its exit code instead of relying on $LASTEXITCODE in pwsh.
+            $process = Start-Process -FilePath $regsvr32 -ArgumentList @('/s', "`"$dll`"") -Wait -PassThru
+            if ($process.ExitCode -ne 0) {
+              throw "regsvr32 registration failed with exit code $($process.ExitCode)"
+            }
+            $registered = $true
             & ./src/tests/Test-ShellHandlerRegistration.ps1 -FailOnIssues
-            if (-not $?) { throw 'Shell handler registration audit failed' }
             & ./src/tests/Get-OverlayRegistration.ps1 -RequireRegistration
-            if (-not $?) { throw 'Overlay registration audit failed' }
           }
           finally {
-            & $regsvr32 /u /s $dll
-            if ($LASTEXITCODE -ne 0) {
-              Write-Warning "Shell extension cleanup returned exit code $LASTEXITCODE"
+            if ($registered) {
+              $cleanup = Start-Process -FilePath $regsvr32 -ArgumentList @('/u', '/s', "`"$dll`"") -Wait -PassThru
+              if ($cleanup.ExitCode -ne 0) {
+                Write-Warning "Shell extension cleanup returned exit code $($cleanup.ExitCode)"
+              }
             }
           }
