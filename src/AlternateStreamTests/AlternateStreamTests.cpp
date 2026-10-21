@@ -84,7 +84,7 @@ namespace
             // Reserve space for the path terminator and the second NUL
             // required by CF_HDROP, checking arithmetic before allocation.
             const size_t maxCharacters =
-                (std::numeric_limits<size_t>::max() - sizeof(DROPFILES)) / sizeof(WCHAR);
+                ((std::numeric_limits<size_t>::max)() - sizeof(DROPFILES)) / sizeof(WCHAR);
             if (path_.size() > maxCharacters - 2)
                 return E_OUTOFMEMORY;
             const size_t bytes = sizeof(DROPFILES) +
@@ -126,6 +126,14 @@ namespace
         ULONG references_ = 1;
     };
 
+    // Distinguish local test fixture setup failures from test assertions.
+    class OverlayDllPathError : public std::runtime_error
+    {
+    public:
+        explicit OverlayDllPathError(const char* message)
+            : std::runtime_error(message) {}
+    };
+
     std::wstring GetOverlayDllPath()
     {
         // CI can provide an explicit build artifact. Test Explorer does not
@@ -136,7 +144,7 @@ namespace
         if (overrideLength != 0)
         {
             if (overrideLength >= buffer.size())
-                throw std::runtime_error("ASO_OVERLAY_DLL exceeds the path buffer");
+                throw OverlayDllPathError("ASO_OVERLAY_DLL exceeds the path buffer");
             return std::wstring(buffer.data(), overrideLength);
         }
 
@@ -145,19 +153,19 @@ namespace
             GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
             GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
             reinterpret_cast<LPCWSTR>(&CreateStream), &testModule))
-            throw std::runtime_error("Unable to locate the test module");
+            throw OverlayDllPathError("Unable to locate the test module");
 
         const DWORD length = GetModuleFileNameW(
             testModule, buffer.data(), static_cast<DWORD>(buffer.size()));
         if (length == 0 || length >= buffer.size())
-            throw std::runtime_error("Unable to retrieve the test module path");
+            throw OverlayDllPathError("Unable to retrieve the test module path");
 
         const std::wstring testPath(buffer.data(), length);
         const size_t lastSlash = testPath.find_last_of(L"\\/");
         const size_t configSlash = lastSlash == std::wstring::npos
             ? std::wstring::npos : testPath.find_last_of(L"\\/", lastSlash - 1);
         if (configSlash == std::wstring::npos)
-            throw std::runtime_error("Unexpected MSTest output directory");
+            throw OverlayDllPathError("Unexpected MSTest output directory");
 
         // Default solution layout:
         // src\x64\Debug\AlternateStreamTests.dll
