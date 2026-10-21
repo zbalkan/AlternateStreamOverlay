@@ -3,6 +3,7 @@
 #include "stream_info_detail.h"
 #include <algorithm>
 #include <cstddef>
+#include <limits>
 #include <string>
 #include <stdexcept>
 #include <vector>
@@ -82,7 +83,8 @@ namespace
 
             // Reserve space for the path terminator and the second NUL
             // required by CF_HDROP, checking arithmetic before allocation.
-            const size_t maxCharacters = (SIZE_MAX - sizeof(DROPFILES)) / sizeof(WCHAR);
+            const size_t maxCharacters =
+                (std::numeric_limits<size_t>::max() - sizeof(DROPFILES)) / sizeof(WCHAR);
             if (path_.size() > maxCharacters - 2)
                 return E_OUTOFMEMORY;
             const size_t bytes = sizeof(DROPFILES) +
