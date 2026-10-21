@@ -307,7 +307,16 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
             }
             generation = request->gate->generation;
             asHex = request->gate->asHex;
-            path = request->gate->path;
+            try
+            {
+                path = request->gate->path;
+            }
+            catch (const std::bad_alloc&)
+            {
+                // A failed snapshot must not escape the Win32 callback.
+                request->gate->workerActive = false;
+                return;
+            }
         }
 
         std::unique_ptr<PreviewResult> result(new (std::nothrow) PreviewResult);
