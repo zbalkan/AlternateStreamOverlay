@@ -578,75 +578,81 @@ UINT CALLBACK PropPageCallbackProc(HWND, UINT uMsg, LPPROPSHEETPAGE ppsp)
 
 typedef INT_PTR DLGRETURN;
 
-DLGRETURN CALLBACK PropPageDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+namespace
 {
-    if (uMsg == WM_INITDIALOG)
-        return OnInitDialog(hWnd, lParam);
+void OnPreviewReady(HWND hWnd, WPARAM wParam, LPARAM lParam)
+{
+    // Each completion message owns its result, even when the dialog is gone.
+    std::unique_ptr<PreviewResult> result(reinterpret_cast<PreviewResult*>(lParam));
+    const auto* state = reinterpret_cast<const DialogState*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+    if (state == nullptr)
+        return;
 
-    if (uMsg == WM_PREVIEW_READY)
+    if (result && result->generation == state->generation)
+        SetWindowTextW(GetDlgItem(hWnd, IDC_EDIT1), result->text.c_str());
+    else if (!result && static_cast<size_t>(wParam) == state->generation)
+        SetWindowTextW(GetDlgItem(hWnd, IDC_EDIT1),
+                       L"Unable to read alternate stream.");
+}
+
+void CloseGateAndDrain(HWND hWnd, DialogState& state)
+{
     {
-        std::unique_ptr<PreviewResult> result(reinterpret_cast<PreviewResult*>(lParam));
-        auto* state = reinterpret_cast<DialogState*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
-        if (state != nullptr)
-        {
-            if (result && result->generation == state->generation)
-                SetWindowTextW(GetDlgItem(hWnd, IDC_EDIT1), result->text.c_str());
-            else if (!result && static_cast<size_t>(wParam) == state->generation)
-                SetWindowTextW(GetDlgItem(hWnd, IDC_EDIT1),
-                               L"Unable to read alternate stream.");
-        }
-        return TRUE;
+        ExclusiveSrwLock lock(state.gate->lock);
+        state.gate->alive = false;
     }
 
-    if (uMsg == WM_DESTROY)
+    // Drain completions only after releasing the nonrecursive SRW lock.
+    MSG pending = {};
+    while (PeekMessageW(&pending, hWnd, WM_PREVIEW_READY,
+                        WM_PREVIEW_READY, PM_REMOVE))
     {
-        std::unique_ptr<DialogState> state(reinterpret_cast<DialogState*>(
-            GetWindowLongPtr(hWnd, GWLP_USERDATA)));
-        if (state != nullptr)
-        {
-            {
-                ExclusiveSrwLock lock(state->gate->lock);
-                state->gate->alive = false;
-            }
-
-            // Drain completions only after releasing the nonrecursive SRW lock.
-            MSG pending = {};
-            while (PeekMessageW(&pending, hWnd, WM_PREVIEW_READY,
-                                WM_PREVIEW_READY, PM_REMOVE))
-            {
-                // Each removed message owns one completion result.
-                std::unique_ptr<PreviewResult> discarded(
-                    reinterpret_cast<PreviewResult*>(pending.lParam));
-            }
-        }
-        HWND textBox = GetDlgItem(hWnd, IDC_EDIT1);
-        if (textBox != nullptr)
-        {
-            HFONT font = reinterpret_cast<HFONT>(
-                GetWindowLongPtr(textBox, GWLP_USERDATA));
-            if (font != nullptr)
-            {
-                // Stop the control from referencing the font before deleting it.
-                SendMessage(textBox, WM_SETFONT, 0, FALSE);
-                SetWindowLongPtr(textBox, GWLP_USERDATA, 0);
-                DeleteObject(font);
-            }
-        }
-        SetWindowLongPtr(hWnd, GWLP_USERDATA, 0);
-        return FALSE;
+        // Each removed message owns one completion result.
+        std::unique_ptr<PreviewResult> discarded(
+            reinterpret_cast<PreviewResult*>(pending.lParam));
     }
+}
 
-    if (uMsg != WM_COMMAND)
+void ReleaseEditFont(HWND hWnd)
+{
+    HWND textBox = GetDlgItem(hWnd, IDC_EDIT1);
+    if (textBox == nullptr)
+        return;
+
+    auto font = reinterpret_cast<HFONT>(GetWindowLongPtr(textBox, GWLP_USERDATA));
+    if (font == nullptr)
+        return;
+
+    // Stop the control from referencing the font before deleting it.
+    SendMessage(textBox, WM_SETFONT, 0, FALSE);
+    SetWindowLongPtr(textBox, GWLP_USERDATA, 0);
+    DeleteObject(font);
+}
+
+void OnDestroy(HWND hWnd)
+{
+    // Keep dialog state alive until cleanup has completed.
+    std::unique_ptr<DialogState> state(reinterpret_cast<DialogState*>(
+        GetWindowLongPtr(hWnd, GWLP_USERDATA)));
+    if (state != nullptr)
+        CloseGateAndDrain(hWnd, *state);
+
+    ReleaseEditFont(hWnd);
+    SetWindowLongPtr(hWnd, GWLP_USERDATA, 0);
+}
+
+bool IsSelectionInput(UINT controlId, UINT notification)
+{
+    return (controlId == IDC_COMBO1 && notification == CBN_SELCHANGE) ||
+           (controlId == IDC_CHECK1 && notification == BN_CLICKED);
+}
+
+DLGRETURN OnCommand(HWND hWnd, WPARAM wParam)
+{
+    if (!IsSelectionInput(LOWORD(wParam), HIWORD(wParam)))
         return FALSE;
 
-    const UINT controlId = LOWORD(wParam);
-    const UINT notification = HIWORD(wParam);
-    if ((controlId != IDC_COMBO1 || notification != CBN_SELCHANGE) &&
-        (controlId != IDC_CHECK1 || notification != BN_CLICKED))
-        return FALSE;
-
-    auto* state = reinterpret_cast<DialogState*>(
-        GetWindowLongPtr(hWnd, GWLP_USERDATA));
+    auto* state = reinterpret_cast<DialogState*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
     if (state == nullptr)
         return FALSE;
 
@@ -660,6 +666,26 @@ DLGRETURN CALLBACK PropPageDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
     const bool hex = SendMessage(checkBox, BM_GETCHECK, 0, 0) == BST_CHECKED;
     SelectText(state, static_cast<size_t>(selected), hex, textBox);
     return TRUE;
+}
+} // namespace
+
+DLGRETURN CALLBACK PropPageDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    switch (uMsg)
+    {
+    case WM_INITDIALOG:
+        return OnInitDialog(hWnd, lParam);
+    case WM_PREVIEW_READY:
+        OnPreviewReady(hWnd, wParam, lParam);
+        return TRUE;
+    case WM_DESTROY:
+        OnDestroy(hWnd);
+        return FALSE;
+    case WM_COMMAND:
+        return OnCommand(hWnd, wParam);
+    default:
+        return FALSE;
+    }
 }
 
 STDMETHODIMP CAlternateStreamContext::AddPages(
