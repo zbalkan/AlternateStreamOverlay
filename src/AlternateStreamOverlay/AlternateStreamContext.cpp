@@ -12,7 +12,8 @@
 STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDataObj, HKEY)
 {
     FORMATETC fmt = { CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
-    STGMEDIUM stg = { TYMED_HGLOBAL };
+    STGMEDIUM stg = {};
+    stg.tymed = TYMED_HGLOBAL;
     if (pDataObj == nullptr) return E_INVALIDARG;
 
     HDROP hDrop = nullptr;
@@ -91,7 +92,8 @@ STDMETHODIMP CAlternateStreamContext::QueryContextMenu(
     if (idCmdFirst > idCmdLast)
         return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
 
-    MENUITEMINFOW item = { sizeof(item) };
+    MENUITEMINFOW item = {};
+    item.cbSize = sizeof(item);
     item.fMask = MIIM_ID | MIIM_STRING;
     item.wID = idCmdFirst;
     // Alt+A when the classic context menu is open. Explorer chooses
