@@ -33,23 +33,31 @@ bool IsLocalDrivePath(LPCWSTR path)
 // Does this overlay apply?
 STDMETHODIMP CAlternateStreamOverlayIcon::IsMemberOf(LPCWSTR pwszPath, DWORD dwAttrib)
 {
-    if (pwszPath == nullptr || *pwszPath == L'\0')
-        return S_FALSE;
+    try
+    {
+        if (pwszPath == nullptr || *pwszPath == L'\0')
+            return S_FALSE;
 
-    // Explorer calls this for every displayed item. Do not open files that
-    // are offline or may be recalled from remote/cloud storage.
-    constexpr DWORD recallAttributes =
-        FILE_ATTRIBUTE_OFFLINE |
-        FILE_ATTRIBUTE_RECALL_ON_OPEN |
-        FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS;
-    if ((dwAttrib & recallAttributes) != 0)
-        return S_FALSE;
+        // Explorer calls this for every displayed item. Do not open files that
+        // are offline or may be recalled from remote/cloud storage.
+        constexpr DWORD recallAttributes =
+            FILE_ATTRIBUTE_OFFLINE |
+            FILE_ATTRIBUTE_RECALL_ON_OPEN |
+            FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS;
+        if ((dwAttrib & recallAttributes) != 0)
+            return S_FALSE;
 
-    // Avoid synchronous SMB/UNC I/O on Explorer's overlay callback path.
-    if (PathIsUNCW(pwszPath) || !IsLocalDrivePath(pwszPath))
-        return S_FALSE;
+        // Avoid synchronous SMB/UNC I/O on Explorer's overlay callback path.
+        if (PathIsUNCW(pwszPath) || !IsLocalDrivePath(pwszPath))
+            return S_FALSE;
 
-    return hasAlternateStreams(pwszPath) ? S_OK : S_FALSE;
+        return hasAlternateStreams(pwszPath) ? S_OK : S_FALSE;
+    }
+    catch (...)
+    {
+        // Overlay detection must not propagate C++ exceptions into Explorer.
+        return S_FALSE;
+    }
 }
 
 STDMETHODIMP CAlternateStreamOverlayIcon::GetOverlayInfo(LPWSTR pwszIconFile, int cchMax, int* pIndex, DWORD* pdwFlags)
