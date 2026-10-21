@@ -309,7 +309,7 @@ std::wstring ReadPreview(const std::wstring& path, bool asHex)
     HandleW hFile(::CreateFileW(path.c_str(), GENERIC_READ,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
         nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr));
-    if (hFile == INVALID_HANDLE_VALUE)
+    if (hFile.get() == INVALID_HANDLE_VALUE)
         return L"Unable to open alternate stream.";
 
     constexpr DWORD MaxPreviewBytes = 64 * 1024 - 1;
@@ -319,7 +319,7 @@ std::wstring ReadPreview(const std::wstring& path, bool asHex)
     {
         DWORD count = 0;
         const DWORD remaining = static_cast<DWORD>(buffer.size()) - bytesRead;
-        if (!ReadFile(hFile, buffer.data() + bytesRead, remaining, &count, nullptr))
+        if (!ReadFile(hFile.get(), buffer.data() + bytesRead, remaining, &count, nullptr))
             return L"Unable to read alternate stream.";
         if (count == 0)
             break;
