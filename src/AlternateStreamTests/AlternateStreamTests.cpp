@@ -65,6 +65,37 @@ namespace AlternateStreamTests
             Assert::IsTrue(reader.ListAlternateStreams(L"").empty());
         }
 
+        TEST_METHOD(EnumerationReportsInvalidInput)
+        {
+            AlternateStreamReader reader;
+            const auto invalidHandle = reader.EnumerateStreams(INVALID_HANDLE_VALUE);
+            Assert::IsTrue(invalidHandle.status == StreamStatus::Error);
+            Assert::AreEqual(static_cast<DWORD>(ERROR_INVALID_HANDLE), invalidHandle.error);
+            Assert::IsFalse(invalidHandle.hasNamedStreams);
+            Assert::IsTrue(invalidHandle.streams.empty());
+
+            const auto invalidPath = reader.EnumerateStreams(static_cast<LPCWSTR>(nullptr));
+            Assert::IsTrue(invalidPath.status == StreamStatus::Error);
+            Assert::AreEqual(static_cast<DWORD>(ERROR_INVALID_PARAMETER), invalidPath.error);
+        }
+
+        TEST_METHOD(EnumerationPreservesNamedStreamEvidence)
+        {
+            TemporaryFile fixture;
+            AlternateStreamReader reader;
+            const auto before = reader.EnumerateStreams(fixture.path.data());
+            Assert::IsTrue(before.status == StreamStatus::Ok);
+            Assert::IsFalse(before.hasNamedStreams);
+
+            const std::wstring namedPath = std::wstring(fixture.path.data()) + L":status_test";
+            CreateStream(namedPath);
+            const auto after = reader.EnumerateStreams(fixture.path.data());
+            Assert::IsTrue(after.status == StreamStatus::Ok);
+            Assert::IsTrue(after.hasNamedStreams);
+            Assert::IsTrue(std::find(after.streams.begin(), after.streams.end(),
+                L":status_test:$DATA") != after.streams.end());
+        }
+
         TEST_METHOD(DistinguishesUnnamedFromNamedStreams)
         {
             TemporaryFile fixture;

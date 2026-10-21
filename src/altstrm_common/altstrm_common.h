@@ -26,10 +26,23 @@ private:
     HANDLE handle_;
 };
 
+// Preserve incomplete enumeration and native failures separately from no streams.
+enum class StreamStatus { Ok, Truncated, Error };
+
+struct StreamEnumeration
+{
+    StreamStatus status = StreamStatus::Error;
+    DWORD error = ERROR_SUCCESS;
+    bool hasNamedStreams = false;
+    std::vector<std::wstring> streams;
+};
+
 // Enumerate alternate streams using the documented Windows 10+ API.
 class AlternateStreamReader
 {
 public:
+    StreamEnumeration EnumerateStreams(HANDLE file) const;
+    StreamEnumeration EnumerateStreams(LPCWSTR filename) const;
     bool HasAlternateStreams(HANDLE file) const;
     bool HasAlternateStreams(LPCWSTR filename) const;
     std::vector<std::wstring> ListAlternateStreams(HANDLE file) const;
