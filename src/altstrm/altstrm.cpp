@@ -105,7 +105,7 @@ namespace
             WriteSearchError(error);
     }
 
-    bool ReportStreams(AlternateStreamReader& reader, const std::wstring& fullPath)
+    bool ReportStreams(const AlternateStreamReader& reader, const std::wstring& fullPath)
     {
         const StreamEnumeration enumeration = reader.EnumerateStreams(fullPath.c_str());
         if (enumeration.status != StreamStatus::Ok)
@@ -132,7 +132,7 @@ namespace
 
     // The caller closes the search handle. Capture the terminal error before
     // FindClose; an early reporting failure has already been handled.
-    bool ReportMatches(AlternateStreamReader& reader, HANDLE search,
+    bool ReportMatches(const AlternateStreamReader& reader, HANDLE search,
                        WIN32_FIND_DATAW& findData, const std::wstring& directory)
     {
         do
