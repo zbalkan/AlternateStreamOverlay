@@ -93,7 +93,9 @@ namespace
             }
             if (mediumCase_ == MediumCase::WrongMedium)
             {
-                medium->tymed = TYMED_NULL;
+                // Wrong representation and missing interface payload.
+                medium->tymed = TYMED_ISTREAM;
+                medium->pstm = nullptr;
                 return S_OK;
             }
 
