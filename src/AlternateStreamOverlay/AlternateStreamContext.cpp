@@ -293,7 +293,14 @@ const std::wstring& CAlternateStreamContext::get_path() const
 
 namespace
 {
-constexpr UINT WM_PREVIEW_READY = WM_APP + 42;
+// Registered to avoid collisions with other dialog-specific application messages.
+// The message is a notification only; no message parameter owns memory.
+UINT PreviewMessageId()
+{
+    static const UINT id = RegisterWindowMessageW(
+        L"AlternateStreamOverlay.PreviewReady.{9AC93D79-3D54-461E-A4E7-D855D24C24E3}");
+    return id;
+}
 
 class ExclusiveSrwLock
 {
@@ -315,6 +322,12 @@ private:
     SRWLOCK& lock_;
 };
 
+struct PreviewResult
+{
+    size_t generation = 0;
+    std::wstring text;
+};
+
 struct PreviewGate
 {
     SRWLOCK lock = SRWLOCK_INIT;
@@ -324,6 +337,9 @@ struct PreviewGate
     size_t generation = 0;
     std::wstring path;
     bool asHex = false;
+    std::unique_ptr<PreviewResult> pending;
+    size_t failedGeneration = 0;
+    bool pendingFailure = false;
 };
 
 struct DialogState
@@ -337,12 +353,6 @@ struct PreviewRequest
 {
     std::shared_ptr<PreviewGate> gate;
     HMODULE moduleHandle = nullptr;
-};
-
-struct PreviewResult
-{
-    size_t generation;
-    std::wstring text;
 };
 
 std::wstring ReadPreview(const std::wstring& path, bool asHex)
@@ -387,13 +397,17 @@ std::wstring ReadPreview(const std::wstring& path, bool asHex)
     return formatted;
 }
 
-// A null result signals failure without allocating on an exhausted heap.
-// The generation prevents a stale worker failure from replacing newer content.
+// Called with the gate lock held; publish a failure without allocating.
 void PostPreviewFailure(PreviewGate& gate, size_t generation)
 {
-    if (gate.alive && gate.generation == generation)
-        PostMessageW(gate.window, WM_PREVIEW_READY,
-                     static_cast<WPARAM>(generation), 0);
+    if (!gate.alive || gate.generation != generation)
+        return;
+    gate.pending.reset();
+    gate.failedGeneration = generation;
+    gate.pendingFailure = true;
+    if (!PostMessageW(gate.window, PreviewMessageId(),
+                      static_cast<WPARAM>(generation), 0))
+        gate.pendingFailure = false;
 }
 
 VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP_WORK work)
@@ -468,9 +482,13 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
         if (generation != request->gate->generation)
             continue; // Skip superseded results; read only the latest selection.
 
-        if (PostMessageW(request->gate->window, WM_PREVIEW_READY, 0,
-                         reinterpret_cast<LPARAM>(result.get())))
-            result.release();
+        // The worker hands the result to shared state, not to a message's
+        // untrusted lParam. A failed post relinquishes the result immediately.
+        request->gate->pending.swap(result);
+        request->gate->pendingFailure = false;
+        if (!PostMessageW(request->gate->window, PreviewMessageId(),
+                          static_cast<WPARAM>(generation), 0))
+            request->gate->pending.reset();
         // A failed post usually means the dialog is gone; do not keep a
         // worker marked active when delivery was unsuccessful.
         request->gate->workerActive = false;
@@ -630,17 +648,35 @@ typedef INT_PTR DLGRETURN;
 
 namespace
 {
-void OnPreviewReady(HWND hWnd, WPARAM wParam, LPARAM lParam)
+void OnPreviewReady(HWND hWnd, WPARAM wParam)
 {
-    // Each completion message owns its result, even when the dialog is gone.
-    std::unique_ptr<PreviewResult> result(reinterpret_cast<PreviewResult*>(lParam));
-    const auto* state = reinterpret_cast<const DialogState*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
-    if (state == nullptr)
+    const auto* state = reinterpret_cast<const DialogState*>(
+        GetWindowLongPtr(hWnd, GWLP_USERDATA));
+    if (state == nullptr || static_cast<size_t>(wParam) != state->generation)
         return;
 
-    if (result && result->generation == state->generation)
+    std::unique_ptr<PreviewResult> result;
+    bool failed = false;
+    {
+        ExclusiveSrwLock lock(state->gate->lock);
+        if (!state->gate->alive || state->gate->generation != state->generation)
+            return;
+
+        if (state->gate->pending &&
+            state->gate->pending->generation == state->generation)
+            result.swap(state->gate->pending);
+        else if (state->gate->pendingFailure &&
+                 state->gate->failedGeneration == state->generation)
+        {
+            failed = true;
+            state->gate->pendingFailure = false;
+        }
+    }
+
+    // Win32 control messages must not be sent while holding the SRW lock.
+    if (result)
         SetWindowTextW(GetDlgItem(hWnd, IDC_EDIT1), result->text.c_str());
-    else if (!result && static_cast<size_t>(wParam) == state->generation)
+    else if (failed)
         SetWindowTextW(GetDlgItem(hWnd, IDC_EDIT1),
                        L"Unable to read alternate stream.");
 }
@@ -650,16 +686,17 @@ void CloseGateAndDrain(HWND hWnd, DialogState& state)
     {
         ExclusiveSrwLock lock(state.gate->lock);
         state.gate->alive = false;
+        state.gate->pending.reset();
+        state.gate->pendingFailure = false;
     }
 
-    // Drain completions only after releasing the nonrecursive SRW lock.
+    // Queued notifications carry no ownership; removing them is optional for
+    // memory safety, but avoids needless messages during dialog destruction.
     MSG pending = {};
-    while (PeekMessageW(&pending, hWnd, WM_PREVIEW_READY,
-                        WM_PREVIEW_READY, PM_REMOVE))
+    const UINT messageId = PreviewMessageId();
+    while (messageId != 0 && PeekMessageW(&pending, hWnd, messageId,
+                                         messageId, PM_REMOVE))
     {
-        // Each removed message owns one completion result.
-        std::unique_ptr<PreviewResult> discarded(
-            reinterpret_cast<PreviewResult*>(pending.lParam));
     }
 }
 
@@ -722,13 +759,17 @@ DLGRETURN OnCommand(HWND hWnd, WPARAM wParam)
 
 DLGRETURN CALLBACK PropPageDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    const UINT previewMessage = PreviewMessageId();
+    if (previewMessage != 0 && uMsg == previewMessage)
+    {
+        OnPreviewReady(hWnd, wParam);
+        return TRUE;
+    }
+
     switch (uMsg)
     {
     case WM_INITDIALOG:
         return OnInitDialog(hWnd, lParam);
-    case WM_PREVIEW_READY:
-        OnPreviewReady(hWnd, wParam, lParam);
-        return TRUE;
     case WM_DESTROY:
         OnDestroy(hWnd);
         return FALSE;
