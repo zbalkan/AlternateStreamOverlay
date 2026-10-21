@@ -7,7 +7,7 @@
 #include <string>
 #include <stdexcept>
 #include <vector>
-#include <shlobj.h>
+#include <ShlObj.h>
 #include <wrl/client.h>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -120,11 +120,11 @@ namespace
 
     struct ScopedModule
     {
-        explicit ScopedModule(LPCWSTR path) : module(LoadLibraryW(path)) {}
-        ~ScopedModule() { if (module != nullptr) FreeLibrary(module); }
+        explicit ScopedModule(LPCWSTR path) : handle(LoadLibraryW(path)) {}
+        ~ScopedModule() { if (handle != nullptr) FreeLibrary(handle); }
         ScopedModule(const ScopedModule&) = delete;
         ScopedModule& operator=(const ScopedModule&) = delete;
-        HMODULE module;
+        HMODULE handle;
     };
 }
 
@@ -143,10 +143,10 @@ namespace AlternateStreamTests
                 L"ASO_OVERLAY_DLL must identify the built overlay DLL");
 
             ScopedModule module(dllPath);
-            Assert::IsTrue(module.module != nullptr, L"Unable to load overlay DLL");
+            Assert::IsTrue(module.handle != nullptr, L"Unable to load overlay DLL");
             using GetClassObject = HRESULT (STDAPICALLTYPE*)(REFCLSID, REFIID, void**);
             const auto getClassObject = reinterpret_cast<GetClassObject>(
-                GetProcAddress(module.module, "DllGetClassObject"));
+                GetProcAddress(module.handle, "DllGetClassObject"));
             Assert::IsTrue(getClassObject != nullptr, L"DllGetClassObject not exported");
 
             // CLSID_AlternateStreamContext from AlternateStreamOverlay.idl.
