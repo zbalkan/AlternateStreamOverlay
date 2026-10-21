@@ -91,6 +91,47 @@ jobs:
           & .\src\tests\Smoke-AlternateStreams.ps1 -ExePath $exe
           if (-not $?) { throw 'ADS smoke tests failed' }
 
+  cppcheck:
+    name: Cppcheck (Linux)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install Cppcheck
+        run: sudo apt-get update && sudo apt-get install -y cppcheck
+
+      - name: Analyze native source
+        shell: bash
+        run: |
+          cppcheck --version
+          cppcheck --enable=warning,performance,portability --error-exitcode=0 --suppress=missingIncludeSystem --xml --xml-version=2 src 2> cppcheck-results.xml
+          cat cppcheck-results.xml
+
+  flawfinder:
+    name: Flawfinder (Linux)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Scan native source
+        uses: david-a-wheeler/flawfinder@c4216b74cf2639ffa98503768bd6e4299b5440c9 # 2.0.20
+        with:
+          arguments: '--sarif src/'
+          output: flawfinder-results.sarif
+
+      - name: Upload Flawfinder SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@ce5e7eeac396d720fe2d802714996c8ce561e311 # v3
+        with:
+          sarif_file: flawfinder-results.sarif
+
   analyze:
     name: MSVC and clang-tidy (Release x64)
     runs-on: windows-2025
