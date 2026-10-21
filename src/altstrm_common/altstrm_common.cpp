@@ -248,6 +248,9 @@ bool TryDecodeUtf8Preview(const BYTE* data, size_t size, bool truncated,
     if (length == 0)
         return true;
 
+    // Win32 takes the input length in bytes (cbMultiByte), but the output
+    // capacity in WCHAR elements (cchWideChar). Query the required character
+    // count first, then allocate exactly that many wchar_t elements.
     const auto byteCount = static_cast<int>(length);
     const auto count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
         reinterpret_cast<const char*>(data), byteCount, nullptr, 0);
