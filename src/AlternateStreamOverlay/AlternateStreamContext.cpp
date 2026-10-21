@@ -43,6 +43,28 @@ bool CanEnumerateSynchronously(const std::wstring& path)
     return attributes != INVALID_FILE_ATTRIBUTES &&
            (attributes & recallAttributes) == 0;
 }
+
+// Scope ownership after successful GetData, including exceptions.
+class ScopedDropMedium
+{
+public:
+    explicit ScopedDropMedium(STGMEDIUM& medium) : medium_(medium) {}
+    ~ScopedDropMedium()
+    {
+        if (locked_)
+            GlobalUnlock(medium_.hGlobal);
+        ReleaseStgMedium(&medium_);
+    }
+
+    ScopedDropMedium(const ScopedDropMedium&) = delete;
+    ScopedDropMedium& operator=(const ScopedDropMedium&) = delete;
+
+    void SetLocked() { locked_ = true; }
+
+private:
+    STGMEDIUM& medium_;
+    bool locked_ = false;
+};
 }
 
 // IShellExtInit fixes this signature. Keep unused arguments unnamed to avoid C4100.
@@ -60,6 +82,7 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
     STGMEDIUM stg = {};
     if (FAILED(pDataObj->GetData(&fmt, &stg)))
         return E_INVALIDARG;
+    ScopedDropMedium mediumGuard(stg);
 
     // IDataObject::GetData must return a usable CF_HDROP HGLOBAL.
     // Always release a successfully returned medium, including malformed ones.
@@ -91,25 +114,20 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
         if (missingPayload)
             stg.tymed = TYMED_NULL;
 
-        ReleaseStgMedium(&stg);
         return E_INVALIDARG;
     }
 
     auto hDrop = static_cast<HDROP>(GlobalLock(stg.hGlobal));
 
     if (hDrop == nullptr)
-    {
-        ReleaseStgMedium(&stg);
         return E_INVALIDARG;
-    }
+    mediumGuard.SetLocked();
 
     UINT uNumFiles = DragQueryFileW(hDrop, 0xffffffff, nullptr, 0);
     HRESULT hr = S_OK;
     // We only handle single file case.
     if (1 != uNumFiles)
     {
-        GlobalUnlock(stg.hGlobal);
-        ReleaseStgMedium(&stg);
         return E_INVALIDARG;
     }
 
@@ -127,8 +145,6 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
             filePath.assign(path.data(), pathLength);
     }
 
-    GlobalUnlock(stg.hGlobal);
-    ReleaseStgMedium(&stg);
 
     if (FAILED(hr)) return hr;
     if (!CanEnumerateSynchronously(filePath))
