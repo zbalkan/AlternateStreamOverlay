@@ -235,7 +235,7 @@ struct DialogState
 struct PreviewRequest
 {
     std::shared_ptr<PreviewGate> gate;
-    HMODULE module = nullptr;
+    HMODULE moduleHandle = nullptr;
 };
 
 struct PreviewResult
@@ -290,7 +290,7 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
 {
     std::unique_ptr<PreviewRequest> request(static_cast<PreviewRequest*>(parameter));
     // Windows releases the DLL only after this callback has completely returned.
-    FreeLibraryWhenCallbackReturns(instance, request->module);
+    FreeLibraryWhenCallbackReturns(instance, request->moduleHandle);
     CloseThreadpoolWork(work);
 
     for (;;)
@@ -372,18 +372,18 @@ void SelectText(DialogState* state, size_t idx, bool asHex, HWND textBox)
         return;
     }
     request->gate = state->gate;
-    HMODULE module = nullptr;
+    HMODULE moduleHandle = nullptr;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-        reinterpret_cast<LPCWSTR>(&PreviewWorker), &module))
+        reinterpret_cast<LPCWSTR>(&PreviewWorker), &moduleHandle))
     {
         SetWindowTextW(textBox, L"Unable to start alternate stream preview.");
         return;
     }
-    request->module = module;
+    request->moduleHandle = moduleHandle;
     PTP_WORK work = CreateThreadpoolWork(PreviewWorker, request.get(), nullptr);
     if (work == nullptr)
     {
-        FreeLibrary(module);
+        FreeLibrary(moduleHandle);
         SetWindowTextW(textBox, L"Unable to start alternate stream preview.");
         return;
     }
