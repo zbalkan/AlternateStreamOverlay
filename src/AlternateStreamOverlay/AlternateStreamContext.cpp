@@ -540,8 +540,12 @@ DLGRETURN CALLBACK PropPageDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
             GetWindowLongPtr(hWnd, GWLP_USERDATA)));
         if (state != nullptr)
         {
-            ExclusiveSrwLock lock(state->gate->lock);
-            state->gate->alive = false;
+            {
+                ExclusiveSrwLock lock(state->gate->lock);
+                state->gate->alive = false;
+            }
+
+            // Drain completions only after releasing the nonrecursive SRW lock.
             MSG pending = {};
             while (PeekMessageW(&pending, hWnd, WM_PREVIEW_READY,
                                 WM_PREVIEW_READY, PM_REMOVE))
