@@ -1,65 +1,121 @@
 //
-// A very simple command line test of altstrm_common
+// Command-line alternate data stream enumeration.
 //
 
 #include "stdafx.h"
 #include <windows.h>
 #include <algorithm>
-#include <tchar.h>
-#include <stdio.h>
 #include <string>
-#include <sstream>
-#include <iostream>
+#include <vector>
 #include "altstrm_common.h"
 
-AlternateStreamReader g_streamReader;
-
-int _tmain(int argc, _TCHAR* argv[])
+namespace
 {
-    WIN32_FIND_DATA FindFileData;
-    HANDLE hFind;
+    // Write UTF-16 directly to a console. Redirected output is UTF-8 without
+    // a BOM, independent of the active Windows console code page. Unpaired
+    // UTF-16 surrogates in NTFS names are replaced during UTF-8 encoding.
+    bool WriteOutput(const std::wstring& text)
+    {
+        const HANDLE output = GetStdHandle(STD_OUTPUT_HANDLE);
+        if (output == nullptr || output == INVALID_HANDLE_VALUE)
+            return false;
 
+        DWORD mode = 0;
+        if (GetConsoleMode(output, &mode))
+        {
+            size_t position = 0;
+            while (position < text.size())
+            {
+                DWORD written = 0;
+                const auto count = static_cast<DWORD>(text.size() - position);
+                if (!WriteConsoleW(output, text.data() + position, count, &written, nullptr) ||
+                    written == 0)
+                    return false;
+                position += written;
+            }
+            return true;
+        }
+
+        if (text.empty())
+            return true;
+        const auto characters = static_cast<int>(text.size());
+        const int byteCount = WideCharToMultiByte(CP_UTF8, 0,
+            text.c_str(), characters, nullptr, 0, nullptr, nullptr);
+        if (byteCount == 0)
+            return false;
+
+        std::string encoded(static_cast<size_t>(byteCount), '\0');
+        if (WideCharToMultiByte(CP_UTF8, 0,
+            text.c_str(), characters, &encoded[0], byteCount, nullptr, nullptr) != byteCount)
+            return false;
+
+        size_t position = 0;
+        while (position < encoded.size())
+        {
+            DWORD written = 0;
+            const auto count = static_cast<DWORD>(encoded.size() - position);
+            if (!WriteFile(output, encoded.data() + position, count, &written, nullptr) ||
+                written == 0)
+                return false;
+            position += written;
+        }
+        return true;
+    }
+}
+
+int wmain(int argc, wchar_t* argv[])
+{
     if (argc != 2)
     {
-        std::wcout << argv[0] << L" [file path/spec]\n";
+        const std::wstring program = argc > 0 ? argv[0] : L"altstrm";
+        WriteOutput(program + L" [file path/spec]\r\n");
         return 1;
     }
 
-    std::wstring arg(argv[1]);
+    // Treat a directory argument as the directory itself, so its named
+    // streams are reported (rather than enumerating its children).
+    const std::wstring pattern(argv[1]);
 
-    // if this is a directory, postfix '\*', if not carry on.
+    const size_t separator = pattern.find_last_of(L"\\/");
+    const std::wstring directory = separator == std::wstring::npos
+        ? L".\\" : pattern.substr(0, separator + 1);
 
-    std::wstring::size_type pos = arg.find_last_of(L'\\');
-    std::wstring directory = L".\\";
-    if (pos != std::wstring::npos)
+    if (!WriteOutput(L"Files with alternate streams matching " +
+                     std::wstring(argv[1]) + L"\r\n"))
+        return 1;
+
+    WIN32_FIND_DATAW findData = {};
+    const HANDLE search = FindFirstFileW(pattern.c_str(), &findData);
+    if (search == INVALID_HANDLE_VALUE)
     {
-        directory = arg.substr(0, pos + 1);
-    }
-
-    std::wcout << L"Files with alternate streams matching " << argv[1] << L"\n";
-    hFind = FindFirstFile(arg.c_str(), &FindFileData);
-    if (hFind == INVALID_HANDLE_VALUE)
-    {
-        std::wcout << L"No files to check.\n";
+        WriteOutput(L"No files to check.\r\n");
         return 1;
     }
 
+    AlternateStreamReader reader;
+    bool success = true;
     do
     {
-        std::wstring fullPath = directory + FindFileData.cFileName;
-        std::vector<std::wstring> subnames = g_streamReader.ListAlternateStreams(fullPath.c_str());
-        // Only named streams are ADS; the unnamed "::$DATA" entry is not.
-        subnames.erase(std::remove(subnames.begin(), subnames.end(), L"::$DATA"), subnames.end());
-        if (!subnames.empty())
+        const std::wstring fullPath = directory + findData.cFileName;
+        std::vector<std::wstring> names = reader.ListAlternateStreams(fullPath.c_str());
+        // The unnamed default stream is not an alternate data stream.
+        names.erase(std::remove(names.begin(), names.end(), L"::$DATA"), names.end());
+        if (!names.empty())
         {
-            std::wcout << fullPath << L"\n";
-            for (std::vector<std::wstring>::const_iterator vit = subnames.begin(); vit != subnames.end(); ++vit)
+            std::wstring result = fullPath + L"\r\n";
+            for (const auto& name : names)
+                result += L" " + name + L"\r\n";
+            if (!WriteOutput(result))
             {
-                std::wcout << L" " << *vit << L"\n";
+                success = false;
+                break;
             }
         }
-    } while (FindNextFile(hFind, &FindFileData) != 0);
-    FindClose(hFind);
+    } while (FindNextFileW(search, &findData) != 0);
 
-    return 0;
+    const DWORD lastError = GetLastError();
+    FindClose(search);
+    if (success && lastError != ERROR_NO_MORE_FILES)
+        success = false;
+    return success ? 0 : 1;
 }

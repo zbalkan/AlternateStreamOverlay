@@ -247,6 +247,37 @@ function Test-FilesystemLifecycle {
     Write-Host 'PASS: directory negatives, ADS lifecycle, large stream, repeatability and sharing'
 }
 
+function Test-RedirectedUnicodeOutput {
+    param([string] $Root)
+
+    $path = Join-Path $Root ('cli_' + [char]0x00E9 + '.txt')
+    [NativeAdsFixture]::Create($path)
+    $streamName = 'str' + [char]0x00F6 + 'm'
+    [NativeAdsFixture]::Create($path + ':' + $streamName)
+
+    $start = New-Object System.Diagnostics.ProcessStartInfo
+    $start.FileName = $exe
+    $start.Arguments = '"' + $path + '"'
+    $start.UseShellExecute = $false
+    $start.RedirectStandardOutput = $true
+    $process = [System.Diagnostics.Process]::Start($start)
+    try {
+        $bytes = New-Object System.IO.MemoryStream
+        $process.StandardOutput.BaseStream.CopyTo($bytes)
+        $process.WaitForExit()
+        if ($process.ExitCode -ne 0) { throw "Unicode CLI exited $($process.ExitCode)" }
+        $strictUtf8 = [System.Text.UTF8Encoding]::new($false, $true)
+        $output = $strictUtf8.GetString($bytes.ToArray())
+        if (-not $output.Contains($path) -or -not $output.Contains(':' + $streamName + ':$DATA')) {
+            throw "Redirected UTF-8 output lost Unicode path or ADS name: $output"
+        }
+    }
+    finally {
+        $process.Dispose()
+    }
+    Write-Host 'PASS: redirected UTF-8 Unicode path and ADS name'
+}
+
 function Test-UnicodeNames {
     param([string] $Root)
     $high = [string][char]0xD800
@@ -316,6 +347,7 @@ try {
     Add-Type -TypeDefinition $nativeSource -ErrorAction Stop
     Test-BasicEnumeration -Root $directory
     Test-FilesystemLifecycle -Root $directory
+    Test-RedirectedUnicodeOutput -Root $directory
     Test-UnicodeNames -Root $directory
     Write-Host 'PASS: all NTFS ADS integration tests'
 }
