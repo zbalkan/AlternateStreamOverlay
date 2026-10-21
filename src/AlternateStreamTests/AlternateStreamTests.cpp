@@ -1,6 +1,8 @@
 #include "CppUnitTest.h"
 #include "altstrm_common.h"
 #include <algorithm>
+#include <cstddef>
+#include <cstring>
 #include <string>
 #include <stdexcept>
 #include <vector>
@@ -173,6 +175,76 @@ namespace AlternateStreamTests
             Assert::AreEqual(
                 L"0000FFF8  41 41 41 41 41 41 41     |AAAAAAA |\r\n",
                 formatted.substr(formatted.size() - RowWidth).c_str());
+        }
+    };
+
+
+    TEST_CLASS(StreamInfoRecordTests)
+    {
+    public:
+        TEST_METHOD(RejectsMissingOrTruncatedHeaders)
+        {
+            stream_info_detail::Record record = {};
+            std::vector<BYTE> buffer(64, 0);
+            Assert::IsFalse(stream_info_detail::ReadRecord(nullptr, 64, 0, record));
+            Assert::IsFalse(stream_info_detail::ReadRecord(buffer.data(), 8, 0, record));
+            Assert::IsFalse(stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 65, record));
+            Assert::IsFalse(stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 1, record));
+        }
+
+        TEST_METHOD(RejectsMalformedLengthsAndOffsets)
+        {
+            constexpr size_t Header = offsetof(FILE_STREAM_INFO, StreamName);
+            std::vector<BYTE> buffer(64, 0);
+            auto* entry = reinterpret_cast<FILE_STREAM_INFO*>(buffer.data());
+            entry->StreamNameLength = sizeof(WCHAR);
+            entry->StreamName[0] = L'A';
+            stream_info_detail::Record record = {};
+            Assert::IsTrue(stream_info_detail::ReadRecord(
+                buffer.data(), buffer.size(), 0, record));
+            Assert::AreEqual(static_cast<size_t>(sizeof(WCHAR)), record.nameBytes);
+
+            entry->StreamNameLength = 0;
+            Assert::IsFalse(stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 0, record));
+            entry->StreamNameLength = 1;
+            Assert::IsFalse(stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 0, record));
+            entry->StreamNameLength = static_cast<DWORD>(buffer.size());
+            Assert::IsFalse(stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 0, record));
+
+            entry->StreamNameLength = sizeof(WCHAR);
+            entry->NextEntryOffset = 1;
+            Assert::IsFalse(stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 0, record));
+            entry->NextEntryOffset = static_cast<DWORD>(Header);
+            Assert::IsFalse(stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 0, record));
+            entry->NextEntryOffset = 32;
+            entry->StreamNameLength = 16;
+            Assert::IsFalse(stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 0, record));
+            entry->StreamNameLength = sizeof(WCHAR);
+            entry->NextEntryOffset = 128;
+            Assert::IsFalse(stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 0, record));
+        }
+
+        TEST_METHOD(ReadsAlignedChainedRecords)
+        {
+            std::vector<BYTE> buffer(64, 0);
+            auto* first = reinterpret_cast<FILE_STREAM_INFO*>(buffer.data());
+            first->NextEntryOffset = 32;
+            first->StreamNameLength = sizeof(WCHAR);
+            first->StreamName[0] = L'A';
+
+            auto* second = reinterpret_cast<FILE_STREAM_INFO*>(buffer.data() + 32);
+            second->NextEntryOffset = 0;
+            second->StreamNameLength = sizeof(WCHAR);
+            second->StreamName[0] = L'B';
+
+            stream_info_detail::Record record = {};
+            Assert::IsTrue(stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 0, record));
+            Assert::AreEqual(static_cast<size_t>(32), record.nextOffset);
+            Assert::AreEqual(L'A', record.name[0]);
+            Assert::IsTrue(stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 32, record));
+            Assert::AreEqual(static_cast<size_t>(0), record.nextOffset);
+            Assert::AreEqual(L'B', record.name[0]);
+            Assert::IsFalse(stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 48, record));
         }
     };
 

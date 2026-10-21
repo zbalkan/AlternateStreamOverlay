@@ -26,6 +26,20 @@ private:
     HANDLE handle_;
 };
 
+// Internal record validator shared by enumeration and synthetic-buffer tests.
+// The supplied offset must point to a FILE_STREAM_INFO record within the buffer.
+namespace stream_info_detail
+{
+    struct Record
+    {
+        const WCHAR* name;
+        size_t nameBytes;
+        size_t nextOffset;
+    };
+
+    bool ReadRecord(const BYTE* buffer, size_t size, size_t offset, Record& record);
+}
+
 // Enumerate alternate streams using the documented Windows 10+ API.
 class AlternateStreamReader
 {
