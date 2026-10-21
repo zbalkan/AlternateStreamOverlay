@@ -27,3 +27,14 @@ msbuild .\src\AlternateStreamOverlay.sln /t:Rebuild /m /p:Configuration=Release 
 ```
 
 Debug builds use `/p:Configuration=Debug`. The GitHub Actions workflow builds both configurations.
+
+## Explorer overlay registration diagnostics
+
+Run `./src/tests/Get-OverlayRegistration.ps1` on the target Windows machine to
+inspect machine and per-user shell icon overlay identifiers and their
+effective COM server paths. The audit is read-only and warns when this
+extension's overlay registration is absent or its COM server is missing.
+
+Explorer has a limited number of overlay slots shared by installed handlers.
+A registration count does **not** establish which overlays Explorer selected;
+the script does not change registration names, ordering, priorities or slots.
