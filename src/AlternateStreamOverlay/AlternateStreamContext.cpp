@@ -76,103 +76,114 @@ private:
 // IShellExtInit fixes this signature. Keep unused arguments unnamed to avoid C4100.
 STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDataObj, HKEY)
 {
-    // A failed reinitialization must not retain the previous shell selection.
-    m_path.clear();
-    m_streams.clear();
-    m_isDirectory = false;
-
-    FORMATETC fmt = { CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
-    if (pDataObj == nullptr)
-        return E_INVALIDARG;
-
-    STGMEDIUM stg = {};
-    if (FAILED(pDataObj->GetData(&fmt, &stg)))
-        return E_INVALIDARG;
-    ScopedDropMedium mediumGuard(stg);
-
-    // IDataObject::GetData must return a usable CF_HDROP HGLOBAL.
-    // Always release a successfully returned medium, including malformed ones.
-    if (stg.tymed != TYMED_HGLOBAL || stg.hGlobal == nullptr)
+    try
     {
-        // A malformed data object may return an interface/file medium with
-        // a null payload. Do not let ReleaseStgMedium dereference it; retain
-        // pUnkForRelease so the provider's release hook is still invoked.
-        // tymed selects one storage representation. Exact matching is
-        // intentional; testing individual bits would accept malformed combinations.
-        bool missingPayload = false;
-        switch (stg.tymed)
+        // A failed reinitialization must not retain the previous shell selection.
+        m_path.clear();
+        m_streams.clear();
+        m_isDirectory = false;
+
+        FORMATETC fmt = { CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+        if (pDataObj == nullptr)
+            return E_INVALIDARG;
+
+        STGMEDIUM stg = {};
+        if (FAILED(pDataObj->GetData(&fmt, &stg)))
+            return E_INVALIDARG;
+        ScopedDropMedium mediumGuard(stg);
+
+        // IDataObject::GetData must return a usable CF_HDROP HGLOBAL.
+        // Always release a successfully returned medium, including malformed ones.
+        if (stg.tymed != TYMED_HGLOBAL || stg.hGlobal == nullptr)
         {
-        case TYMED_ISTREAM:
-            missingPayload = stg.pstm == nullptr;
-            break;
-        case TYMED_ISTORAGE:
-            missingPayload = stg.pstg == nullptr;
-            break;
-        case TYMED_FILE:
-            missingPayload = stg.lpszFileName == nullptr;
-            break;
-        case TYMED_MFPICT:
-            missingPayload = stg.hMetaFilePict == nullptr;
-            break;
-        default:
-            break;
+            // A malformed data object may return an interface/file medium with
+            // a null payload. Do not let ReleaseStgMedium dereference it; retain
+            // pUnkForRelease so the provider's release hook is still invoked.
+            // tymed selects one storage representation. Exact matching is
+            // intentional; testing individual bits would accept malformed combinations.
+            bool missingPayload = false;
+            switch (stg.tymed)
+            {
+            case TYMED_ISTREAM:
+                missingPayload = stg.pstm == nullptr;
+                break;
+            case TYMED_ISTORAGE:
+                missingPayload = stg.pstg == nullptr;
+                break;
+            case TYMED_FILE:
+                missingPayload = stg.lpszFileName == nullptr;
+                break;
+            case TYMED_MFPICT:
+                missingPayload = stg.hMetaFilePict == nullptr;
+                break;
+            default:
+                break;
+            }
+            if (missingPayload)
+                stg.tymed = TYMED_NULL;
+
+            return E_INVALIDARG;
         }
-        if (missingPayload)
-            stg.tymed = TYMED_NULL;
 
-        return E_INVALIDARG;
-    }
+        auto hDrop = static_cast<HDROP>(GlobalLock(stg.hGlobal));
 
-    auto hDrop = static_cast<HDROP>(GlobalLock(stg.hGlobal));
+        if (hDrop == nullptr)
+            return E_INVALIDARG;
+        mediumGuard.SetLocked();
 
-    if (hDrop == nullptr)
-        return E_INVALIDARG;
-    mediumGuard.SetLocked();
+        UINT uNumFiles = DragQueryFileW(hDrop, 0xffffffff, nullptr, 0);
+        HRESULT hr = S_OK;
+        // We only handle single file case.
+        if (1 != uNumFiles)
+        {
+            return E_INVALIDARG;
+        }
 
-    UINT uNumFiles = DragQueryFileW(hDrop, 0xffffffff, nullptr, 0);
-    HRESULT hr = S_OK;
-    // We only handle single file case.
-    if (1 != uNumFiles)
-    {
-        return E_INVALIDARG;
-    }
-
-    const UINT pathLength = DragQueryFileW(hDrop, 0, nullptr, 0);
-    if (pathLength == 0)
-        hr = E_INVALIDARG;
-
-    std::wstring filePath;
-    if (SUCCEEDED(hr))
-    {
-        std::vector<WCHAR> path(pathLength + 1);
-        if (DragQueryFileW(hDrop, 0, path.data(), static_cast<UINT>(path.size())) != pathLength)
+        const UINT pathLength = DragQueryFileW(hDrop, 0, nullptr, 0);
+        if (pathLength == 0)
             hr = E_INVALIDARG;
-        else
-            filePath.assign(path.data(), pathLength);
+
+        std::wstring filePath;
+        if (SUCCEEDED(hr))
+        {
+            std::vector<WCHAR> path(pathLength + 1);
+            if (DragQueryFileW(hDrop, 0, path.data(), static_cast<UINT>(path.size())) != pathLength)
+                hr = E_INVALIDARG;
+            else
+                filePath.assign(path.data(), pathLength);
+        }
+
+        // Do not hold the shell data object's storage during filesystem I/O.
+        mediumGuard.Release();
+
+        if (FAILED(hr)) return hr;
+        if (!CanEnumerateSynchronously(filePath))
+            return E_FAIL;
+
+        const bool directory = PathIsDirectoryW(filePath.c_str()) != FALSE;
+        auto streams = listAlternateStreams(filePath.c_str());
+        // FILE_STREAM_INFO includes the unnamed default stream for ordinary files.
+        // The property page should present only named alternate data streams.
+        streams.erase(std::remove(streams.begin(), streams.end(), L"::$DATA"),
+                      streams.end());
+        if (streams.empty())
+            return E_FAIL;
+
+        // Commit the new selection only after validation succeeds. Swapping also
+        // avoids allocating while updating the COM object's stored state.
+        m_path.swap(filePath);
+        m_streams.swap(streams);
+        m_isDirectory = directory;
+        return S_OK;
     }
-
-    // Do not hold the shell data object's storage during filesystem I/O.
-    mediumGuard.Release();
-
-    if (FAILED(hr)) return hr;
-    if (!CanEnumerateSynchronously(filePath))
-        return E_FAIL;
-
-    const bool directory = PathIsDirectoryW(filePath.c_str()) != FALSE;
-    auto streams = listAlternateStreams(filePath.c_str());
-    // FILE_STREAM_INFO includes the unnamed default stream for ordinary files.
-    // The property page should present only named alternate data streams.
-    streams.erase(std::remove(streams.begin(), streams.end(), L"::$DATA"),
-                  streams.end());
-    if (streams.empty())
-        return E_FAIL;
-
-    // Commit the new selection only after validation succeeds. Swapping also
-    // avoids allocating while updating the COM object's stored state.
-    m_path.swap(filePath);
-    m_streams.swap(streams);
-    m_isDirectory = directory;
-    return S_OK;
+    catch (const std::bad_alloc&)
+    {
+        return E_OUTOFMEMORY;
+    }
+    catch (...)
+    {
+        return E_UNEXPECTED;
+    }
 }
 
 STDMETHODIMP CAlternateStreamContext::QueryContextMenu(
