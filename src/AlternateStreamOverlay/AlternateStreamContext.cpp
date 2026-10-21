@@ -300,8 +300,8 @@ DWORD WINAPI PreviewWorker(LPVOID parameter)
         result->text = L"Unable to read alternate stream.";
     }
 
-    // Serialize posting with destruction. A destroyed dialog cannot receive
-    // late completions; WM_DESTROY drains any completion already posted.
+    // The Windows thread-pool callback must not allow exceptions to escape.
+    // Serialize posting with destruction. WM_DESTROY drains posted completions.
     std::lock_guard<std::mutex> lock(request->gate->mutex);
     if (request->gate->alive &&
         PostMessageW(request->gate->window, WM_PREVIEW_READY, 0,
@@ -390,8 +390,7 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     if (!streams.empty())
     {
         SendMessage(comboBox, CB_SETCURSEL, 0, 0);
-        auto* state = reinterpret_cast<DialogState*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
-        SelectText(state, 0, false, textBox);
+        SelectText(state.get(), 0, false, textBox);
     }
     return TRUE;
 }
@@ -434,7 +433,8 @@ DLGRETURN CALLBACK PropPageDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
 
     if (uMsg == WM_DESTROY)
     {
-        auto* state = reinterpret_cast<DialogState*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+        std::unique_ptr<DialogState> state(reinterpret_cast<DialogState*>(
+            GetWindowLongPtr(hWnd, GWLP_USERDATA)));
         if (state != nullptr)
         {
             std::lock_guard<std::mutex> lock(state->gate->mutex);
@@ -442,7 +442,11 @@ DLGRETURN CALLBACK PropPageDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
             MSG pending = {};
             while (PeekMessageW(&pending, hWnd, WM_PREVIEW_READY,
                                 WM_PREVIEW_READY, PM_REMOVE))
-                delete reinterpret_cast<PreviewResult*>(pending.lParam);
+            {
+                // Each removed message owns one completion result.
+                std::unique_ptr<PreviewResult> discarded(
+                    reinterpret_cast<PreviewResult*>(pending.lParam));
+            }
         }
         HWND textBox = GetDlgItem(hWnd, IDC_EDIT1);
         if (textBox != nullptr)
@@ -458,7 +462,6 @@ DLGRETURN CALLBACK PropPageDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
             }
         }
         SetWindowLongPtr(hWnd, GWLP_USERDATA, 0);
-        delete state;
         return FALSE;
     }
 
