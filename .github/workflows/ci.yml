@@ -187,11 +187,11 @@ jobs:
             exit 0
           }
           $diagnostics = @(Get-Content -LiteralPath 'msvc-analysis.log' | Where-Object {
-            $_ -match ': warning (C\d+|D\d+):'
+            $_ -match '\bwarning\s+[CD]\d+\s*:'
           } | Sort-Object -Unique)
           $counts = @{}
           foreach ($entry in $diagnostics) {
-            if ($entry -match ': warning (?<rule>[CD]\d+):') {
+            if ($entry -match '\bwarning\s+(?<rule>[CD]\d+)\s*:') {
               $rule = $Matches.rule
               if (-not $counts.ContainsKey($rule)) { $counts[$rule] = 0 }
               $counts[$rule]++
@@ -201,9 +201,30 @@ jobs:
           foreach ($rule in @($counts.Keys | Sort-Object)) { $summary += "| $rule | $($counts[$rule]) |" }
           if (-not $counts.Count) { $summary += '| None | 0 |' }
           $summary += @('', '#### Findings', '', '| Diagnostic |', '|---|')
-          foreach ($entry in $diagnostics) { $summary += '| ' + $entry.Trim().Replace('|', '\|') + ' |' }
+          # Keep the summary comfortably below GitHub's per-step size limit.
+          # Counts above include all unique diagnostics; only details are truncated.
+          $maxFindings = 100
+          foreach ($entry in @($diagnostics | Select-Object -First $maxFindings)) {
+            $line = $entry.Trim()
+            if ($line.Length -gt 500) { $line = $line.Substring(0, 497) + '...' }
+            $summary += '| ' + $line.Replace('|', '\|') + ' |'
+          }
+          if ($diagnostics.Count -gt $maxFindings) {
+            $summary += ''
+            $summary += "Showing first $maxFindings of $($diagnostics.Count) unique diagnostic lines. See the full MSBuild log artifact."
+          }
           if (-not $diagnostics.Count) { $summary += '| No matching diagnostics |' }
           Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ($summary -join "`n")
+
+
+      - name: Upload complete MSVC analysis log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: msvc-analysis-log
+          path: msvc-analysis.log
+          if-no-files-found: warn
+
 
 
   analyze-clang-tidy:
