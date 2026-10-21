@@ -270,6 +270,8 @@ bool TryDecodeUtf8Preview(const BYTE* data, size_t size, bool truncated,
 
 std::wstring FormatHexPreview(const BYTE* data, size_t size)
 {
+    // BYTE matches the Win32 stream API; these values are octets used for
+    // numeric indexing and ASCII/hex rendering, not typed C++ byte storage.
     constexpr size_t BytesPerRow = 8;
     constexpr size_t MaxPreviewBytes = 65535;
     constexpr size_t CharactersPerRow = 47;
@@ -280,7 +282,7 @@ std::wstring FormatHexPreview(const BYTE* data, size_t size)
 
     // The caller reads at most 65535 preview bytes; enforce the same
     // bound here so formatting cannot allocate unbounded Explorer memory.
-    const size_t length = std::min(size, MaxPreviewBytes);
+    const size_t length = (std::min)(size, MaxPreviewBytes);
     const size_t rows = (length + BytesPerRow - 1) / BytesPerRow;
     std::wstring output;
     output.reserve(rows * CharactersPerRow);
@@ -291,7 +293,7 @@ std::wstring FormatHexPreview(const BYTE* data, size_t size)
             output.push_back(Digits[(offset >> shift) & 0xF]);
         output += L"  ";
 
-        const size_t count = std::min(BytesPerRow, length - offset);
+        const size_t count = (std::min)(BytesPerRow, length - offset);
         for (size_t i = 0; i < BytesPerRow; ++i)
         {
             if (i < count)
