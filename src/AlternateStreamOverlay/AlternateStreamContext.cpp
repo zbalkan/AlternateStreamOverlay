@@ -48,7 +48,7 @@ bool CanEnumerateSynchronously(const std::wstring& path)
 // IShellExtInit fixes this signature. Keep unused arguments unnamed to avoid C4100.
 STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDataObj, HKEY)
 {
-    FORMATETC fmt = { CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+    FORMATETC fmt = { CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
     if (pDataObj == nullptr)
         return E_INVALIDARG;
 
@@ -98,7 +98,7 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
         return E_INVALIDARG;
     }
 
-    UINT uNumFiles = DragQueryFile(hDrop, 0xffffffff, NULL, 0);
+    UINT uNumFiles = DragQueryFileW(hDrop, 0xffffffff, nullptr, 0);
     HRESULT hr = S_OK;
     // We only handle single file case.
     if (1 != uNumFiles)
