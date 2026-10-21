@@ -113,6 +113,7 @@ jobs:
           cppcheck --enable=warning,performance,portability --error-exitcode=0 \
             --suppress=missingIncludeSystem \
             '-DDECLARE_REGISTRY_RESOURCEID(x)=' \
+            '-DDECLARE_REGISTRY_APPID_RESOURCEID(x,y)=' \
             '-DDECLARE_NOT_AGGREGATABLE(x)=' \
             '-DBEGIN_COM_MAP(x)=' \
             '-DCOM_INTERFACE_ENTRY(x)=' \
