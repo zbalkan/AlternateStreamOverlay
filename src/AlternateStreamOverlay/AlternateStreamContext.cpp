@@ -167,7 +167,8 @@ STDMETHODIMP CAlternateStreamContext::QueryContextMenu(
     item.wID = idCmdFirst;
     // Alt+A when the classic context menu is open. Explorer chooses
     // whether a mnemonic is available when other commands use the same key.
-    item.dwTypeData = const_cast<LPWSTR>(L"&Alternate Streams...");
+    wchar_t menuText[] = L"&Alternate Streams...";
+    item.dwTypeData = menuText;
     if (!InsertMenuItemW(hmenu, indexMenu, TRUE, &item))
         return HRESULT_FROM_WIN32(GetLastError());
 
