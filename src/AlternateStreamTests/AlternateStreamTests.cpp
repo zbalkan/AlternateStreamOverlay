@@ -296,6 +296,11 @@ namespace AlternateStreamTests
             Assert::AreEqual(static_cast<HRESULT>(E_POINTER),
                 propertyPages->AddPages(nullptr, 0));
 
+            // Leave only the test's IShellPropSheetExt reference outstanding,
+            // so an unbalanced page callback cannot be masked by other refs.
+            menu.Reset();
+            initializer.Reset();
+
             HPROPSHEETPAGE acceptedPage = nullptr;
             Assert::AreEqual(static_cast<HRESULT>(S_OK),
                 propertyPages->AddPages(CapturePropertyPage,
@@ -307,12 +312,15 @@ namespace AlternateStreamTests
             // prematurely release the COM object used by this test.
             Assert::AreEqual(static_cast<HRESULT>(E_FAIL),
                 propertyPages->AddPages(RejectPropertyPage, 0));
-            Assert::AreEqual(static_cast<HRESULT>(S_OK),
-                initializer->Initialize(nullptr, data.Get(), nullptr));
 
+            // After rejection, the caller's sole reference must still keep
+            // the object alive and allow acquisition of another interface.
+            Microsoft::WRL::ComPtr<IShellExtInit> recovered;
+            Assert::IsTrue(SUCCEEDED(propertyPages.As(&recovered)));
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                recovered->Initialize(nullptr, data.Get(), nullptr));
+            recovered.Reset();
             propertyPages.Reset();
-            menu.Reset();
-            initializer.Reset();
             factory.Reset();
             data.Reset();
         }
