@@ -203,6 +203,17 @@ namespace
         ScopedModule& operator=(const ScopedModule&) = delete;
         HMODULE handle;
     };
+
+    BOOL CALLBACK CapturePropertyPage(HPROPSHEETPAGE page, LPARAM context)
+    {
+        *reinterpret_cast<HPROPSHEETPAGE*>(context) = page;
+        return TRUE;
+    }
+
+    BOOL CALLBACK RejectPropertyPage(HPROPSHEETPAGE, LPARAM)
+    {
+        return FALSE;
+    }
 }
 
 namespace AlternateStreamTests
@@ -277,6 +288,29 @@ namespace AlternateStreamTests
             Assert::AreEqual(static_cast<HRESULT>(S_OK),
                 initializer->Initialize(nullptr, data.Get(), nullptr));
 
+            // The shell property-page callback owns a COM reference until
+            // DestroyPropertySheetPage invokes PSPCB_RELEASE. Cover both the
+            // accepted and rejected page paths without displaying a dialog.
+            Microsoft::WRL::ComPtr<IShellPropSheetExt> propertyPages;
+            Assert::IsTrue(SUCCEEDED(initializer.As(&propertyPages)));
+            Assert::AreEqual(static_cast<HRESULT>(E_POINTER),
+                propertyPages->AddPages(nullptr, 0));
+
+            HPROPSHEETPAGE acceptedPage = nullptr;
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                propertyPages->AddPages(CapturePropertyPage,
+                    reinterpret_cast<LPARAM>(&acceptedPage)));
+            Assert::IsTrue(acceptedPage != nullptr);
+            Assert::IsTrue(DestroyPropertySheetPage(acceptedPage) != FALSE);
+
+            // Rejection destroys the page inside AddPages and must not
+            // prematurely release the COM object used by this test.
+            Assert::AreEqual(static_cast<HRESULT>(E_FAIL),
+                propertyPages->AddPages(RejectPropertyPage, 0));
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                initializer->Initialize(nullptr, data.Get(), nullptr));
+
+            propertyPages.Reset();
             menu.Reset();
             initializer.Reset();
             factory.Reset();
