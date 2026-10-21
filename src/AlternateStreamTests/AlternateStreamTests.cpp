@@ -252,11 +252,12 @@ namespace AlternateStreamTests
                 menu->InvokeCommand(&command));
 
             // A successful GetData call may still supply a malformed medium.
-            // Neither a null HGLOBAL nor an unexpected tymed may restore the
-            // previously selected stream.
+            // Each malformed reinitialization must discard a valid selection.
             Microsoft::WRL::ComPtr<IDataObject> nullGlobal;
             nullGlobal.Attach(new DropDataObject(fixture.path.data(),
                 DropDataObject::MediumCase::NullGlobal));
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                initializer->Initialize(nullptr, data.Get(), nullptr));
             Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG),
                 initializer->Initialize(nullptr, nullGlobal.Get(), nullptr));
             Assert::AreEqual(static_cast<HRESULT>(E_FAIL),
@@ -265,6 +266,8 @@ namespace AlternateStreamTests
             Microsoft::WRL::ComPtr<IDataObject> wrongMedium;
             wrongMedium.Attach(new DropDataObject(fixture.path.data(),
                 DropDataObject::MediumCase::WrongMedium));
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                initializer->Initialize(nullptr, data.Get(), nullptr));
             Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG),
                 initializer->Initialize(nullptr, wrongMedium.Get(), nullptr));
             Assert::AreEqual(static_cast<HRESULT>(E_FAIL),
