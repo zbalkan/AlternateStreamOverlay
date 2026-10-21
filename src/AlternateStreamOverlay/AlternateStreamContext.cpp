@@ -697,6 +697,7 @@ void CloseGateAndDrain(HWND hWnd, DialogState& state)
     while (messageId != 0 && PeekMessageW(&pending, hWnd, messageId,
                                          messageId, PM_REMOVE))
     {
+        // PM_REMOVE discards each notification; no payload needs cleanup.
     }
 }
 
