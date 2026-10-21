@@ -24,10 +24,27 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
         // A malformed data object may return an interface/file medium with
         // a null payload. Do not let ReleaseStgMedium dereference it; retain
         // pUnkForRelease so the provider's release hook is still invoked.
-        if ((stg.tymed == TYMED_ISTREAM && stg.pstm == nullptr) ||
-            (stg.tymed == TYMED_ISTORAGE && stg.pstg == nullptr) ||
-            (stg.tymed == TYMED_FILE && stg.lpszFileName == nullptr) ||
-            (stg.tymed == TYMED_MFPICT && stg.hMetaFilePict == nullptr))
+        // tymed selects one storage representation. Exact matching is
+        // intentional; testing individual bits would accept malformed combinations.
+        bool missingPayload = false;
+        switch (stg.tymed)
+        {
+        case TYMED_ISTREAM:
+            missingPayload = stg.pstm == nullptr;
+            break;
+        case TYMED_ISTORAGE:
+            missingPayload = stg.pstg == nullptr;
+            break;
+        case TYMED_FILE:
+            missingPayload = stg.lpszFileName == nullptr;
+            break;
+        case TYMED_MFPICT:
+            missingPayload = stg.hMetaFilePict == nullptr;
+            break;
+        default:
+            break;
+        }
+        if (missingPayload)
             stg.tymed = TYMED_NULL;
 
         ReleaseStgMedium(&stg);
