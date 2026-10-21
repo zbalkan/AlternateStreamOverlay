@@ -134,6 +134,11 @@ jobs:
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
               summary.write("\n".join(lines) + "\n")
           print("Cppcheck finding counts:", dict(counts))
+          # Enforce only confirmed high-severity Cppcheck errors.
+          # Warning, performance and portability findings remain informational.
+          errors = [item for item in findings if item.get("severity") == "error"]
+          if errors:
+              raise SystemExit(f"Cppcheck reported {len(errors)} error-severity finding(s)")
           PY
 
   flawfinder:
