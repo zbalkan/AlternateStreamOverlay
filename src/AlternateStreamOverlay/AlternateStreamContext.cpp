@@ -3,9 +3,7 @@
 #include <algorithm>
 #include <strsafe.h>
 #include <vector>
-#include <sstream>
 #include <string>
-#include <ios>
 #include "Common.h"
 
 // IShellExtInit fixes this signature. Keep unused arguments unnamed to avoid C4100.
@@ -181,47 +179,6 @@ const std::wstring& CAlternateStreamContext::get_path() const
 
 namespace
 {
-char asciificate(BYTE b)
-{
-    if (b >= 32 && b <= 126) return static_cast<char>(b);
-    return '.';
-}
-
-// Eight-byte rows keep the ASCII column visible in the narrow properties tab.
-void DumpHex(const BYTE* bytes, DWORD size, std::stringstream& output)
-{
-    constexpr DWORD BytesPerLine = 8;
-    constexpr char Digits[] = "0123456789ABCDEF";
-
-    for (DWORD offset = 0; offset < size; offset += BytesPerLine)
-    {
-        // Each offset covers the first 64 KiB, so eight hex digits suffice.
-        for (int shift = 28; shift >= 0; shift -= 4)
-            output << Digits[(offset >> shift) & 0xF];
-        output << "  ";
-
-        const DWORD count = (size - offset < BytesPerLine)
-            ? size - offset : BytesPerLine;
-        for (DWORD i = 0; i < BytesPerLine; ++i)
-        {
-            if (i < count)
-            {
-                const BYTE b = bytes[offset + i];
-                output << Digits[b >> 4] << Digits[b & 0xF] << ' ';
-            }
-            else
-                output << "   ";
-        }
-
-        output << " |";
-        for (DWORD i = 0; i < count; ++i)
-            output << asciificate(bytes[offset + i]);
-        for (DWORD i = count; i < BytesPerLine; ++i)
-            output << ' ';
-        output << "|\r\n";
-    }
-}
-
 void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND textBox)
 {
     if (textBox == nullptr || pthis == nullptr)
@@ -280,13 +237,10 @@ void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND tex
     }
 
     // Binary, non-UTF-8, or explicitly requested hexadecimal preview.
-    std::stringstream output;
-    DumpHex(buffer.data(), bytesRead, output);
-    std::string formatted = output.str();
+    std::wstring formatted = FormatHexPreview(buffer.data(), bytesRead);
     if (truncated)
-        formatted += "\r\n[Preview truncated after 65535 bytes]";
-    const std::wstring wide(formatted.begin(), formatted.end());
-    SetWindowTextW(textBox, wide.c_str());
+        formatted += L"\r\n[Preview truncated after 65535 bytes]";
+    SetWindowTextW(textBox, formatted.c_str());
 }
 } // namespace
 

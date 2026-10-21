@@ -266,3 +266,55 @@ bool TryDecodeUtf8Preview(const BYTE* data, size_t size, bool truncated,
     text.swap(decoded);
     return true;
 }
+
+
+std::wstring FormatHexPreview(const BYTE* data, size_t size)
+{
+    constexpr size_t BytesPerRow = 8;
+    constexpr size_t MaxPreviewBytes = 65535;
+    constexpr size_t CharactersPerRow = 47;
+    constexpr WCHAR Digits[] = L"0123456789ABCDEF";
+
+    if (data == nullptr || size == 0)
+        return {};
+
+    // The caller reads at most 65535 preview bytes; enforce the same
+    // bound here so formatting cannot allocate unbounded Explorer memory.
+    const size_t length = std::min(size, MaxPreviewBytes);
+    const size_t rows = (length + BytesPerRow - 1) / BytesPerRow;
+    std::wstring output;
+    output.reserve(rows * CharactersPerRow);
+
+    for (size_t offset = 0; offset < length; offset += BytesPerRow)
+    {
+        for (int shift = 28; shift >= 0; shift -= 4)
+            output.push_back(Digits[(offset >> shift) & 0xF]);
+        output += L"  ";
+
+        const size_t count = std::min(BytesPerRow, length - offset);
+        for (size_t i = 0; i < BytesPerRow; ++i)
+        {
+            if (i < count)
+            {
+                const BYTE value = data[offset + i];
+                output.push_back(Digits[value >> 4]);
+                output.push_back(Digits[value & 0xF]);
+                output.push_back(L' ');
+            }
+            else
+                output += L"   ";
+        }
+
+        output += L" |";
+        for (size_t i = 0; i < count; ++i)
+        {
+            const BYTE value = data[offset + i];
+            output.push_back(value >= 32 && value <= 126
+                ? static_cast<WCHAR>(value) : L'.');
+        }
+        output.append(BytesPerRow - count, L' ');
+        output += L"|\r\n";
+    }
+
+    return output;
+}

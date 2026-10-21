@@ -133,4 +133,42 @@ namespace AlternateStreamTests
         }
     };
 
+
+    TEST_CLASS(HexPreviewTests)
+    {
+    public:
+        TEST_METHOD(EmptyAndPartialRows)
+        {
+            Assert::IsTrue(FormatHexPreview(nullptr, 0).empty());
+            const BYTE data[] = { 0, 'A', 0x7F };
+            const std::wstring expected =
+                L"00000000  00 41 7F                 |.A.     |\r\n";
+            Assert::AreEqual(expected.c_str(),
+                FormatHexPreview(data, sizeof(data)).c_str());
+        }
+
+        TEST_METHOD(EightByteRowsAndOffsets)
+        {
+            const BYTE data[] = { 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I' };
+            const std::wstring expected =
+                L"00000000  41 42 43 44 45 46 47 48  |ABCDEFGH|\r\n"
+                L"00000008  49                       |I       |\r\n";
+            Assert::AreEqual(expected.c_str(),
+                FormatHexPreview(data, sizeof(data)).c_str());
+        }
+
+        TEST_METHOD(PreviewLimitAndFinalRow)
+        {
+            constexpr size_t PreviewLimit = 65535;
+            std::vector<BYTE> data(PreviewLimit + 1, 'A');
+            const std::wstring formatted = FormatHexPreview(data.data(), data.size());
+            constexpr size_t RowWidth = 47;
+            constexpr size_t RowCount = (PreviewLimit + 7) / 8;
+            Assert::AreEqual(RowCount * RowWidth, formatted.size());
+            Assert::AreEqual(
+                L"0000FFF8  41 41 41 41 41 41 41     |AAAAAAA |\r\n",
+                formatted.substr(formatted.size() - RowWidth).c_str());
+        }
+    };
+
 }
