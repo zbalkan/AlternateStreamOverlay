@@ -27,7 +27,7 @@ namespace
             while (position < text.size())
             {
                 DWORD written = 0;
-                const DWORD count = static_cast<DWORD>(text.size() - position);
+                const auto count = static_cast<DWORD>(text.size() - position);
                 if (!WriteConsoleW(output, text.data() + position, count, &written, nullptr) ||
                     written == 0)
                     return false;
@@ -38,7 +38,7 @@ namespace
 
         if (text.empty())
             return true;
-        const int characters = static_cast<int>(text.size());
+        const auto characters = static_cast<int>(text.size());
         const int byteCount = WideCharToMultiByte(CP_UTF8, 0,
             text.c_str(), characters, nullptr, 0, nullptr, nullptr);
         if (byteCount == 0)
@@ -53,7 +53,7 @@ namespace
         while (position < encoded.size())
         {
             DWORD written = 0;
-            const DWORD count = static_cast<DWORD>(encoded.size() - position);
+            const auto count = static_cast<DWORD>(encoded.size() - position);
             if (!WriteFile(output, encoded.data() + position, count, &written, nullptr) ||
                 written == 0)
                 return false;
