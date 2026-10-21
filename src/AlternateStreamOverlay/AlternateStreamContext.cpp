@@ -664,7 +664,7 @@ void OnPreviewReady(HWND hWnd, WPARAM wParam)
     if (state == nullptr)
         return;
 
-    const size_t notificationGeneration = static_cast<size_t>(wParam);
+    const auto notificationGeneration = static_cast<size_t>(wParam);
     std::unique_ptr<PreviewResult> result;
     bool failed = false;
     {
