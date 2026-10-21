@@ -660,14 +660,15 @@ void ReleaseEditFont(HWND hWnd)
 
 void OnDestroy(HWND hWnd)
 {
-    // Keep dialog state alive until cleanup has completed.
+    // Detach before cleanup so reentrant messages cannot access the state
+    // while its preview gate and dialog-owned resources are being released.
     std::unique_ptr<DialogState> state(reinterpret_cast<DialogState*>(
         GetWindowLongPtr(hWnd, GWLP_USERDATA)));
+    SetWindowLongPtr(hWnd, GWLP_USERDATA, 0);
     if (state != nullptr)
         CloseGateAndDrain(hWnd, *state);
 
     ReleaseEditFont(hWnd);
-    SetWindowLongPtr(hWnd, GWLP_USERDATA, 0);
 }
 
 bool IsSelectionInput(UINT controlId, UINT notification)
