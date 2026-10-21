@@ -1,0 +1,77 @@
+name: Shell Registration Diagnostics
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/AlternateStreamOverlay/**'
+      - 'src/altstrm_common/**'
+      - 'src/tests/*.ps1'
+      - '.github/workflows/shell-registration.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/AlternateStreamOverlay/**'
+      - 'src/altstrm_common/**'
+      - 'src/tests/*.ps1'
+      - '.github/workflows/shell-registration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shell-registration:
+    name: Shell registration smoke test
+    runs-on: windows-2025
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Validate PowerShell script syntax
+        shell: pwsh
+        run: |
+          $scripts = @(Get-ChildItem -LiteralPath ./src/tests -Filter '*.ps1' -File)
+          foreach ($script in $scripts) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($script.FullName, [ref]$tokens, [ref]$errors)
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error "$($script.Name): $_" }
+              throw "PowerShell syntax check failed for $($script.Name)"
+            }
+          }
+          Write-Host "Validated $($scripts.Count) PowerShell scripts."
+
+      - name: Set up Visual Studio MSBuild
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
+        with:
+          vs-version: '[18.0,19.0)'
+          msbuild-architecture: x64
+
+      - name: Build shell extension
+        shell: pwsh
+        run: |
+          msbuild ./src/AlternateStreamOverlay.sln /t:Rebuild /m /nologo /verbosity:minimal `
+            /p:Configuration=Release /p:Platform=x64 /p:RegisterOutput=false
+          if ($LASTEXITCODE -ne 0) { throw "MSBuild exited with $LASTEXITCODE" }
+
+      - name: Register and audit shell handlers
+        shell: pwsh
+        run: |
+          $dll = (Resolve-Path -LiteralPath './src/AlternateStreamOverlay/x64/Release/AlternateStreamOverlay.dll').Path
+          $regsvr32 = Join-Path $env:WINDIR 'System32/regsvr32.exe'
+          try {
+            & $regsvr32 /s $dll
+            if ($LASTEXITCODE -ne 0) { throw "regsvr32 registration failed: $LASTEXITCODE" }
+            & ./src/tests/Test-ShellHandlerRegistration.ps1 -FailOnIssues
+            if (-not $?) { throw 'Shell handler registration audit failed' }
+            & ./src/tests/Get-OverlayRegistration.ps1 -RequireRegistration
+            if (-not $?) { throw 'Overlay registration audit failed' }
+          }
+          finally {
+            & $regsvr32 /u /s $dll
+            if ($LASTEXITCODE -ne 0) {
+              Write-Warning "Shell extension cleanup returned exit code $LASTEXITCODE"
+            }
+          }

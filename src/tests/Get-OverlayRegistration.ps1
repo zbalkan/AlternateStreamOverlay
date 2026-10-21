@@ -8,7 +8,7 @@
     prove which overlays Explorer has loaded or selected for display.
 #>
 [CmdletBinding()]
-param()
+param([switch] $RequireRegistration)
 
 $overlayPath = 'Software\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers'
 $expectedClsid = '{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}'
@@ -90,5 +90,8 @@ else {
             Write-Warning "$($entry.Scope)\$($entry.Name): COM server path does not exist: $($entry.InprocServer32)"
         }
     }
+}
+if ($RequireRegistration -and ($mine.Count -eq 0 -or @($mine | Where-Object { [string]::IsNullOrWhiteSpace($_.InprocServer32) -or -not (Test-Path -LiteralPath ([Environment]::ExpandEnvironmentVariables($_.InprocServer32)) -PathType Leaf) }).Count -gt 0)) {
+    throw 'AlternateStreamOverlay icon overlay registration is absent or has an invalid COM server.'
 }
 Write-Host 'Note: registration counts are not Explorer slot assignments. Loaded overlays depend on Explorer and other installed handlers.'
