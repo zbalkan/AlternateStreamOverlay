@@ -1,4 +1,5 @@
 #include "altstrm_common.h"
+#include "stream_info_detail.h"
 
 /*
  * 08/2011 lee@benf.org
@@ -52,6 +53,39 @@ namespace
     }
 }
 
+bool stream_info_detail::ReadRecord(
+    const BYTE* buffer, size_t size, size_t offset, Record& record)
+{
+    record = {};
+    if (buffer == nullptr || offset > size ||
+        offset % alignof(FILE_STREAM_INFO) != 0 ||
+        size - offset < StreamInfoHeaderSize)
+        return false;
+
+    const auto* entry =
+        reinterpret_cast<const FILE_STREAM_INFO*>(buffer + offset);
+    const size_t remaining = size - offset;
+    const size_t nameBytes = entry->StreamNameLength;
+    const size_t next = entry->NextEntryOffset;
+
+    if (nameBytes == 0 ||
+        nameBytes % sizeof(WCHAR) != 0 ||
+        nameBytes > remaining - StreamInfoHeaderSize)
+        return false;
+
+    if (next != 0 &&
+        (next < StreamInfoHeaderSize ||
+         next % alignof(FILE_STREAM_INFO) != 0 ||
+         next > remaining ||
+         nameBytes > next - StreamInfoHeaderSize))
+        return false;
+
+    record.name = entry->StreamName;
+    record.nameBytes = nameBytes;
+    record.nextOffset = next;
+    return true;
+}
+
 std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(HANDLE file) const
 {
     std::vector<std::wstring> streams;
@@ -65,33 +99,17 @@ std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(HANDLE fil
     size_t offset = 0;
     for (;;)
     {
-        const size_t remaining = buffer.size() - offset;
-        if (remaining < StreamInfoHeaderSize)
+        stream_info_detail::Record record = {};
+        if (!stream_info_detail::ReadRecord(
+                buffer.data(), buffer.size(), offset, record))
             return {};
 
-        const auto* entry =
-            reinterpret_cast<const FILE_STREAM_INFO*>(buffer.data() + offset);
-        const size_t nameBytes = entry->StreamNameLength;
-        const size_t next = entry->NextEntryOffset;
+        streams.emplace_back(record.name, record.nameBytes / sizeof(WCHAR));
 
-        if (nameBytes == 0 ||
-            nameBytes % sizeof(WCHAR) != 0 ||
-            nameBytes > remaining - StreamInfoHeaderSize)
-            return {};
-
-        if (next != 0 &&
-            (next < StreamInfoHeaderSize ||
-                next % alignof(FILE_STREAM_INFO) != 0 ||
-                next > remaining ||
-                nameBytes > next - StreamInfoHeaderSize))
-            return {};
-
-        streams.emplace_back(entry->StreamName, nameBytes / sizeof(WCHAR));
-
-        if (next == 0)
+        if (record.nextOffset == 0)
             return streams;
 
-        offset += next;
+        offset += record.nextOffset;
     }
 }
 
@@ -125,40 +143,24 @@ bool AlternateStreamReader::HasAlternateStreams(HANDLE file) const
     size_t offset = 0;
     for (;;)
     {
-        const size_t remaining = buffer.size() - offset;
-        if (remaining < StreamInfoHeaderSize)
-            return false;
-
-        const auto* entry =
-            reinterpret_cast<const FILE_STREAM_INFO*>(buffer.data() + offset);
-        const size_t nameBytes = entry->StreamNameLength;
-        const size_t next = entry->NextEntryOffset;
-
-        if (nameBytes == 0 ||
-            nameBytes % sizeof(WCHAR) != 0 ||
-            nameBytes > remaining - StreamInfoHeaderSize)
-            return false;
-
-        if (next != 0 &&
-            (next < StreamInfoHeaderSize ||
-                next % alignof(FILE_STREAM_INFO) != 0 ||
-                next > remaining ||
-                nameBytes > next - StreamInfoHeaderSize))
+        stream_info_detail::Record record = {};
+        if (!stream_info_detail::ReadRecord(
+                buffer.data(), buffer.size(), offset, record))
             return false;
 
         // FileStreamInfo uses "::$DATA" for the unnamed default stream.
         // Directories may have no unnamed stream at all. Both cases are
         // handled by inspecting names rather than counting entries.
         constexpr WCHAR defaultName[] = L"::$DATA";
-        if (nameBytes != (sizeof(defaultName) - sizeof(WCHAR)) ||
-            wmemcmp(entry->StreamName, defaultName,
+        if (record.nameBytes != (sizeof(defaultName) - sizeof(WCHAR)) ||
+            wmemcmp(record.name, defaultName,
                 (sizeof(defaultName) / sizeof(WCHAR)) - 1) != 0)
             return true;
 
-        if (next == 0)
+        if (record.nextOffset == 0)
             return false;
 
-        offset += next;
+        offset += record.nextOffset;
     }
 }
 
