@@ -9,6 +9,42 @@
 #include <exception>
 #include "Common.h"
 
+namespace
+{
+bool CanEnumerateSynchronously(const std::wstring& path)
+{
+    if (PathIsUNCW(path.c_str()))
+        return false;
+
+    // CF_HDROP supplies absolute paths. Reject unrecognized path forms rather
+    // than risk synchronous remote I/O in Explorer's initialization callback.
+    size_t offset = 0;
+    if (path.compare(0, 4, L"\\\\?\\") == 0)
+        offset = 4;
+    if (path.size() < offset + 3)
+        return false;
+
+    const WCHAR letter = path[offset];
+    if (!((letter >= L'A' && letter <= L'Z') ||
+          (letter >= L'a' && letter <= L'z')) ||
+        path[offset + 1] != L':' || path[offset + 2] != L'\\')
+        return false;
+
+    const WCHAR root[] = { letter, L':', L'\\', L'\0' };
+    const UINT driveType = GetDriveTypeW(root);
+    if (driveType == DRIVE_REMOTE || driveType == DRIVE_UNKNOWN ||
+        driveType == DRIVE_NO_ROOT_DIR)
+        return false;
+
+    // Do not recall offline or cloud-backed content for a context menu/page.
+    const DWORD attributes = GetFileAttributesW(path.c_str());
+    constexpr DWORD recallAttributes = FILE_ATTRIBUTE_OFFLINE |
+        FILE_ATTRIBUTE_RECALL_ON_OPEN | FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS;
+    return attributes != INVALID_FILE_ATTRIBUTES &&
+           (attributes & recallAttributes) == 0;
+}
+}
+
 // IShellExtInit fixes this signature. Keep unused arguments unnamed to avoid C4100.
 STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDataObj, HKEY)
 {
@@ -90,6 +126,8 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
     ReleaseStgMedium(&stg);
 
     if (FAILED(hr)) return hr;
+    if (!CanEnumerateSynchronously(filePath))
+        return E_FAIL;
 
     const bool directory = PathIsDirectoryW(filePath.c_str()) != FALSE;
     m_path = filePath;
