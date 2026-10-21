@@ -1,0 +1,2 @@
+Checks: 'cppcoreguidelines-*,modernize-use-nullptr'
+WarningsAsErrors: 'modernize-use-nullptr'
