@@ -138,19 +138,15 @@ jobs:
           # Warning, performance and portability findings remain informational.
           parser_ids = {"unknownMacro", "syntaxError"}
           parser_failures = [item for item in findings if item.get("id") in parser_ids]
-          affected_files = sorted({
-              loc.get("file", item.get("file0", "unknown"))
-              for item in parser_failures
-              for loc in (item.findall("location") or [None])
-              if loc is not None
-          } | {
-              item.get("file0") for item in parser_failures
-              if not item.findall("location") and item.get("file0")
-          })
+          affected_files = sorted(
+              {item.get("file0") for item in parser_failures if item.get("file0")}
+              | {loc.get("file") for item in parser_failures
+                 for loc in item.findall("location") if loc.get("file")}
+          )
           coverage = [
               "", "#### Analysis coverage", "",
               f"Parser/configuration failures: {len(parser_failures)}",
-              f"Affected source locations: {len(affected_files)}",
+              f"Affected files: {len(affected_files)}",
           ]
           if parser_failures:
               coverage.append("**Incomplete analysis:** affected files may not have been fully analyzed.")
@@ -160,14 +156,13 @@ jobs:
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
               summary.write("\n".join(coverage) + "\n")
           print(f"Cppcheck parser/configuration failures: {len(parser_failures)}")
-          print(f"Affected source locations ({len(affected_files)}):")
+          print(f"Affected files ({len(affected_files)}):")
           for path in affected_files:
               print(f"  {path}")
           if parser_failures:
               print("WARNING: Cppcheck analysis coverage is incomplete.")
           # Parser/configuration failures are not actionable source defects.
           # Keep them visible in the summary; gate only analyzable error IDs.
-          parser_ids = {"unknownMacro", "syntaxError"}
           errors = [item for item in findings
                     if item.get("severity") == "error"
                     and item.get("id") not in parser_ids]
