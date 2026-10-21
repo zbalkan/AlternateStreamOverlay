@@ -6,6 +6,7 @@
 #include <string>
 #include <memory>
 #include <new>
+#include <exception>
 #include "Common.h"
 
 // IShellExtInit fixes this signature. Keep unused arguments unnamed to avoid C4100.
@@ -373,7 +374,7 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
     }
 }
 
-void SelectText(DialogState* state, size_t idx, bool asHex, HWND textBox)
+void SelectTextImpl(DialogState* state, size_t idx, bool asHex, HWND textBox)
 {
     if (textBox == nullptr || state == nullptr)
         return;
@@ -418,6 +419,21 @@ void SelectText(DialogState* state, size_t idx, bool asHex, HWND textBox)
     state->gate->workerActive = true;
     SubmitThreadpoolWork(work);
     request.release();
+}
+
+void SelectText(DialogState* state, size_t idx, bool asHex, HWND textBox)
+{
+    try
+    {
+        SelectTextImpl(state, idx, asHex, textBox);
+    }
+    catch (const std::exception&)
+    {
+        // Never propagate allocation or string construction failures through
+        // the Win32 dialog procedure. The scoped SRW guard releases on unwind.
+        if (textBox != nullptr)
+            SetWindowTextW(textBox, L"Unable to start alternate stream preview.");
+    }
 }
 
 } // namespace
