@@ -7,6 +7,8 @@
 #include <string>
 #include <stdexcept>
 #include <vector>
+#include <shlobj.h>
+#include <wrl/client.h>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
@@ -45,10 +47,145 @@ namespace
         Assert::IsTrue(file.get() != INVALID_HANDLE_VALUE,
             L"Failed to create alternate stream");
     }
+
+    // Minimal CF_HDROP provider; GetData supplies a fresh, caller-owned medium.
+    class DropDataObject final : public IDataObject
+    {
+    public:
+        explicit DropDataObject(const std::wstring& path) : path_(path) {}
+
+        HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** object) override
+        {
+            if (object == nullptr) return E_POINTER;
+            *object = nullptr;
+            if (iid == __uuidof(IUnknown) || iid == __uuidof(IDataObject))
+            {
+                *object = static_cast<IDataObject*>(this);
+                AddRef();
+                return S_OK;
+            }
+            return E_NOINTERFACE;
+        }
+
+        ULONG STDMETHODCALLTYPE AddRef() override { return ++references_; }
+        ULONG STDMETHODCALLTYPE Release() override
+        {
+            const ULONG remaining = --references_;
+            if (remaining == 0) delete this;
+            return remaining;
+        }
+
+        HRESULT STDMETHODCALLTYPE GetData(FORMATETC* format, STGMEDIUM* medium) override
+        {
+            if (format == nullptr || medium == nullptr) return E_POINTER;
+            if (format->cfFormat != CF_HDROP || format->tymed != TYMED_HGLOBAL)
+                return DV_E_FORMATETC;
+
+            const size_t bytes = sizeof(DROPFILES) +
+                (path_.size() + 2) * sizeof(WCHAR);
+            HGLOBAL storage = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, bytes);
+            if (storage == nullptr) return E_OUTOFMEMORY;
+            void* memory = GlobalLock(storage);
+            if (memory == nullptr)
+            {
+                GlobalFree(storage);
+                return E_OUTOFMEMORY;
+            }
+            auto* drop = static_cast<DROPFILES*>(memory);
+            drop->pFiles = sizeof(DROPFILES);
+            drop->fWide = TRUE;
+            memcpy(static_cast<BYTE*>(memory) + sizeof(DROPFILES),
+                   path_.c_str(), (path_.size() + 1) * sizeof(WCHAR));
+            GlobalUnlock(storage);
+
+            *medium = {};
+            medium->tymed = TYMED_HGLOBAL;
+            medium->hGlobal = storage;
+            return S_OK;
+        }
+
+        HRESULT STDMETHODCALLTYPE GetDataHere(FORMATETC*, STGMEDIUM*) override { return E_NOTIMPL; }
+        HRESULT STDMETHODCALLTYPE QueryGetData(FORMATETC*) override { return E_NOTIMPL; }
+        HRESULT STDMETHODCALLTYPE GetCanonicalFormatEtc(FORMATETC*, FORMATETC*) override { return E_NOTIMPL; }
+        HRESULT STDMETHODCALLTYPE SetData(FORMATETC*, STGMEDIUM*, BOOL) override { return E_NOTIMPL; }
+        HRESULT STDMETHODCALLTYPE EnumFormatEtc(DWORD, IEnumFORMATETC**) override { return E_NOTIMPL; }
+        HRESULT STDMETHODCALLTYPE DAdvise(FORMATETC*, DWORD, IAdviseSink*, DWORD*) override { return E_NOTIMPL; }
+        HRESULT STDMETHODCALLTYPE DUnadvise(DWORD) override { return E_NOTIMPL; }
+        HRESULT STDMETHODCALLTYPE EnumDAdvise(IEnumSTATDATA**) override { return E_NOTIMPL; }
+
+    private:
+        std::wstring path_;
+        ULONG references_ = 1;
+    };
+
+    struct ScopedModule
+    {
+        explicit ScopedModule(LPCWSTR path) : module(LoadLibraryW(path)) {}
+        ~ScopedModule() { if (module != nullptr) FreeLibrary(module); }
+        ScopedModule(const ScopedModule&) = delete;
+        ScopedModule& operator=(const ScopedModule&) = delete;
+        HMODULE module;
+    };
 }
 
 namespace AlternateStreamTests
 {
+
+    TEST_CLASS(ComInitializationTests)
+    {
+    public:
+        TEST_METHOD(FailedReinitializationDiscardsPreviousSelection)
+        {
+            WCHAR dllPath[MAX_PATH] = {};
+            const DWORD pathLength = GetEnvironmentVariableW(
+                L"ASO_OVERLAY_DLL", dllPath, _countof(dllPath));
+            Assert::IsTrue(pathLength > 0 && pathLength < _countof(dllPath),
+                L"ASO_OVERLAY_DLL must identify the built overlay DLL");
+
+            ScopedModule module(dllPath);
+            Assert::IsTrue(module.module != nullptr, L"Unable to load overlay DLL");
+            using GetClassObject = HRESULT (STDAPICALLTYPE*)(REFCLSID, REFIID, void**);
+            const auto getClassObject = reinterpret_cast<GetClassObject>(
+                GetProcAddress(module.module, "DllGetClassObject"));
+            Assert::IsTrue(getClassObject != nullptr, L"DllGetClassObject not exported");
+
+            // CLSID_AlternateStreamContext from AlternateStreamOverlay.idl.
+            const CLSID clsid = { 0x4A26024B, 0x5499, 0x45BE,
+                { 0xA2, 0x3F, 0x4A, 0x65, 0xE8, 0x88, 0x88, 0xD0 } };
+            Microsoft::WRL::ComPtr<IClassFactory> factory;
+            Assert::IsTrue(SUCCEEDED(getClassObject(clsid, __uuidof(IClassFactory),
+                reinterpret_cast<void**>(factory.GetAddressOf()))));
+
+            Microsoft::WRL::ComPtr<IShellExtInit> initializer;
+            Assert::IsTrue(SUCCEEDED(factory->CreateInstance(nullptr,
+                __uuidof(IShellExtInit),
+                reinterpret_cast<void**>(initializer.GetAddressOf()))));
+            Microsoft::WRL::ComPtr<IContextMenu> menu;
+            Assert::IsTrue(SUCCEEDED(initializer.As(&menu)));
+
+            TemporaryFile fixture;
+            CreateStream(std::wstring(fixture.path.data()) + L":lifecycle");
+            Microsoft::WRL::ComPtr<IDataObject> data;
+            data.Attach(new DropDataObject(fixture.path.data()));
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                initializer->Initialize(nullptr, data.Get(), nullptr));
+
+            CMINVOKECOMMANDINFO command = {};
+            command.cbSize = sizeof(command);
+            command.lpVerb = MAKEINTRESOURCEA(0);
+            // Missing data object must clear the previously initialized selection.
+            Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG),
+                initializer->Initialize(nullptr, nullptr, nullptr));
+            Assert::AreEqual(static_cast<HRESULT>(E_FAIL),
+                menu->InvokeCommand(&command));
+
+            menu.Reset();
+            initializer.Reset();
+            factory.Reset();
+            data.Reset();
+        }
+    };
+
     TEST_CLASS(StreamReaderTests)
     {
     public:
