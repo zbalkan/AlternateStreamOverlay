@@ -15,6 +15,6 @@ extern "C" BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD dwReason, LPVOID lpRes
     if (!PrxDllMain(hInstance, dwReason, lpReserved))
         return FALSE;
 #endif
-    hInstance;
+    static_cast<void>(hInstance);
     return _AtlModule.DllMain(dwReason, lpReserved);
 }
