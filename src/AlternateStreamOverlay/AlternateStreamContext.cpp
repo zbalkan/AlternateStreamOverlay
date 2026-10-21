@@ -423,6 +423,9 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
         if (!result)
         {
             ExclusiveSrwLock lock(request->gate->lock);
+            // A newer selection must still be serviced after this failed read.
+            if (request->gate->alive && generation != request->gate->generation)
+                continue;
             PostPreviewFailure(*request->gate, generation);
             request->gate->workerActive = false;
             return;
@@ -437,6 +440,9 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
             // An error-string allocation can also fail. Use an allocation-free
             // completion message instead of attempting another string write.
             ExclusiveSrwLock lock(request->gate->lock);
+            // Do not abandon a newer selection because an older read failed.
+            if (request->gate->alive && generation != request->gate->generation)
+                continue;
             PostPreviewFailure(*request->gate, generation);
             request->gate->workerActive = false;
             return;
