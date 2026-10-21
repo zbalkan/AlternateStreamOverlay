@@ -47,6 +47,10 @@ public:
     bool HasAlternateStreams(LPCWSTR filename) const;
     std::vector<std::wstring> ListAlternateStreams(HANDLE file) const;
     std::vector<std::wstring> ListAlternateStreams(LPCWSTR filename) const;
+
+private:
+    StreamEnumeration EnumerateStreams(HANDLE file, bool collectNames) const;
+    StreamEnumeration EnumerateStreams(LPCWSTR filename, bool collectNames) const;
 };
 
 // Format bounded binary previews in eight-byte rows for the property page.
