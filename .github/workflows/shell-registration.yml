@@ -69,13 +69,35 @@ jobs:
             throw 'Machine-wide COM registration requires an elevated administrator token.'
           }
 
+          function Invoke-RegistrationProcess {
+            param(
+              [Parameter(Mandatory)][string] $FilePath,
+              [Parameter(Mandatory)][string] $Arguments
+            )
+            $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+            $startInfo.FileName = $FilePath
+            $startInfo.Arguments = $Arguments
+            $startInfo.UseShellExecute = $false
+            $startInfo.CreateNoWindow = $true
+
+            $process = [System.Diagnostics.Process]::new()
+            try {
+              $process.StartInfo = $startInfo
+              if (-not $process.Start()) { throw "Could not start $FilePath" }
+              $process.WaitForExit()
+              return $process.ExitCode
+            }
+            finally {
+              $process.Dispose()
+            }
+          }
+
+          $quotedDll = '"' + $dll + '"'
           $registered = $false
           try {
-            # regsvr32 is a GUI-subsystem executable. Use Start-Process -Wait to
-            # capture its exit code instead of relying on $LASTEXITCODE in pwsh.
-            $process = Start-Process -FilePath $regsvr32 -ArgumentList @('/s', "`"$dll`"") -Wait -PassThru
-            if ($process.ExitCode -ne 0) {
-              throw "regsvr32 registration failed with exit code $($process.ExitCode)"
+            $exitCode = Invoke-RegistrationProcess -FilePath $regsvr32 -Arguments "/s $quotedDll"
+            if ($exitCode -ne 0) {
+              throw "regsvr32 registration failed with exit code $exitCode"
             }
             $registered = $true
             & ./src/tests/Test-ShellHandlerRegistration.ps1 -FailOnIssues
@@ -83,9 +105,9 @@ jobs:
           }
           finally {
             if ($registered) {
-              $cleanup = Start-Process -FilePath $regsvr32 -ArgumentList @('/u', '/s', "`"$dll`"") -Wait -PassThru
-              if ($cleanup.ExitCode -ne 0) {
-                Write-Warning "Shell extension cleanup returned exit code $($cleanup.ExitCode)"
+              $exitCode = Invoke-RegistrationProcess -FilePath $regsvr32 -Arguments "/u /s $quotedDll"
+              if ($exitCode -ne 0) {
+                Write-Warning "Shell extension cleanup returned exit code $exitCode"
               }
             }
           }
