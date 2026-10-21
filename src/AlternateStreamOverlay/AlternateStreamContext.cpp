@@ -25,7 +25,7 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
         return E_INVALIDARG;
     }
 
-    HDROP hDrop = reinterpret_cast<HDROP>(GlobalLock(stg.hGlobal));
+    auto hDrop = static_cast<HDROP>(GlobalLock(stg.hGlobal));
 
     if (hDrop == nullptr)
     {
@@ -183,7 +183,7 @@ const std::wstring& CAlternateStreamContext::get_path() const
 
 namespace
 {
-void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND textBox)
+void SelectText(const CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND textBox)
 {
     if (textBox == nullptr || pthis == nullptr)
         return;
