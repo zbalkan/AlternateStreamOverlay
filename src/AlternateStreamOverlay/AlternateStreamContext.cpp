@@ -48,6 +48,11 @@ bool CanEnumerateSynchronously(const std::wstring& path)
 // IShellExtInit fixes this signature. Keep unused arguments unnamed to avoid C4100.
 STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDataObj, HKEY)
 {
+    // A failed reinitialization must not retain the previous shell selection.
+    m_path.clear();
+    m_streams.clear();
+    m_isDirectory = false;
+
     FORMATETC fmt = { CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
     if (pDataObj == nullptr)
         return E_INVALIDARG;
