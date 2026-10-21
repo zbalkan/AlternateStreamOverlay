@@ -4,6 +4,9 @@
 #include <strsafe.h>
 #include <vector>
 #include <string>
+#include <memory>
+#include <mutex>
+#include <new>
 #include "Common.h"
 
 // IShellExtInit fixes this signature. Keep unused arguments unnamed to avoid C4100.
@@ -209,33 +212,46 @@ const std::wstring& CAlternateStreamContext::get_path() const
 
 namespace
 {
-void SelectText(const CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND textBox)
+constexpr UINT WM_PREVIEW_READY = WM_APP + 42;
+
+struct PreviewGate
 {
-    if (textBox == nullptr || pthis == nullptr)
-        return;
+    std::mutex mutex;
+    bool alive = true;
+    HWND window = nullptr;
+    bool workerActive = false;
+    size_t generation = 0;
+    std::wstring path;
+    bool asHex = false;
+};
 
-    SetWindowTextW(textBox, L"");
-    const std::vector<std::wstring>& streams = pthis->get_streams();
-    if (idx >= streams.size())
-        return;
+struct DialogState
+{
+    CAlternateStreamContext* context;
+    std::shared_ptr<PreviewGate> gate;
+    size_t generation = 0;
+};
 
-    const std::wstring& fname = pthis->get_path();
+struct PreviewRequest
+{
+    std::shared_ptr<PreviewGate> gate;
+    HMODULE moduleHandle = nullptr;
+};
 
-    const std::wstring full_path = fname + streams[idx];
+struct PreviewResult
+{
+    size_t generation;
+    std::wstring text;
+};
 
-    // Preview reads should coexist with writers, rename and delete operations.
-    HandleW hFile(::CreateFileW(full_path.c_str(), GENERIC_READ,
+std::wstring ReadPreview(const std::wstring& path, bool asHex)
+{
+    HandleW hFile(::CreateFileW(path.c_str(), GENERIC_READ,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
         nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr));
-
     if (hFile == INVALID_HANDLE_VALUE)
-    {
-        SetWindowTextW(textBox, L"Unable to open alternate stream.");
-        return;
-    }
+        return L"Unable to open alternate stream.";
 
-    // Read one byte beyond the display limit to detect truncated previews
-    // without loading an unbounded stream into the Explorer process.
     constexpr DWORD MaxPreviewBytes = 64 * 1024 - 1;
     std::vector<BYTE> buffer(MaxPreviewBytes + 1);
     DWORD bytesRead = 0;
@@ -243,12 +259,8 @@ void SelectText(const CAlternateStreamContext* pthis, size_t idx, bool asHex, HW
     {
         DWORD count = 0;
         const DWORD remaining = static_cast<DWORD>(buffer.size()) - bytesRead;
-        if (!ReadFile(hFile, buffer.data() + bytesRead, remaining,
-                      &count, nullptr))
-        {
-            SetWindowTextW(textBox, L"Unable to read alternate stream.");
-            return;
-        }
+        if (!ReadFile(hFile, buffer.data() + bytesRead, remaining, &count, nullptr))
+            return L"Unable to read alternate stream.";
         if (count == 0)
             break;
         bytesRead += count;
@@ -264,17 +276,131 @@ void SelectText(const CAlternateStreamContext* pthis, size_t idx, bool asHex, HW
         {
             if (truncated)
                 text += L"\r\n[Preview truncated after 65535 bytes]";
-            SetWindowTextW(textBox, text.c_str());
-            return;
+            return text;
         }
     }
 
-    // Binary, non-UTF-8, or explicitly requested hexadecimal preview.
     std::wstring formatted = FormatHexPreview(buffer.data(), bytesRead);
     if (truncated)
         formatted += L"\r\n[Preview truncated after 65535 bytes]";
-    SetWindowTextW(textBox, formatted.c_str());
+    return formatted;
 }
+
+VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP_WORK work)
+{
+    std::unique_ptr<PreviewRequest> request(static_cast<PreviewRequest*>(parameter));
+    // Windows releases the DLL only after this callback has completely returned.
+    FreeLibraryWhenCallbackReturns(instance, request->moduleHandle);
+    CloseThreadpoolWork(work);
+
+    for (;;)
+    {
+        std::wstring path;
+        size_t generation = 0;
+        bool asHex = false;
+        {
+            std::lock_guard<std::mutex> lock(request->gate->mutex);
+            if (!request->gate->alive)
+            {
+                request->gate->workerActive = false;
+                return;
+            }
+            generation = request->gate->generation;
+            asHex = request->gate->asHex;
+            try
+            {
+                path = request->gate->path;
+            }
+            catch (const std::bad_alloc&)
+            {
+                // A failed snapshot must not escape the Win32 callback.
+                request->gate->workerActive = false;
+                return;
+            }
+        }
+
+        std::unique_ptr<PreviewResult> result(new (std::nothrow) PreviewResult);
+        if (!result)
+        {
+            std::lock_guard<std::mutex> lock(request->gate->mutex);
+            request->gate->workerActive = false;
+            return;
+        }
+        result->generation = generation;
+        try
+        {
+            result->text = ReadPreview(path, asHex);
+        }
+        catch (...)
+        {
+            // Never propagate exceptions across the Win32 thread-pool boundary.
+            result->text = L"Unable to read alternate stream.";
+        }
+
+        std::lock_guard<std::mutex> lock(request->gate->mutex);
+        if (!request->gate->alive)
+        {
+            request->gate->workerActive = false;
+            return;
+        }
+        if (generation != request->gate->generation)
+            continue; // Skip superseded results; read only the latest selection.
+
+        if (PostMessageW(request->gate->window, WM_PREVIEW_READY, 0,
+                         reinterpret_cast<LPARAM>(result.get())))
+            result.release();
+        request->gate->workerActive = false;
+        return;
+    }
+}
+
+void SelectText(DialogState* state, size_t idx, bool asHex, HWND textBox)
+{
+    if (textBox == nullptr || state == nullptr)
+        return;
+    const auto& streams = state->context->get_streams();
+    ++state->generation;
+    if (idx >= streams.size())
+    {
+        SetWindowTextW(textBox, L"");
+        return;
+    }
+
+    SetWindowTextW(textBox, L"Loading alternate stream...");
+    std::lock_guard<std::mutex> lock(state->gate->mutex);
+    state->gate->generation = state->generation;
+    state->gate->asHex = asHex;
+    state->gate->path = state->context->get_path() + streams[idx];
+    if (state->gate->workerActive)
+        return; // Coalesce changes into the most recent pending selection.
+
+    std::unique_ptr<PreviewRequest> request(new (std::nothrow) PreviewRequest);
+    if (!request)
+    {
+        SetWindowTextW(textBox, L"Unable to start alternate stream preview.");
+        return;
+    }
+    request->gate = state->gate;
+    HMODULE moduleHandle = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+        reinterpret_cast<LPCWSTR>(&PreviewWorker), &moduleHandle))
+    {
+        SetWindowTextW(textBox, L"Unable to start alternate stream preview.");
+        return;
+    }
+    request->moduleHandle = moduleHandle;
+    PTP_WORK work = CreateThreadpoolWork(PreviewWorker, request.get(), nullptr);
+    if (work == nullptr)
+    {
+        FreeLibrary(moduleHandle);
+        SetWindowTextW(textBox, L"Unable to start alternate stream preview.");
+        return;
+    }
+    state->gate->workerActive = true;
+    SubmitThreadpoolWork(work);
+    request.release();
+}
+
 } // namespace
 
 BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
@@ -287,7 +413,22 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     if (pthis == nullptr)
         return FALSE;
 
-    SetWindowLongPtr(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(pthis));
+    std::unique_ptr<DialogState> state(new (std::nothrow) DialogState);
+    if (!state)
+        return FALSE;
+    state->context = pthis;
+    try
+    {
+        state->gate = std::make_shared<PreviewGate>();
+    }
+    catch (const std::bad_alloc&)
+    {
+        return FALSE;
+    }
+    state->gate->window = hWnd;
+    DialogState* dialogState = state.get();
+    SetWindowLongPtr(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(dialogState));
+    state.release();
 
     HWND comboBox = GetDlgItem(hWnd, IDC_COMBO1);
     HWND checkBox = GetDlgItem(hWnd, IDC_CHECK1);
@@ -317,7 +458,7 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     if (!streams.empty())
     {
         SendMessage(comboBox, CB_SETCURSEL, 0, 0);
-        SelectText(pthis, 0, false, textBox);
+        SelectText(dialogState, 0, false, textBox);
     }
     return TRUE;
 }
@@ -349,8 +490,32 @@ DLGRETURN CALLBACK PropPageDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
     if (uMsg == WM_INITDIALOG)
         return OnInitDialog(hWnd, lParam);
 
+    if (uMsg == WM_PREVIEW_READY)
+    {
+        std::unique_ptr<PreviewResult> result(reinterpret_cast<PreviewResult*>(lParam));
+        auto* state = reinterpret_cast<DialogState*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+        if (state != nullptr && result && result->generation == state->generation)
+            SetWindowTextW(GetDlgItem(hWnd, IDC_EDIT1), result->text.c_str());
+        return TRUE;
+    }
+
     if (uMsg == WM_DESTROY)
     {
+        std::unique_ptr<DialogState> state(reinterpret_cast<DialogState*>(
+            GetWindowLongPtr(hWnd, GWLP_USERDATA)));
+        if (state != nullptr)
+        {
+            std::lock_guard<std::mutex> lock(state->gate->mutex);
+            state->gate->alive = false;
+            MSG pending = {};
+            while (PeekMessageW(&pending, hWnd, WM_PREVIEW_READY,
+                                WM_PREVIEW_READY, PM_REMOVE))
+            {
+                // Each removed message owns one completion result.
+                std::unique_ptr<PreviewResult> discarded(
+                    reinterpret_cast<PreviewResult*>(pending.lParam));
+            }
+        }
         HWND textBox = GetDlgItem(hWnd, IDC_EDIT1);
         if (textBox != nullptr)
         {
@@ -377,9 +542,9 @@ DLGRETURN CALLBACK PropPageDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
         (controlId != IDC_CHECK1 || notification != BN_CLICKED))
         return FALSE;
 
-    auto* context = reinterpret_cast<CAlternateStreamContext*>(
+    auto* state = reinterpret_cast<DialogState*>(
         GetWindowLongPtr(hWnd, GWLP_USERDATA));
-    if (context == nullptr)
+    if (state == nullptr)
         return FALSE;
 
     HWND comboBox = GetDlgItem(hWnd, IDC_COMBO1);
@@ -390,7 +555,7 @@ DLGRETURN CALLBACK PropPageDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
         return TRUE;
 
     const bool hex = SendMessage(checkBox, BM_GETCHECK, 0, 0) == BST_CHECKED;
-    SelectText(context, static_cast<size_t>(selected), hex, textBox);
+    SelectText(state, static_cast<size_t>(selected), hex, textBox);
     return TRUE;
 }
 
