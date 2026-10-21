@@ -36,4 +36,9 @@ public:
     std::vector<std::wstring> ListAlternateStreams(LPCWSTR filename) const;
 };
 
+// Decode text previews, discarding only an incomplete trailing UTF-8 character
+// when the read was confirmed truncated. Invalid content remains binary.
+bool TryDecodeUtf8Preview(const BYTE* data, size_t size, bool truncated,
+                          std::wstring& text);
+
 #endif // _ALTSTRM_COMMON_H_

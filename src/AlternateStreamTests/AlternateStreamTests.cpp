@@ -75,4 +75,62 @@ namespace AlternateStreamTests
             Assert::IsFalse(reader.HasAlternateStreams(fixture.path));
         }
     };
+
+    TEST_CLASS(StreamPreviewTests)
+    {
+    public:
+        TEST_METHOD(ValidUtf8AndBinaryFallback)
+        {
+            std::wstring text;
+            const BYTE valid[] = { 'A', 0xE2, 0x82, 0xAC };
+            Assert::IsTrue(TryDecodeUtf8Preview(valid, sizeof(valid), false, text));
+            Assert::AreEqual(L"A\u20AC", text.c_str());
+
+            const BYTE invalid[] = { 'A', 0xC0, 0xAF };
+            Assert::IsFalse(TryDecodeUtf8Preview(invalid, sizeof(invalid), false, text));
+            const BYTE nul[] = { 'A', 0, 'B' };
+            Assert::IsFalse(TryDecodeUtf8Preview(nul, sizeof(nul), false, text));
+        }
+
+        TEST_METHOD(TruncationOnlyDiscardsIncompleteUtf8Suffix)
+        {
+            std::wstring text;
+            const BYTE split[] = { 'A', 0xE2, 0x82 };
+            Assert::IsTrue(TryDecodeUtf8Preview(split, sizeof(split), true, text));
+            Assert::AreEqual(L"A", text.c_str());
+            Assert::IsFalse(TryDecodeUtf8Preview(split, sizeof(split), false, text));
+
+            const BYTE malformed[] = { 'A', 0xF0, 0x80 };
+            Assert::IsFalse(TryDecodeUtf8Preview(malformed, sizeof(malformed), true, text));
+            const BYTE fourByteSplit[] = { 'A', 0xF0, 0x9F, 0x98 };
+            Assert::IsTrue(TryDecodeUtf8Preview(fourByteSplit, sizeof(fourByteSplit), true, text));
+            Assert::AreEqual(L"A", text.c_str());
+            const BYTE loneContinuation[] = { 'A', 0x80 };
+            Assert::IsFalse(TryDecodeUtf8Preview(loneContinuation, sizeof(loneContinuation), true, text));
+            const BYTE invalidSecond[] = { 'A', 0xE0, 0x80 };
+            Assert::IsFalse(TryDecodeUtf8Preview(invalidSecond, sizeof(invalidSecond), true, text));
+            const BYTE complete[] = { 'A', 0xE2, 0x82, 0xAC };
+            Assert::IsTrue(TryDecodeUtf8Preview(complete, sizeof(complete), true, text));
+            Assert::AreEqual(L"A\u20AC", text.c_str());
+            const BYTE invalidInside[] = { 0xFF, 'A', 0xE2 };
+            Assert::IsFalse(TryDecodeUtf8Preview(invalidInside, sizeof(invalidInside), true, text));
+        }
+
+        TEST_METHOD(ExactPreviewBoundary)
+        {
+            constexpr size_t PreviewLimit = 65535;
+            std::vector<BYTE> data(PreviewLimit, 'A');
+            std::wstring text;
+            Assert::IsTrue(TryDecodeUtf8Preview(data.data(), data.size(), false, text));
+            Assert::AreEqual(PreviewLimit, text.size());
+
+            // 65535-byte display limit cuts off the final byte of a euro sign.
+            data[PreviewLimit - 2] = 0xE2;
+            data[PreviewLimit - 1] = 0x82;
+            Assert::IsTrue(TryDecodeUtf8Preview(data.data(), data.size(), true, text));
+            Assert::AreEqual(PreviewLimit - 2, text.size());
+            Assert::IsFalse(TryDecodeUtf8Preview(data.data(), data.size(), false, text));
+        }
+    };
+
 }

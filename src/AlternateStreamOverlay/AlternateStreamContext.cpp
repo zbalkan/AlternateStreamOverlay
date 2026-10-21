@@ -232,9 +232,7 @@ void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND tex
 
     const std::wstring& fname = pthis->get_path();
 
-    std::wstringstream ss;
-    ss << fname << streams[idx];
-    std::wstring full_path = ss.str();
+    const std::wstring full_path = fname + streams[idx];
 
     HandleW hFile(::CreateFile(full_path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL));
 
@@ -249,44 +247,33 @@ void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND tex
     constexpr DWORD MaxPreviewBytes = 64 * 1024 - 1;
     std::vector<BYTE> buffer(MaxPreviewBytes + 1);
     DWORD bytesRead = 0;
-    if (!ReadFile(hFile, buffer.data(), static_cast<DWORD>(buffer.size()),
-                  &bytesRead, nullptr))
+    while (bytesRead < buffer.size())
     {
-        SetWindowTextW(textBox, L"Unable to read alternate stream.");
-        return;
+        DWORD count = 0;
+        const DWORD remaining = static_cast<DWORD>(buffer.size()) - bytesRead;
+        if (!ReadFile(hFile, buffer.data() + bytesRead, remaining,
+                      &count, nullptr))
+        {
+            SetWindowTextW(textBox, L"Unable to read alternate stream.");
+            return;
+        }
+        if (count == 0)
+            break;
+        bytesRead += count;
     }
     const bool truncated = bytesRead > MaxPreviewBytes;
     if (truncated)
         bytesRead = MaxPreviewBytes;
 
-    // Treat the byte stream as UTF-8 text only when conversion is valid.
-    // An edit control cannot display embedded NUL characters.
-    if (!asHex && bytesRead == 0)
-        return;
-
-    if (!asHex &&
-        std::find(buffer.begin(), buffer.begin() + bytesRead, static_cast<BYTE>(0)) ==
-            buffer.begin() + bytesRead)
+    if (!asHex)
     {
-        const int byteCount = static_cast<int>(bytesRead);
-        const int charCount = MultiByteToWideChar(
-            CP_UTF8, MB_ERR_INVALID_CHARS,
-            reinterpret_cast<const char*>(buffer.data()), byteCount,
-            nullptr, 0);
-        if (charCount > 0)
+        std::wstring text;
+        if (TryDecodeUtf8Preview(buffer.data(), bytesRead, truncated, text))
         {
-            std::wstring text(static_cast<size_t>(charCount), L'\0');
-            const int converted = MultiByteToWideChar(
-                CP_UTF8, MB_ERR_INVALID_CHARS,
-                reinterpret_cast<const char*>(buffer.data()), byteCount,
-                &text[0], charCount);
-            if (converted == charCount)
-            {
-                if (truncated)
-                    text += L"\r\n[Preview truncated after 65535 bytes]";
-                SetWindowTextW(textBox, text.c_str());
-                return;
-            }
+            if (truncated)
+                text += L"\r\n[Preview truncated after 65535 bytes]";
+            SetWindowTextW(textBox, text.c_str());
+            return;
         }
     }
 
@@ -296,7 +283,8 @@ void SelectText(CAlternateStreamContext* pthis, size_t idx, bool asHex, HWND tex
     std::string formatted = output.str();
     if (truncated)
         formatted += "\r\n[Preview truncated after 65535 bytes]";
-    SetWindowTextA(textBox, formatted.c_str());
+    const std::wstring wide(formatted.begin(), formatted.end());
+    SetWindowTextW(textBox, wide.c_str());
 }
 } // namespace
 
