@@ -53,3 +53,7 @@ extension's overlay registration is absent or its COM server is missing.
 Explorer has a limited number of overlay slots shared by installed handlers.
 A registration count does **not** establish which overlays Explorer selected;
 the script does not change registration names, ordering, priorities or slots.
+
+## Fingerprint icon
+
+[fingerprint](https://icons8.com/icon/oNI1jC8ljJ7X/fingerprint) icon by [Icons8](https://icons8.com)
