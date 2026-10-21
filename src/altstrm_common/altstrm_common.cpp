@@ -17,6 +17,8 @@
  *
  */
 
+#include <algorithm>
+#include <climits>
 #include <cstddef>
 #include <cwchar>
 #include <vector>
@@ -173,4 +175,67 @@ bool AlternateStreamReader::HasAlternateStreams(LPCWSTR filename) const
         return false;
 
     return HasAlternateStreams(file.get());
+}
+
+
+bool TryDecodeUtf8Preview(const BYTE* data, size_t size, bool truncated,
+                          std::wstring& text)
+{
+    text.clear();
+    if (size == 0)
+        return true;
+    if (data == nullptr || size > static_cast<size_t>(INT_MAX))
+        return false;
+
+    size_t length = size;
+    if (truncated)
+    {
+        // Only remove an incomplete final code point. Never forgive malformed
+        // UTF-8 elsewhere in the preview (or a genuinely incomplete file).
+        size_t lead = length;
+        while (lead > 0 && length - lead < 3 &&
+               (data[lead - 1] & 0xC0) == 0x80)
+            --lead;
+        if (lead > 0)
+        {
+            --lead;
+            const BYTE first = data[lead];
+            const size_t available = length - lead;
+            const size_t required = first >= 0xF0 && first <= 0xF4 ? 4 :
+                                    first >= 0xE0 && first <= 0xEF ? 3 :
+                                    first >= 0xC2 && first <= 0xDF ? 2 : 0;
+            bool validPrefix = required != 0 && available < required;
+            for (size_t i = lead + 1; validPrefix && i < length; ++i)
+                validPrefix = (data[i] & 0xC0) == 0x80;
+            if (validPrefix && available >= 2)
+            {
+                const BYTE second = data[lead + 1];
+                if ((first == 0xE0 && second < 0xA0) ||
+                    (first == 0xED && second > 0x9F) ||
+                    (first == 0xF0 && second < 0x90) ||
+                    (first == 0xF4 && second > 0x8F))
+                    validPrefix = false;
+            }
+            if (validPrefix)
+                length = lead;
+        }
+    }
+
+    if (std::find(data, data + length, static_cast<BYTE>(0)) != data + length)
+        return false;
+    if (length == 0)
+        return true;
+
+    const int byteCount = static_cast<int>(length);
+    const int count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+        reinterpret_cast<const char*>(data), byteCount, nullptr, 0);
+    if (count <= 0)
+        return false;
+
+    std::wstring decoded(static_cast<size_t>(count), L'\0');
+    if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+        reinterpret_cast<const char*>(data), byteCount, &decoded[0], count) != count)
+        return false;
+    text.swap(decoded);
+    return true;
 }
