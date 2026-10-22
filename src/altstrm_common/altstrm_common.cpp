@@ -140,6 +140,26 @@ bool stream_info_detail::ReadRecord(
     return true;
 }
 
+bool stream_info_detail::IsNamedDataStreamName(const WCHAR* name, size_t length)
+{
+    constexpr WCHAR Suffix[] = L":$DATA";
+    constexpr size_t SuffixLength = (sizeof(Suffix) / sizeof(WCHAR)) - 1;
+    if (name == nullptr || length <= SuffixLength + 1 ||
+        name[0] != L':' ||
+        wmemcmp(name + length - SuffixLength, Suffix, SuffixLength) != 0)
+        return false;
+
+    // A second colon, path separator, or control character could change
+    // how Win32 interprets the concatenated path.
+    for (size_t i = 1; i < length - SuffixLength; ++i)
+    {
+        if (name[i] == L':' || name[i] == L'\\' ||
+            name[i] == L'/' || name[i] < L' ')
+            return false;
+    }
+    return true;
+}
+
 StreamEnumeration AlternateStreamReader::EnumerateStreams(HANDLE file) const
 {
     return EnumerateStreams(file, true);
@@ -173,10 +193,20 @@ StreamEnumeration AlternateStreamReader::EnumerateStreams(HANDLE file, bool coll
         }
 
         constexpr WCHAR DefaultStream[] = L"::$DATA";
-        if (record.nameBytes != sizeof(DefaultStream) - sizeof(WCHAR) ||
-            wmemcmp(record.name, DefaultStream, (sizeof(DefaultStream) / sizeof(WCHAR)) - 1) != 0)
+        const bool defaultStream =
+            record.nameBytes == sizeof(DefaultStream) - sizeof(WCHAR) &&
+            wmemcmp(record.name, DefaultStream,
+                    (sizeof(DefaultStream) / sizeof(WCHAR)) - 1) == 0;
+        const bool namedDataStream = stream_info_detail::IsNamedDataStreamName(
+            record.name, record.nameBytes / sizeof(WCHAR));
+        // Existence is independent of whether a stream name can be safely
+        // appended to a Win32 path. Do not hide an ADS overlay simply because
+        // its name is unsuitable for the preview UI.
+        if (!defaultStream)
             result.hasNamedStreams = true;
-        if (collectNames)
+        // Keep the default stream in the public enumeration for compatibility,
+        // but exclude non-data and unsafe names from path-based consumers.
+        if (collectNames && (defaultStream || namedDataStream))
             result.streams.emplace_back(record.name, record.nameBytes / sizeof(WCHAR));
 
         if (record.nextOffset == 0)

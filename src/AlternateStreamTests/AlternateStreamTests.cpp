@@ -607,6 +607,35 @@ namespace AlternateStreamTests
             Assert::AreEqual(static_cast<size_t>(4 * sizeof(WCHAR)), record.nameBytes);
         }
 
+        TEST_METHOD(ValidatesNamesBeforeUsingThemAsStreamPaths)
+        {
+            using stream_info_detail::IsNamedDataStreamName;
+            auto valid = [](const std::wstring& name) {
+                return IsNamedDataStreamName(name.data(), name.size());
+            };
+
+            Assert::IsTrue(valid(L":report:$DATA"));
+            Assert::IsTrue(valid(L":a b:$DATA"));
+            std::wstring surrogate = L":a:$DATA";
+            surrogate[1] = static_cast<WCHAR>(0xD800);
+            Assert::IsTrue(valid(surrogate)); // Preserve raw UTF-16 names.
+
+            Assert::IsFalse(valid(L"::$DATA")); // The unnamed default stream.
+            Assert::IsFalse(valid(L":report:$INDEX_ALLOCATION"));
+            Assert::IsFalse(valid(L":report"));
+            Assert::IsFalse(valid(L"report:$DATA"));
+            Assert::IsFalse(valid(L":one:two:$DATA"));
+            Assert::IsFalse(valid(L":../escape:$DATA"));
+            Assert::IsFalse(valid(L":a\\b:$DATA"));
+            Assert::IsFalse(valid(L":a/b:$DATA"));
+            std::wstring malformed = L":ab:$DATA";
+            malformed[2] = L'\0';
+            Assert::IsFalse(valid(malformed));
+            malformed[2] = static_cast<WCHAR>(1);
+            Assert::IsFalse(valid(malformed));
+            Assert::IsFalse(IsNamedDataStreamName(nullptr, 10));
+        }
+
         TEST_METHOD(ReadsAlignedChainedRecords)
         {
             std::vector<BYTE> buffer(64, 0);
