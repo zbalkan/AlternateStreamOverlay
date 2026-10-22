@@ -79,10 +79,13 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
     try
     {
         // A failed reinitialization must not retain the previous shell selection.
-        m_path.clear();
-        m_streams.clear();
-        m_isDirectory = false;
-        m_enumerationIncomplete = false;
+        {
+            std::lock_guard<std::mutex> lock(m_selectionMutex);
+            m_path.clear();
+            m_streams.clear();
+            m_isDirectory = false;
+            m_enumerationIncomplete = false;
+        }
 
         FORMATETC fmt = { CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
         if (pDataObj == nullptr)
@@ -178,10 +181,13 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
             return E_FAIL;
 
         // Commit selection only after validation; avoid allocations on commit.
-        m_path.swap(filePath);
-        m_streams.swap(streams);
-        m_isDirectory = directory;
-        m_enumerationIncomplete = incomplete;
+        {
+            std::lock_guard<std::mutex> lock(m_selectionMutex);
+            m_path.swap(filePath);
+            m_streams.swap(streams);
+            m_isDirectory = directory;
+            m_enumerationIncomplete = incomplete;
+        }
         return S_OK;
     }
     catch (const std::bad_alloc&)
@@ -201,9 +207,16 @@ STDMETHODIMP CAlternateStreamContext::QueryContextMenu(
     UINT idCmdLast,
     UINT uFlags)
 {
-    if ((uFlags & CMF_DEFAULTONLY) ||
-        (m_streams.empty() && !m_enumerationIncomplete))
+    if (uFlags & CMF_DEFAULTONLY)
         return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, 0);
+
+    bool incomplete = false;
+    {
+        std::lock_guard<std::mutex> lock(m_selectionMutex);
+        if (m_streams.empty() && !m_enumerationIncomplete)
+            return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, 0);
+        incomplete = m_enumerationIncomplete;
+    }
 
     if (hmenu == nullptr)
         return E_INVALIDARG;
@@ -218,7 +231,7 @@ STDMETHODIMP CAlternateStreamContext::QueryContextMenu(
     // whether a mnemonic is available when other commands use the same key.
     wchar_t menuText[] = L"&Alternate Streams...";
     wchar_t incompleteText[] = L"&Alternate Streams (incomplete)...";
-    item.dwTypeData = m_enumerationIncomplete ? incompleteText : menuText;
+    item.dwTypeData = incomplete ? incompleteText : menuText;
     if (!InsertMenuItemW(hmenu, indexMenu, TRUE, &item))
         return HRESULT_FROM_WIN32(GetLastError());
 
@@ -230,8 +243,18 @@ STDMETHODIMP CAlternateStreamContext::InvokeCommand(
 {
     if (pCmdInfo == nullptr)
         return E_INVALIDARG;
-    if (m_path.empty() || (m_streams.empty() && !m_enumerationIncomplete))
-        return E_FAIL;
+    std::wstring selectedPath;
+    try
+    {
+        std::lock_guard<std::mutex> lock(m_selectionMutex);
+        if (m_path.empty() || (m_streams.empty() && !m_enumerationIncomplete))
+            return E_FAIL;
+        selectedPath = m_path;
+    }
+    catch (const std::bad_alloc&)
+    {
+        return E_OUTOFMEMORY;
+    }
 
     bool invoked = false;
     // Numeric command identifiers use MAKEINTRESOURCE-style pointer values.
@@ -255,7 +278,7 @@ STDMETHODIMP CAlternateStreamContext::InvokeCommand(
     // Request our property page by its PSP_USETITLE name. Shell versions
     // may fall back to the default tab if they cannot activate the page.
     if (!SHObjectProperties(pCmdInfo->hwnd, SHOP_FILEPATH,
-                            m_path.c_str(), L"AlternateStreams"))
+                            selectedPath.c_str(), L"AlternateStreams"))
         return HRESULT_FROM_WIN32(GetLastError());
 
     return S_OK;
@@ -291,19 +314,17 @@ STDMETHODIMP CAlternateStreamContext::GetCommandString(
     return E_INVALIDARG;
 }
 
-const std::vector<std::wstring>& CAlternateStreamContext::get_streams() const
+void CAlternateStreamContext::SnapshotSelection(
+    std::wstring& path, std::vector<std::wstring>& streams, bool& incomplete) const
 {
-    return m_streams;
-}
-
-const std::wstring& CAlternateStreamContext::get_path() const
-{
-    return m_path;
-}
-
-bool CAlternateStreamContext::is_enumeration_incomplete() const
-{
-    return m_enumerationIncomplete;
+    // Copy all fields under the same lock, then publish them to the dialog
+    // only after both potentially throwing allocations have completed.
+    std::lock_guard<std::mutex> lock(m_selectionMutex);
+    std::wstring pathCopy = m_path;
+    std::vector<std::wstring> streamCopy = m_streams;
+    path.swap(pathCopy);
+    streams.swap(streamCopy);
+    incomplete = m_enumerationIncomplete;
 }
 
 namespace
@@ -609,9 +630,8 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     {
         // Snapshot before publishing dialog state. A failed allocation leaves
         // no half-initialized state attached to the window.
-        state->path = pthis->get_path();
-        state->streams = pthis->get_streams();
-        state->enumerationIncomplete = pthis->is_enumeration_incomplete();
+        pthis->SnapshotSelection(state->path, state->streams,
+                                 state->enumerationIncomplete);
         state->gate = std::make_shared<PreviewGate>();
     }
     catch (const std::bad_alloc&)
