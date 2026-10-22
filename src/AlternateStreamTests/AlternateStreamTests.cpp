@@ -616,7 +616,9 @@ namespace AlternateStreamTests
 
             Assert::IsTrue(valid(L":report:$DATA"));
             Assert::IsTrue(valid(L":a b:$DATA"));
-            Assert::IsTrue(valid(L":\uD800:$DATA")); // Preserve raw UTF-16 names.
+            std::wstring surrogate = L":a:$DATA";
+            surrogate[1] = static_cast<WCHAR>(0xD800);
+            Assert::IsTrue(valid(surrogate)); // Preserve raw UTF-16 names.
 
             Assert::IsFalse(valid(L"::$DATA")); // The unnamed default stream.
             Assert::IsFalse(valid(L":report:$INDEX_ALLOCATION"));
@@ -626,8 +628,11 @@ namespace AlternateStreamTests
             Assert::IsFalse(valid(L":../escape:$DATA"));
             Assert::IsFalse(valid(L":a\\b:$DATA"));
             Assert::IsFalse(valid(L":a/b:$DATA"));
-            Assert::IsFalse(valid(std::wstring(L":a\0b:$DATA", 10)));
-            Assert::IsFalse(valid(std::wstring(L":a\x01b:$DATA", 10)));
+            std::wstring malformed = L":ab:$DATA";
+            malformed[2] = L'\0';
+            Assert::IsFalse(valid(malformed));
+            malformed[2] = static_cast<WCHAR>(1);
+            Assert::IsFalse(valid(malformed));
             Assert::IsFalse(IsNamedDataStreamName(nullptr, 10));
         }
 
