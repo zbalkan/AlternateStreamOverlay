@@ -396,7 +396,7 @@ std::wstring FormatStreamPreview(const BYTE* data, size_t size,
     if (length == 0)
         return {};
     const auto bytes = reinterpret_cast<const char*>(data);
-    const int byteCount = static_cast<int>(length);
+    const auto byteCount = static_cast<int>(length);
     // Flawfinder: ignore
     const int count = MultiByteToWideChar(CP_UTF8, 0, bytes, byteCount, nullptr, 0);
     if (count <= 0)
