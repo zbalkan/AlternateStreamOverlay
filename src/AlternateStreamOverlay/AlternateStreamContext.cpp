@@ -36,12 +36,28 @@ bool CanEnumerateSynchronously(const std::wstring& path)
         driveType == DRIVE_NO_ROOT_DIR)
         return false;
 
-    // Do not recall offline or cloud-backed content for a context menu/page.
+    // A drive-letter path may cross a junction or symbolic link into a
+    // remote location. Check each existing component before querying the
+    // selected item; reject reparse points instead of following them.
+    // This is a best-effort Explorer responsiveness guard, not a defense
+    // against concurrent path replacement.
+    constexpr DWORD excludedAttributes = FILE_ATTRIBUTE_REPARSE_POINT |
+        FILE_ATTRIBUTE_OFFLINE | FILE_ATTRIBUTE_RECALL_ON_OPEN |
+        FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS;
+    for (size_t end = offset + 3; end < path.size(); ++end)
+    {
+        if (path[end] != L'\\' && path[end] != L'/')
+            continue;
+        const std::wstring parent = path.substr(0, end);
+        const DWORD attributes = GetFileAttributesW(parent.c_str());
+        if (attributes == INVALID_FILE_ATTRIBUTES ||
+            (attributes & excludedAttributes) != 0)
+            return false;
+    }
+
     const DWORD attributes = GetFileAttributesW(path.c_str());
-    constexpr DWORD recallAttributes = FILE_ATTRIBUTE_OFFLINE |
-        FILE_ATTRIBUTE_RECALL_ON_OPEN | FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS;
     return attributes != INVALID_FILE_ATTRIBUTES &&
-           (attributes & recallAttributes) == 0;
+           (attributes & excludedAttributes) == 0;
 }
 
 // Scope ownership after successful GetData, including exceptions.
