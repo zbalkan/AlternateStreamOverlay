@@ -213,6 +213,11 @@ StreamEnumeration AlternateStreamReader::EnumerateStreams(HANDLE file, bool coll
     }
 }
 
+StreamEnumeration AlternateStreamReader::EnumerateStreams(LPCWSTR filename) const
+{
+    return EnumerateStreams(filename, true);
+}
+
 StreamEnumeration AlternateStreamReader::EnumerateStreams(LPCWSTR filename, bool collectNames) const
 {
     if (filename == nullptr || *filename == L'\0')
