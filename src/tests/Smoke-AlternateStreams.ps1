@@ -321,31 +321,27 @@ function Test-FilesystemLifecycle {
     Write-Host 'PASS: directory negatives, ADS lifecycle, large stream, repeatability and sharing'
 }
 
-function Test-ContinuationAfterError {
+function Test-ScanIncludesErrorAndResult {
     param(
         [string] $Output,
         [string] $Blocked,
         [string] $Following
     )
 
+    # Stdout and stderr have no guaranteed inter-stream ordering. Both
+    # entries must appear in each pass; swapping the blocked candidate
+    # makes an early-return regression fail regardless of search order.
+    if (-not $Output.Contains('Stream enumeration failed for ' + $Blocked)) {
+        throw "Wildcard scan omitted per-item error: $Output"
+    }
     $lines = @($Output -split '\r?\n')
-    $errorIndex = -1
-    $resultIndex = -1
-    for ($i = 0; $i -lt $lines.Count; $i++) {
-        if ($lines[$i].StartsWith('Stream enumeration failed for ' + $Blocked,
-                [StringComparison]::Ordinal)) {
-            $errorIndex = $i
-        }
+    for ($i = 0; $i + 1 -lt $lines.Count; $i++) {
         if ($lines[$i] -ceq $Following -and
-            $i + 1 -lt $lines.Count -and
             $lines[$i + 1] -ceq ' :afterfailure:$DATA') {
-            $resultIndex = $i
+            return $true
         }
     }
-    if ($errorIndex -lt 0) {
-        throw "Wildcard scan omitted dangling-junction error: $Output"
-    }
-    return $resultIndex -gt $errorIndex
+    return $false
 }
 
 function Test-WildcardContinuesAfterFailure {
@@ -384,7 +380,7 @@ function Test-WildcardContinuesAfterFailure {
                 throw "Wildcard scan did not report partial failure: $output"
             }
 
-            if (Test-ContinuationAfterError -Output $output -Blocked $blocked -Following $following) {
+            if (Test-ScanIncludesErrorAndResult -Output $output -Blocked $blocked -Following $following) {
                 $observedContinuation = $true
             }
         }
@@ -395,7 +391,7 @@ function Test-WildcardContinuesAfterFailure {
         }
     }
     if (-not $observedContinuation) {
-        throw 'No wildcard scan demonstrated a valid ADS result after an item error.'
+        throw 'No wildcard scan included both its per-item error and a valid ADS result.'
     }
 
     Write-Host 'PASS: wildcard scan continues after an item failure and exits nonzero'
