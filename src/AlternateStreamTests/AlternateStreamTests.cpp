@@ -1,6 +1,7 @@
 #include "CppUnitTest.h"
 #include "altstrm_common.h"
 #include "stream_info_detail.h"
+#include "../AlternateStreamOverlay/LocalPathPolicy.h"
 #include <algorithm>
 #include <cstddef>
 #include <limits>
@@ -345,6 +346,24 @@ namespace AlternateStreamTests
 
             result.status = StreamStatus::Error;
             Assert::IsTrue(result.NeedsNotice());
+        }
+    };
+
+    TEST_CLASS(ExplorerPathPolicyTests)
+    {
+    public:
+        TEST_METHOD(RejectsRemoteAndUnsupportedPathForms)
+        {
+            Assert::IsFalse(CanEnumerateExplorerPath(L"\\\\server\\share\\file.txt"));
+            Assert::IsFalse(CanEnumerateExplorerPath(L"\\\\?\\UNC\\server\\share\\file.txt"));
+            Assert::IsFalse(CanEnumerateExplorerPath(L"relative.txt"));
+            Assert::IsFalse(CanEnumerateExplorerPath(L""));
+        }
+
+        TEST_METHOD(AcceptsOrdinaryLocalFile)
+        {
+            TemporaryFile fixture;
+            Assert::IsTrue(CanEnumerateExplorerPath(fixture.path.data()));
         }
     };
 
