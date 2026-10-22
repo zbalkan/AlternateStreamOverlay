@@ -119,13 +119,13 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\altstrm_common\altstrm_common.vcxproj">
-      <Project>{8BC40EB3-8843-42D1-A26A-EF117180129A}  <ItemGroup>
-    <ResourceCompile Include="altstrm.rc" />
-  </ItemGroup>
-</Project>
+      <Project>{8BC40EB3-8843-42D1-A26A-EF117180129A}</Project>
       <LinkLibraryDependencies>true</LinkLibraryDependencies>
       <UseLibraryDependencyInputs>false</UseLibraryDependencyInputs>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="altstrm.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
