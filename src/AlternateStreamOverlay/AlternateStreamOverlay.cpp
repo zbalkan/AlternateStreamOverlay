@@ -67,11 +67,8 @@ namespace
             {
                 status = RegDeleteKeyTransactedW(root, OverlayKey, 0, 0,
                     transaction, nullptr);
-                if (status == ERROR_SUCCESS)
-                {
-                    if (!CommitTransaction(transaction))
-                        status = GetLastError();
-                }
+                if (status == ERROR_SUCCESS && !CommitTransaction(transaction))
+                    status = GetLastError();
             }
 
             CloseHandle(transaction);
