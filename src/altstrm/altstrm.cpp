@@ -82,7 +82,7 @@ namespace
                 (value >= 0xD800 && value <= 0xDFFF);
             if (ch == L'\\')
             {
-                output += L"\\\\";
+                output += LR"(\\)";
                 continue;
             }
             if (!unsafe)

@@ -210,8 +210,11 @@ function Assert-CliPathCase {
     $lines = $output -split '\r?\n'
     foreach ($expectedPath in $Case.ExpectedPaths) {
         $found = $false
+        # Display output doubles backslashes to distinguish literal paths
+        # from escaped UTF-16 control sequences.
+        $displayPath = $expectedPath.Replace('\', '\\')
         for ($index = 0; $index -lt $lines.Length - 1; $index++) {
-            if ($lines[$index] -ceq $expectedPath -and
+            if ($lines[$index] -ceq $displayPath -and
                 $lines[$index + 1] -ceq ' :pathcheck:$DATA') {
                 $found = $true
                 break
