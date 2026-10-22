@@ -1,6 +1,6 @@
 #include "stdafx.h"
 #include "AlternateStreamOverlayIcon.h"
-#include "Common.h"
+#include "altstrm_common.h"
 #include "LocalPathPolicy.h"
 
 // Does this overlay apply?
@@ -24,7 +24,8 @@ STDMETHODIMP CAlternateStreamOverlayIcon::IsMemberOf(LPCWSTR pwszPath, DWORD dwA
         if (!CanEnumerateExplorerPath(pwszPath))
             return S_FALSE;
 
-        return hasAlternateStreams(pwszPath) ? S_OK : S_FALSE;
+        const AlternateStreamReader reader;
+        return reader.HasAlternateStreams(pwszPath) ? S_OK : S_FALSE;
     }
     catch (...)
     {
