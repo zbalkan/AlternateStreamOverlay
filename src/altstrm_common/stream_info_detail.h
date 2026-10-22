@@ -15,4 +15,9 @@ namespace stream_info_detail
     };
 
     bool ReadRecord(const BYTE* buffer, size_t size, size_t offset, Record& record);
+
+    // Classification is separate from Win32 calls so unsupported-volume
+    // behavior can be tested with deterministic error and capability inputs.
+    bool IsUnsupportedStreamQuery(DWORD queryError, bool volumeInfoAvailable,
+                                  DWORD volumeFlags);
 }
