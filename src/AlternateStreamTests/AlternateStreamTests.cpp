@@ -246,16 +246,20 @@ namespace AlternateStreamTests
     public:
         TEST_METHOD(RejectsForeignOrUnreadableRegistration)
         {
+            constexpr LPCWSTR expected = L"{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}";
             Assert::IsTrue(CanReplaceOverlayRegistration(
-                ERROR_FILE_NOT_FOUND, nullptr));
+                ERROR_FILE_NOT_FOUND, nullptr, expected, REG_CREATED_NEW_KEY));
+            Assert::IsFalse(CanReplaceOverlayRegistration(
+                ERROR_FILE_NOT_FOUND, nullptr, expected, REG_OPENED_EXISTING_KEY));
             Assert::IsTrue(CanReplaceOverlayRegistration(
-                ERROR_SUCCESS, L"{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}"));
+                ERROR_SUCCESS, expected, expected, REG_OPENED_EXISTING_KEY));
             Assert::IsFalse(CanReplaceOverlayRegistration(
-                ERROR_SUCCESS, L"{00000000-0000-0000-0000-000000000000}"));
+                ERROR_SUCCESS, L"{00000000-0000-0000-0000-000000000000}",
+                expected, REG_OPENED_EXISTING_KEY));
             Assert::IsFalse(CanReplaceOverlayRegistration(
-                ERROR_MORE_DATA, nullptr));
+                ERROR_MORE_DATA, nullptr, expected, REG_CREATED_NEW_KEY));
             Assert::IsFalse(CanReplaceOverlayRegistration(
-                ERROR_UNSUPPORTED_TYPE, nullptr));
+                ERROR_UNSUPPORTED_TYPE, nullptr, expected, REG_OPENED_EXISTING_KEY));
         }
     };
 
