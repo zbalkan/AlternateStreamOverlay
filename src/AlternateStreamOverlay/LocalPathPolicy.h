@@ -2,6 +2,40 @@
 #include <Windows.h>
 #include <string>
 
+// Reuse recently validated ancestors for sibling Explorer callbacks.
+inline bool HasEligibleExplorerAncestors(const std::wstring& path, size_t offset,
+                                         DWORD excludedAttributes)
+{
+    // Sibling overlay callbacks repeatedly inspect the same ancestors.
+    // Cache only a successful directory walk, briefly and per thread.
+    // The leaf is always rechecked; this is not a security boundary.
+    const size_t lastSeparator = path.find_last_of(L"\\/");
+    if (lastSeparator == std::wstring::npos || lastSeparator < offset + 2)
+        return false;
+    const std::wstring directory = path.substr(0, lastSeparator);
+    static thread_local std::wstring cachedDirectory;
+    static thread_local DWORD cachedTick = 0;
+    const DWORD now = GetTickCount();
+    if (directory != cachedDirectory || now - cachedTick > 250)
+    {
+        cachedDirectory.clear();
+        for (size_t end = offset + 3; end < path.size(); ++end)
+        {
+            if (path[end] != L'\\' && path[end] != L'/')
+                continue;
+            const std::wstring parent = path.substr(0, end);
+            const DWORD attributes = GetFileAttributesW(parent.c_str());
+            if (attributes == INVALID_FILE_ATTRIBUTES ||
+                (attributes & excludedAttributes) != 0)
+                return false;
+        }
+        cachedDirectory = directory;
+        cachedTick = now;
+    }
+
+    return true;
+}
+
 // Avoid potentially blocking network/cloud I/O from Explorer callbacks.
 // Reject any reparse component: its destination could be remote even when
 // the drive itself is local. This is a best-effort, fail-closed guard.
@@ -46,32 +80,8 @@ inline bool CanEnumerateExplorerPath(const std::wstring& path)
         (rootAttributes & excludedAttributes) != 0)
         return false;
 
-    // Sibling overlay callbacks repeatedly inspect the same ancestors.
-    // Cache only a successful directory walk, briefly and per thread.
-    // The leaf is always rechecked; this is not a security boundary.
-    const size_t lastSeparator = path.find_last_of(L"\\/");
-    if (lastSeparator == std::wstring::npos || lastSeparator < offset + 2)
+    if (!HasEligibleExplorerAncestors(path, offset, excludedAttributes))
         return false;
-    const std::wstring directory = path.substr(0, lastSeparator);
-    static thread_local std::wstring cachedDirectory;
-    static thread_local DWORD cachedTick = 0;
-    const DWORD now = GetTickCount();
-    if (directory != cachedDirectory || now - cachedTick > 250)
-    {
-        cachedDirectory.clear();
-        for (size_t end = offset + 3; end < path.size(); ++end)
-        {
-            if (path[end] != L'\\' && path[end] != L'/')
-                continue;
-            const std::wstring parent = path.substr(0, end);
-            const DWORD attributes = GetFileAttributesW(parent.c_str());
-            if (attributes == INVALID_FILE_ATTRIBUTES ||
-                (attributes & excludedAttributes) != 0)
-                return false;
-        }
-        cachedDirectory = directory;
-        cachedTick = now;
-    }
 
     const DWORD attributes = GetFileAttributesW(path.c_str());
     return attributes != INVALID_FILE_ATTRIBUTES &&
