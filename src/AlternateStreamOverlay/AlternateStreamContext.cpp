@@ -7,7 +7,7 @@
 #include <memory>
 #include <new>
 #include <exception>
-#include "Common.h"
+#include "altstrm_common.h"
 #include "SrwLock.h"
 #include "stream_info_detail.h"
 #include "LocalPathPolicy.h"
