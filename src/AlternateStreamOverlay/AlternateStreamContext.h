@@ -26,6 +26,8 @@ private:
     std::vector<std::wstring> m_streams;
 public:
     CAlternateStreamContext() = default;
+    CAlternateStreamContext(const CAlternateStreamContext&) = delete;
+    CAlternateStreamContext& operator=(const CAlternateStreamContext&) = delete;
 
     DECLARE_REGISTRY_RESOURCEID(IDR_ALTERNATESTREAMCONTEXT)
 
