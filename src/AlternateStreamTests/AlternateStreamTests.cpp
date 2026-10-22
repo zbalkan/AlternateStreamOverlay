@@ -392,8 +392,16 @@ namespace AlternateStreamTests
             if (started)
             {
                 waitResult = WaitForSingleObject(process.hProcess, 10000);
-                if (waitResult == WAIT_OBJECT_0)
+                if (waitResult != WAIT_OBJECT_0)
+                {
+                    // Do not let a timed-out mklink race fixture cleanup.
+                    TerminateProcess(process.hProcess, 1);
+                    WaitForSingleObject(process.hProcess, INFINITE);
+                }
+                else
+                {
                     GetExitCodeProcess(process.hProcess, &exitCode);
+                }
                 CloseHandle(process.hThread);
                 CloseHandle(process.hProcess);
             }
@@ -401,12 +409,16 @@ namespace AlternateStreamTests
             const DWORD attributes = GetFileAttributesW(link.c_str());
             const bool isJunction = attributes != INVALID_FILE_ATTRIBUTES &&
                 (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+            bool rejectsChild = false;
+            bool rejectsLeaf = false;
             if (isJunction)
             {
-                Assert::IsFalse(CanEnumerateExplorerPath(link + L"\child.txt"));
-                Assert::IsFalse(CanEnumerateExplorerPath(link));
-                RemoveDirectoryW(link.c_str());
+                rejectsChild = !CanEnumerateExplorerPath(link + L"\\child.txt");
+                rejectsLeaf = !CanEnumerateExplorerPath(link);
             }
+            // Perform cleanup before any assertion can abort this test.
+            if (isJunction)
+                RemoveDirectoryW(link.c_str());
             RemoveDirectoryW(target.c_str());
 
             Assert::IsTrue(started != FALSE, L"Unable to launch junction setup");
@@ -415,6 +427,8 @@ namespace AlternateStreamTests
             Assert::AreEqual(static_cast<DWORD>(0), exitCode,
                 L"mklink junction setup failed");
             Assert::IsTrue(isJunction, L"mklink did not create a reparse point");
+            Assert::IsTrue(rejectsChild, L"Junction ancestor was accepted");
+            Assert::IsTrue(rejectsLeaf, L"Junction leaf was accepted");
         }
 
         TEST_METHOD(AcceptsOrdinaryLocalFile)
