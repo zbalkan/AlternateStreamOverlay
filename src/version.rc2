@@ -1,6 +1,6 @@
 #include <winres.h>
 #include "version.h"
-// Each consuming .rc defines ASO_FILE_DESCRIPTION, ASO_ORIGINAL_FILENAME and ASO_FILETYPE.
+// Each consuming .rc defines ASO_FILE_DESCRIPTION, ASO_ORIGINAL_FILENAME, ASO_INTERNAL_NAME and ASO_FILETYPE.
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION ASO_VERSION_COMMA
  PRODUCTVERSION ASO_VERSION_COMMA
@@ -21,6 +21,7 @@ BEGIN
       VALUE "CompanyName", "Zafer Balkan"
       VALUE "FileDescription", ASO_FILE_DESCRIPTION
       VALUE "FileVersion", ASO_VERSION_STRING
+      VALUE "InternalName", ASO_INTERNAL_NAME
       VALUE "OriginalFilename", ASO_ORIGINAL_FILENAME
       VALUE "LegalCopyright", "(c) 2013 benf.org; modifications copyright (c) 2026 Zafer Balkan"
       VALUE "ProductName", "AlternateStreamOverlay"
