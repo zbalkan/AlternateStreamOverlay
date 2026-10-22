@@ -102,7 +102,7 @@ namespace
 
             // Reserve space for the path terminator and the second NUL
             // required by CF_HDROP, checking arithmetic before allocation.
-            const size_t maxCharacters =
+            constexpr size_t maxCharacters =
                 ((std::numeric_limits<size_t>::max)() - sizeof(DROPFILES)) / sizeof(WCHAR);
             if (path_.size() > maxCharacters - 2)
                 return E_OUTOFMEMORY;
