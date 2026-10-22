@@ -137,6 +137,34 @@ namespace
         return HRESULT_FROM_WIN32(status);
     }
 
+    // Preserve existing registrations on a failed re-registration. ATL
+    // registration spans multiple keys and is not itself transactional.
+    bool ComRegistrationExists()
+    {
+        bool perUser = false;
+        if (FAILED(AtlGetPerUserRegistration(&perUser)))
+            return true; // Do not risk removing an unknown existing registration.
+
+        const HKEY root = perUser ? HKEY_CURRENT_USER : HKEY_LOCAL_MACHINE;
+        constexpr LPCWSTR classKeys[] = {
+            L"Software\\Classes\\CLSID\\{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}",
+            L"Software\\Classes\\CLSID\\{4A26024B-5499-45BE-A23F-4A65E88888D0}"
+        };
+        for (const auto* path : classKeys)
+        {
+            HKEY key = nullptr;
+            const LONG status = RegOpenKeyExW(root, path, 0, KEY_READ, &key);
+            if (status == ERROR_SUCCESS)
+            {
+                RegCloseKey(key);
+                return true;
+            }
+            if (status != ERROR_FILE_NOT_FOUND && status != ERROR_PATH_NOT_FOUND)
+                return true;
+        }
+        return false;
+    }
+
     HRESULT UpdateOverlayRegistration(bool install)
     {
         bool perUser = false;
@@ -178,25 +206,32 @@ STDAPI DllGetClassObject(_In_ REFCLSID rclsid, _In_ REFIID riid, _Outptr_ LPVOID
 // DllRegisterServer - Adds entries to the system registry
 STDAPI DllRegisterServer(void)
 {
-    // registers object, typelib and all interfaces in typelib
+    // Do not unregister pre-existing COM classes when re-registration fails.
+    const bool existingRegistration = ComRegistrationExists();
+
     HRESULT hr = _AtlModule.DllRegisterServer();
-#ifdef _MERGE_PROXYSTUB
     if (FAILED(hr))
         return hr;
-    hr = PrxDllRegisterServer();
-#endif
-    if (SUCCEEDED(hr))
-    {
-        hr = UpdateOverlayRegistration(true);
-        if (FAILED(hr))
-        {
-            // Plain regsvr32 invokes DllRegisterServer directly. Roll back
-            // the COM registration without removing a foreign overlay key.
-            _AtlModule.DllUnregisterServer();
+
 #ifdef _MERGE_PROXYSTUB
-            PrxDllUnregisterServer();
+    hr = PrxDllRegisterServer();
+    if (FAILED(hr))
+    {
+        // Only a fresh ATL registration may be undone safely here.
+        if (!existingRegistration)
+            _AtlModule.DllUnregisterServer();
+        return hr;
+    }
 #endif
-        }
+
+    hr = UpdateOverlayRegistration(true);
+    if (FAILED(hr) && !existingRegistration)
+    {
+        // A foreign overlay is left untouched. Undo only new COM classes.
+#ifdef _MERGE_PROXYSTUB
+        PrxDllUnregisterServer();
+#endif
+        _AtlModule.DllUnregisterServer();
     }
     return hr;
 }
