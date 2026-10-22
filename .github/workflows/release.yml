@@ -1,0 +1,157 @@
+name: Manual Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (MAJOR.MINOR.PATCH, without v)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: manual-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and stage v${{ inputs.version }}
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-2025
+    permissions:
+      contents: write
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Validate release version and tag
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ($env:RELEASE_VERSION -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
+            throw 'Version must be MAJOR.MINOR.PATCH with no leading v or leading zeroes.'
+          }
+          $header = Get-Content -LiteralPath 'src/version.h' -Raw
+          $parts = foreach ($name in 'MAJOR', 'MINOR', 'PATCH', 'BUILD') {
+            $match = [regex]::Match($header, ('(?m)^\s*#define\s+ASO_VERSION_{0}\s+(\d+)\s*$' -f $name))
+            if (-not $match.Success) { throw "Missing ASO_VERSION_$name" }
+            [int]$match.Groups[1].Value
+          }
+          if ($parts[3] -ne 0) { throw 'ASO_VERSION_BUILD must be zero for a release.' }
+          $sourceVersion = $parts[0..2] -join '.'
+          if ($sourceVersion -ne $env:RELEASE_VERSION) {
+            throw "Requested $env:RELEASE_VERSION but version.h specifies $sourceVersion."
+          }
+          $changelog = Get-Content -LiteralPath 'CHANGELOG.md' -Raw
+          $latest = [regex]::Match($changelog, '(?m)^## \[(\d+\.\d+\.\d+)\]').Groups[1].Value
+          if ($latest -ne $env:RELEASE_VERSION) {
+            throw "Latest CHANGELOG release is $latest, not $env:RELEASE_VERSION."
+          }
+          $tag = "v$env:RELEASE_VERSION"
+          $existing = & gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/$tag" --silent 2>&1
+          if ($LASTEXITCODE -eq 0) { throw "Git tag $tag already exists." }
+          if ($LASTEXITCODE -ne 1) { throw "Unable to check Git tag $tag (exit $LASTEXITCODE): $existing" }
+          $existingRelease = & gh release view $tag --json id 2>&1
+          if ($LASTEXITCODE -eq 0) { throw "GitHub release $tag already exists." }
+          if ($LASTEXITCODE -ne 1) { throw "Unable to check GitHub release $tag (exit $LASTEXITCODE): $existingRelease" }
+          Write-Host "Release version $tag validated."
+
+      - name: Set up Visual Studio 2026 MSBuild
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
+        with:
+          vs-version: '[18.0,19.0)'
+          msbuild-architecture: x64
+
+      - name: Build Release x64
+        shell: pwsh
+        run: |
+          msbuild .\src\AlternateStreamOverlay.sln /t:Rebuild /m /nologo /verbosity:normal /p:Configuration=Release /p:Platform=x64 /p:RegisterOutput=false
+          if ($LASTEXITCODE -ne 0) { throw "MSBuild failed: $LASTEXITCODE" }
+
+      - name: Verify built VERSIONINFO
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          $expected = "$env:RELEASE_VERSION.0"
+          $binaries = @{
+            '.\src\AlternateStreamOverlay\x64\Release\AlternateStreamOverlay.dll' = 'AlternateStreamOverlay.dll'
+            '.\src\x64\Release\altstrm.exe' = 'altstrm.exe'
+          }
+          foreach ($binary in $binaries.Keys) {
+            if (-not (Test-Path -LiteralPath $binary)) { throw "Missing $binary" }
+            $info = [System.Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path -LiteralPath $binary).Path)
+            $file = @($info.FileMajorPart, $info.FileMinorPart, $info.FileBuildPart, $info.FilePrivatePart) -join '.'
+            $product = @($info.ProductMajorPart, $info.ProductMinorPart, $info.ProductBuildPart, $info.ProductPrivatePart) -join '.'
+            if ($file -ne $expected -or $product -ne $expected) {
+              throw "$binary expected $expected, found FileVersion=$file ProductVersion=$product"
+            }
+            if ($info.InternalName -ne $binaries[$binary] -or $info.OriginalFilename -ne $binaries[$binary]) {
+              throw "$binary has incorrect InternalName or OriginalFilename"
+            }
+            Write-Host "$binary : $expected"
+          }
+
+      - name: Run native MSTest
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vsPath = & $vswhere -latest -products * -property installationPath
+          if ($LASTEXITCODE -ne 0 -or -not $vsPath) { throw 'Visual Studio installation not found' }
+          $vstest = Join-Path $vsPath 'Common7\IDE\CommonExtensions\Microsoft\TestWindow\vstest.console.exe'
+          $env:ASO_OVERLAY_DLL = (Resolve-Path -LiteralPath '.\src\AlternateStreamOverlay\x64\Release\AlternateStreamOverlay.dll').Path
+          & $vstest '.\src\x64\Release\AlternateStreamTests.dll' '/Platform:x64' '/Logger:console;verbosity=normal'
+          if ($LASTEXITCODE -ne 0) { throw "MSTest failed: $LASTEXITCODE" }
+
+      - name: Run NTFS ADS smoke tests
+        shell: pwsh
+        run: |
+          & .\src\tests\Smoke-AlternateStreams.ps1 -ExePath '.\src\x64\Release\altstrm.exe'
+          if (-not $?) { throw 'ADS smoke tests failed' }
+
+      - name: Package binaries and checksums
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $folder = "dist\AlternateStreamOverlay-v$env:RELEASE_VERSION-win-x64"
+          New-Item -ItemType Directory -Force -Path $folder | Out-Null
+          Copy-Item -LiteralPath '.\src\AlternateStreamOverlay\x64\Release\AlternateStreamOverlay.dll' -Destination $folder
+          Copy-Item -LiteralPath '.\src\x64\Release\altstrm.exe' -Destination $folder
+          Copy-Item -LiteralPath 'README.md', 'CHANGELOG.md' -Destination $folder
+          $archive = "dist\AlternateStreamOverlay-v$env:RELEASE_VERSION-win-x64.zip"
+          Compress-Archive -LiteralPath $folder -DestinationPath $archive -CompressionLevel Optimal
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
+          $archiveName = Split-Path -Leaf $archive
+          Set-Content -LiteralPath "$archive.sha256" -Value "$hash  $archiveName" -Encoding ascii
+          Write-Host "$hash  $archiveName"
+
+      - name: Upload release candidate artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-v${{ inputs.version }}-win-x64
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
+
+      - name: Create draft GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          $tag = "v$env:RELEASE_VERSION"
+          $notes = "Release $tag. See CHANGELOG.md for details. Verify the attached SHA-256 checksum before using these binaries."
+          $notes | Set-Content -LiteralPath 'dist\release-notes.txt' -Encoding utf8
+          $archive = "dist/AlternateStreamOverlay-$tag-win-x64.zip"
+          $checksum = "$archive.sha256"
+          gh release create $tag $archive $checksum --title $tag --draft --target $env:GITHUB_SHA --notes-file 'dist\release-notes.txt'
+          if ($LASTEXITCODE -ne 0) { throw "Failed to create draft GitHub release $tag" }
