@@ -22,8 +22,10 @@ namespace
         const HKEY root = perUser ? HKEY_CURRENT_USER : HKEY_LOCAL_MACHINE;
         if (!install)
         {
-            // Do not remove a registration that another application or
-            // administrator has reassigned to a different overlay handler.
+            // Best-effort ownership check: avoid deleting a registration
+            // already reassigned to a different handler. Win32 provides no
+            // ordinary conditional RegDeleteKey operation; an unrelated
+            // installer can still modify this key between read and delete.
             std::array<WCHAR, 64> registeredClsid = {};
             DWORD bytes = static_cast<DWORD>(registeredClsid.size() * sizeof(WCHAR));
             const LONG query = RegGetValueW(root, OverlayKey, nullptr,
