@@ -10,58 +10,10 @@
 #include "Common.h"
 #include "SrwLock.h"
 #include "stream_info_detail.h"
+#include "LocalPathPolicy.h"
 
 namespace
 {
-bool CanEnumerateSynchronously(const std::wstring& path)
-{
-    if (PathIsUNCW(path.c_str()))
-        return false;
-
-    // CF_HDROP supplies absolute paths. Reject unrecognized path forms rather
-    // than risk synchronous remote I/O in Explorer's initialization callback.
-    size_t offset = 0;
-    if (path.compare(0, 4, L"\\\\?\\") == 0)
-        offset = 4;
-    if (path.size() < offset + 3)
-        return false;
-
-    const WCHAR letter = path[offset];
-    if (!((letter >= L'A' && letter <= L'Z') ||
-          (letter >= L'a' && letter <= L'z')) ||
-        path[offset + 1] != L':' || path[offset + 2] != L'\\')
-        return false;
-
-    const WCHAR root[] = { letter, L':', L'\\', L'\0' };
-    const UINT driveType = GetDriveTypeW(root);
-    if (driveType == DRIVE_REMOTE || driveType == DRIVE_UNKNOWN ||
-        driveType == DRIVE_NO_ROOT_DIR)
-        return false;
-
-    // A drive-letter path may cross a junction or symbolic link into a
-    // remote location. Check each existing component before querying the
-    // selected item; reject reparse points instead of following them.
-    // This is a best-effort Explorer responsiveness guard, not a defense
-    // against concurrent path replacement.
-    constexpr DWORD excludedAttributes = FILE_ATTRIBUTE_REPARSE_POINT |
-        FILE_ATTRIBUTE_OFFLINE | FILE_ATTRIBUTE_RECALL_ON_OPEN |
-        FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS;
-    for (size_t end = offset + 3; end < path.size(); ++end)
-    {
-        if (path[end] != L'\\' && path[end] != L'/')
-            continue;
-        const std::wstring parent = path.substr(0, end);
-        const DWORD attributes = GetFileAttributesW(parent.c_str());
-        if (attributes == INVALID_FILE_ATTRIBUTES ||
-            (attributes & excludedAttributes) != 0)
-            return false;
-    }
-
-    const DWORD attributes = GetFileAttributesW(path.c_str());
-    return attributes != INVALID_FILE_ATTRIBUTES &&
-           (attributes & excludedAttributes) == 0;
-}
-
 // Scope ownership after successful GetData, including exceptions.
 class ScopedDropMedium
 {
@@ -167,7 +119,7 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
 
         // Do not hold the shell data object's storage during filesystem I/O.
         mediumGuard.Release();
-        if (!CanEnumerateSynchronously(filePath))
+        if (!CanEnumerateExplorerPath(filePath))
             return E_FAIL;
 
         AlternateStreamReader reader;
