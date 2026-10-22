@@ -28,10 +28,7 @@
     <ClCompile Include="AlternateStreamOverlayIcon.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Common.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="dlldatax.c">
+<ClCompile Include="dlldatax.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="dllmain.cpp">
@@ -70,10 +67,7 @@
     <ClInclude Include="AlternateStreamOverlayIcon.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Common.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="SrwLock.h">
+<ClInclude Include="SrwLock.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="LocalPathPolicy.h">
