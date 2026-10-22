@@ -21,6 +21,20 @@ namespace
         const HKEY root = perUser ? HKEY_CURRENT_USER : HKEY_LOCAL_MACHINE;
         if (!install)
         {
+            // Do not remove a registration that another application or
+            // administrator has reassigned to a different overlay handler.
+            WCHAR registeredClsid[64] = {};
+            DWORD bytes = sizeof(registeredClsid);
+            const LONG query = RegGetValueW(root, OverlayKey, nullptr,
+                RRF_RT_REG_SZ, nullptr, registeredClsid, &bytes);
+            if (query == ERROR_FILE_NOT_FOUND || query == ERROR_MORE_DATA ||
+                query == ERROR_UNSUPPORTED_TYPE)
+                return S_OK;
+            if (query != ERROR_SUCCESS)
+                return HRESULT_FROM_WIN32(query);
+            if (_wcsicmp(registeredClsid, OverlayClsid) != 0)
+                return S_OK;
+
             const LONG status = RegDeleteKeyW(root, OverlayKey);
             return status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND
                 ? S_OK : HRESULT_FROM_WIN32(status);
