@@ -643,9 +643,9 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     if (pthis->is_enumeration_incomplete())
     {
         SetWindowTextW(textBox,
-            L"Stream enumeration is incomplete (4 MiB metadata limit). "
-            L"No stream names are available for preview. "
-            L"Use altstrm.exe for a diagnostic report.");
+            L"Stream enumeration is incomplete.\r\n"
+            L"Stream names cannot be displayed or previewed.\r\n"
+            L"The metadata exceeds the supported limit.");
     }
     else if (!streams.empty())
     {
