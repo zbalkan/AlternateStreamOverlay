@@ -1,6 +1,7 @@
 #include "CppUnitTest.h"
 #include "altstrm_common.h"
 #include "stream_info_detail.h"
+#include "../AlternateStreamOverlay/LocalPathPolicy.h"
 #include <algorithm>
 #include <cstddef>
 #include <limits>
@@ -345,6 +346,97 @@ namespace AlternateStreamTests
 
             result.status = StreamStatus::Error;
             Assert::IsTrue(result.NeedsNotice());
+        }
+    };
+
+    TEST_CLASS(ExplorerPathPolicyTests)
+    {
+    public:
+        TEST_METHOD(RejectsRemoteAndUnsupportedPathForms)
+        {
+            Assert::IsFalse(CanEnumerateExplorerPath(L"\\\\server\\share\\file.txt"));
+            Assert::IsFalse(CanEnumerateExplorerPath(L"\\\\?\\UNC\\server\\share\\file.txt"));
+            Assert::IsFalse(CanEnumerateExplorerPath(L"relative.txt"));
+            Assert::IsFalse(CanEnumerateExplorerPath(L""));
+        }
+
+        TEST_METHOD(RejectsDirectoryJunctionAncestor)
+        {
+            TemporaryFile fixture;
+            if (!CanEnumerateExplorerPath(fixture.path.data()))
+            {
+                Logger::WriteMessage(L"SKIP: temporary directory is ineligible for Explorer path probing.");
+                return;
+            }
+
+            const std::wstring root = fixture.path.data();
+            const std::wstring link = root + L".junction";
+            const std::wstring target = root + L".target";
+            Assert::IsTrue(CreateDirectoryW(target.c_str(), nullptr) != FALSE,
+                L"Unable to create junction target");
+
+            // Setup failures must not turn this regression into a false pass.
+            // Junctions are directory reparse points, unlike plain filenames.
+            const std::wstring command = L"cmd.exe /d /c mklink /J \"" +
+                link + L"\" \"" + target + L"\" >nul 2>&1";
+            std::vector<wchar_t> mutableCommand(command.begin(), command.end());
+            mutableCommand.push_back(L'\0');
+            STARTUPINFOW startup = {};
+            startup.cb = sizeof(startup);
+            PROCESS_INFORMATION process = {};
+            const BOOL started = CreateProcessW(nullptr, mutableCommand.data(),
+                nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr,
+                &startup, &process);
+            DWORD waitResult = WAIT_FAILED;
+            DWORD exitCode = STILL_ACTIVE;
+            if (started)
+            {
+                waitResult = WaitForSingleObject(process.hProcess, 10000);
+                if (waitResult != WAIT_OBJECT_0)
+                {
+                    // Do not let a timed-out mklink race fixture cleanup.
+                    TerminateProcess(process.hProcess, 1);
+                    WaitForSingleObject(process.hProcess, INFINITE);
+                }
+                else
+                {
+                    GetExitCodeProcess(process.hProcess, &exitCode);
+                }
+                CloseHandle(process.hThread);
+                CloseHandle(process.hProcess);
+            }
+
+            const DWORD attributes = GetFileAttributesW(link.c_str());
+            const bool isJunction = attributes != INVALID_FILE_ATTRIBUTES &&
+                (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+            bool rejectsChild = false;
+            bool rejectsLeaf = false;
+            if (isJunction)
+            {
+                rejectsChild = !CanEnumerateExplorerPath(link + L"\\child.txt");
+                rejectsLeaf = !CanEnumerateExplorerPath(link);
+            }
+            // Perform cleanup before any assertion can abort this test.
+            if (isJunction)
+                RemoveDirectoryW(link.c_str());
+            RemoveDirectoryW(target.c_str());
+
+            Assert::IsTrue(started != FALSE, L"Unable to launch junction setup");
+            Assert::AreEqual(static_cast<DWORD>(WAIT_OBJECT_0), waitResult,
+                L"Junction setup did not finish");
+            Assert::AreEqual(static_cast<DWORD>(0), exitCode,
+                L"mklink junction setup failed");
+            Assert::IsTrue(isJunction, L"mklink did not create a reparse point");
+            Assert::IsTrue(rejectsChild, L"Junction ancestor was accepted");
+            Assert::IsTrue(rejectsLeaf, L"Junction leaf was accepted");
+        }
+
+        TEST_METHOD(AcceptsOrdinaryLocalFile)
+        {
+            TemporaryFile fixture;
+            if (!CanEnumerateExplorerPath(fixture.path.data()))
+                return; // TEMP may be on an ineligible drive or reparse-backed path.
+            Assert::IsTrue(CanEnumerateExplorerPath(fixture.path.data()));
         }
     };
 
