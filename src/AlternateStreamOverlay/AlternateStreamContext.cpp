@@ -8,6 +8,7 @@
 #include <new>
 #include <exception>
 #include "Common.h"
+#include "SrwLock.h"
 
 namespace
 {
@@ -96,7 +97,7 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
     {
         // A failed reinitialization must not retain the previous shell selection.
         {
-            std::lock_guard<std::mutex> lock(m_selectionMutex);
+            ExclusiveSrwLock lock(m_selectionLock);
             m_path.clear();
             m_streams.clear();
             m_enumerationIncomplete = false;
@@ -185,7 +186,7 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
 
         // Commit selection only after validation; avoid allocations on commit.
         {
-            std::lock_guard<std::mutex> lock(m_selectionMutex);
+            ExclusiveSrwLock lock(m_selectionLock);
             m_path.swap(filePath);
             m_streams.swap(streams);
             m_enumerationIncomplete = incomplete;
@@ -214,7 +215,7 @@ STDMETHODIMP CAlternateStreamContext::QueryContextMenu(
 
     bool incomplete = false;
     {
-        std::lock_guard<std::mutex> lock(m_selectionMutex);
+        ExclusiveSrwLock lock(m_selectionLock);
         if (m_streams.empty() && !m_enumerationIncomplete)
             return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, 0);
         incomplete = m_enumerationIncomplete;
@@ -248,7 +249,7 @@ STDMETHODIMP CAlternateStreamContext::InvokeCommand(
     std::wstring selectedPath;
     try
     {
-        std::lock_guard<std::mutex> lock(m_selectionMutex);
+        ExclusiveSrwLock lock(m_selectionLock);
         if (m_path.empty() || (m_streams.empty() && !m_enumerationIncomplete))
             return E_FAIL;
         selectedPath = m_path;
@@ -321,7 +322,7 @@ void CAlternateStreamContext::SnapshotSelection(
 {
     // Copy all fields under the same lock, then publish them to the dialog
     // only after both potentially throwing allocations have completed.
-    std::lock_guard<std::mutex> lock(m_selectionMutex);
+    ExclusiveSrwLock lock(m_selectionLock);
     std::wstring pathCopy = m_path;
     std::vector<std::wstring> streamCopy = m_streams;
     path.swap(pathCopy);
@@ -339,26 +340,6 @@ UINT PreviewMessageId()
         L"AlternateStreamOverlay.PreviewReady.{9AC93D79-3D54-461E-A4E7-D855D24C24E3}");
     return id;
 }
-
-class ExclusiveSrwLock
-{
-public:
-    explicit ExclusiveSrwLock(SRWLOCK& lock) : lock_(lock)
-    {
-        AcquireSRWLockExclusive(&lock_);
-    }
-
-    ~ExclusiveSrwLock()
-    {
-        ReleaseSRWLockExclusive(&lock_);
-    }
-
-    ExclusiveSrwLock(const ExclusiveSrwLock&) = delete;
-    ExclusiveSrwLock& operator=(const ExclusiveSrwLock&) = delete;
-
-private:
-    SRWLOCK& lock_;
-};
 
 struct PreviewResult
 {

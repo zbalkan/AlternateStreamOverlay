@@ -6,7 +6,7 @@
 #include <comdef.h>
 #include <vector>
 #include <string>
-#include <mutex>
+#include "SrwLock.h"
 #include <windows.h>
 
 /* Responsible for context menu item, and property tab */
@@ -20,7 +20,7 @@ class ATL_NO_VTABLE CAlternateStreamContext :
     public IShellPropSheetExt
 {
 private:
-    mutable std::mutex m_selectionMutex;
+    mutable SRWLOCK m_selectionLock = SRWLOCK_INIT;
     std::wstring m_path;
     bool m_enumerationIncomplete = false;
     std::vector<std::wstring> m_streams;
