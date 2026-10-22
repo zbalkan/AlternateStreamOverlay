@@ -254,7 +254,9 @@ STDMETHODIMP CAlternateStreamContext::GetCommandString(
     if (idCmd != 0)
         return E_INVALIDARG;
 
-    const UINT kind = uFlags & 0x00000007;
+    // Match exact documented requests. Masking to the low three bits aliases
+    // GCS_VERBICONW (0x14) to GCS_VERBW (0x04), returning the wrong data.
+    const UINT kind = uFlags;
     if (kind == GCS_VALIDATEA || kind == GCS_VALIDATEW)
         return S_OK;
     if (pszName == nullptr || cchMax == 0)
