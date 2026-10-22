@@ -15,36 +15,63 @@ namespace
         L"ShellIconOverlayIdentifiers\\AlternateStreamOverlayIcon";
     constexpr WCHAR OverlayClsid[] = L"{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}";
 
+    // Scoped Win32 ownership keeps aborted registry transactions uncommitted.
+    class TransactionHandle
+    {
+    public:
+        TransactionHandle()
+            : handle_(CreateTransaction(nullptr, nullptr, 0, 0, 0, 0, nullptr)) {}
+        ~TransactionHandle()
+        {
+            if (handle_ != INVALID_HANDLE_VALUE)
+                CloseHandle(handle_);
+        }
+        TransactionHandle(const TransactionHandle&) = delete;
+        TransactionHandle& operator=(const TransactionHandle&) = delete;
+        HANDLE get() const { return handle_; }
+
+    private:
+        HANDLE handle_;
+    };
+
+    class RegistryKey
+    {
+    public:
+        ~RegistryKey() { if (handle_ != nullptr) RegCloseKey(handle_); }
+        RegistryKey(const RegistryKey&) = delete;
+        RegistryKey& operator=(const RegistryKey&) = delete;
+        RegistryKey() = default;
+        HKEY* put() { return &handle_; }
+        HKEY get() const { return handle_; }
+
+    private:
+        HKEY handle_ = nullptr;
+    };
+
+    LONG ReadRegisteredClsid(HKEY key, std::array<WCHAR, 64>& clsid)
+    {
+        auto bytes = static_cast<DWORD>(clsid.size() * sizeof(WCHAR));
+        return RegGetValueW(key, nullptr, nullptr, RRF_RT_REG_SZ,
+            nullptr, clsid.data(), &bytes);
+    }
+
     HRESULT RemoveOverlayRegistration(HKEY root)
     {
         // Keep the ownership read and deletion in one registry transaction.
-        // A conflicting non-transacted modification aborts the transaction
-        // rather than allowing an unrelated handler to be deleted.
-        const HANDLE transaction =
-            CreateTransaction(nullptr, nullptr, 0, 0, 0, 0, nullptr);
-        if (transaction == INVALID_HANDLE_VALUE)
+        TransactionHandle transaction;
+        if (transaction.get() == INVALID_HANDLE_VALUE)
             return HRESULT_FROM_WIN32(GetLastError());
 
-        HKEY key = nullptr;
+        RegistryKey key;
         LONG status = RegOpenKeyTransactedW(root, OverlayKey, 0,
-            KEY_QUERY_VALUE, &key, transaction, nullptr);
+            KEY_QUERY_VALUE, key.put(), transaction.get(), nullptr);
         if (status == ERROR_FILE_NOT_FOUND)
-        {
-            CloseHandle(transaction);
             return S_OK;
-        }
         if (status != ERROR_SUCCESS)
-        {
-            CloseHandle(transaction);
             return HRESULT_FROM_WIN32(status);
-        }
 
-        auto registeredClsid = std::array<WCHAR, 64>{};
-        auto bytes = static_cast<DWORD>(
-            registeredClsid.size() * sizeof(WCHAR));
-        status = RegGetValueW(key, nullptr, nullptr, RRF_RT_REG_SZ,
-            nullptr, registeredClsid.data(), &bytes);
-        RegCloseKey(key);
+        std::array<WCHAR, 64> registeredClsid = {};
+        status = ReadRegisteredClsid(key.get(), registeredClsid);
 
         // An absent, different, or unrecognizable value is not ours.
         if (status == ERROR_FILE_NOT_FOUND ||
@@ -52,66 +79,52 @@ namespace
             status == ERROR_UNSUPPORTED_TYPE ||
             (status == ERROR_SUCCESS &&
              _wcsicmp(registeredClsid.data(), OverlayClsid) != 0))
-        {
-            CloseHandle(transaction); // Uncommitted transaction rolls back.
             return S_OK;
-        }
-        if (status == ERROR_SUCCESS)
-        {
-            status = RegDeleteKeyTransactedW(root, OverlayKey, 0, 0,
-                transaction, nullptr);
-            // Another remover may already have deleted the key.
-            // Do not mask transactional conflicts or commit failures.
-            if (status == ERROR_FILE_NOT_FOUND)
-                status = ERROR_SUCCESS;
-            else if (status == ERROR_SUCCESS && !CommitTransaction(transaction))
-                status = GetLastError();
-        }
 
-        CloseHandle(transaction);
+        if (status != ERROR_SUCCESS)
+            return HRESULT_FROM_WIN32(status);
+
+        status = RegDeleteKeyTransactedW(root, OverlayKey, 0, 0,
+            transaction.get(), nullptr);
+        // Another remover may already have deleted the key.
+        // Do not mask transactional conflicts or commit failures.
+        if (status == ERROR_FILE_NOT_FOUND)
+            return S_OK;
+        if (status == ERROR_SUCCESS && !CommitTransaction(transaction.get()))
+            status = GetLastError();
         return HRESULT_FROM_WIN32(status);
     }
 
     HRESULT InstallOverlayRegistration(HKEY root)
     {
-        // Use a single registry transaction for the ownership check and
-        // write, matching the existing transactional unregistration path.
-        const HANDLE transaction =
-            CreateTransaction(nullptr, nullptr, 0, 0, 0, 0, nullptr);
-        if (transaction == INVALID_HANDLE_VALUE)
+        // Ownership validation and the write share one transaction.
+        TransactionHandle transaction;
+        if (transaction.get() == INVALID_HANDLE_VALUE)
             return HRESULT_FROM_WIN32(GetLastError());
 
-        HKEY key = nullptr;
+        RegistryKey key;
         DWORD disposition = 0;
         LONG status = RegCreateKeyTransactedW(root, OverlayKey, 0, nullptr,
             REG_OPTION_NON_VOLATILE, KEY_QUERY_VALUE | KEY_SET_VALUE,
-            nullptr, &key, &disposition, transaction, nullptr);
+            nullptr, key.put(), &disposition, transaction.get(), nullptr);
         if (status != ERROR_SUCCESS)
-        {
-            CloseHandle(transaction);
             return HRESULT_FROM_WIN32(status);
-        }
 
         std::array<WCHAR, 64> registeredClsid = {};
-        auto bytes = static_cast<DWORD>(registeredClsid.size() * sizeof(WCHAR));
-        const LONG readStatus = RegGetValueW(key, nullptr, nullptr,
-            RRF_RT_REG_SZ, nullptr, registeredClsid.data(), &bytes);
+        const LONG readStatus = ReadRegisteredClsid(key.get(), registeredClsid);
         if (!CanReplaceOverlayRegistration(readStatus, registeredClsid.data(),
                                             OverlayClsid, disposition))
         {
-            RegCloseKey(key);
-            CloseHandle(transaction); // Roll back a newly created key.
+            // An uncommitted transaction rolls back newly created keys.
             return HRESULT_FROM_WIN32(readStatus == ERROR_SUCCESS ||
                 readStatus == ERROR_FILE_NOT_FOUND
                 ? ERROR_ALREADY_EXISTS : readStatus);
         }
 
-        status = RegSetValueExW(key, nullptr, 0, REG_SZ,
+        status = RegSetValueExW(key.get(), nullptr, 0, REG_SZ,
             reinterpret_cast<const BYTE*>(OverlayClsid), sizeof(OverlayClsid));
-        RegCloseKey(key);
-        if (status == ERROR_SUCCESS && !CommitTransaction(transaction))
+        if (status == ERROR_SUCCESS && !CommitTransaction(transaction.get()))
             status = GetLastError();
-        CloseHandle(transaction);
         return HRESULT_FROM_WIN32(status);
     }
 
