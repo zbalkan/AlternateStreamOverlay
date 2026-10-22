@@ -318,6 +318,10 @@ namespace AlternateStreamTests
             Assert::AreEqual(static_cast<HRESULT>(E_FAIL),
                 menu->InvokeCommand(&command));
 
+            // Unexpected callback arguments must fail without touching COM state.
+            Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG),
+                menu->InvokeCommand(nullptr));
+
             // The same COM instance must remain reusable after those failures.
             Assert::AreEqual(static_cast<HRESULT>(S_OK),
                 initializer->Initialize(nullptr, data.Get(), nullptr));
