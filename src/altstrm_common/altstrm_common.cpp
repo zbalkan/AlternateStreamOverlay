@@ -174,7 +174,7 @@ StreamEnumeration AlternateStreamReader::EnumerateStreams(HANDLE file, bool coll
 
     // Most files fit the initial query: avoid allocating a heap buffer on
     // every Explorer icon overlay callback. Grow on demand for large records.
-    std::array<BYTE, InitialBufferSize> initial = {};
+    alignas(FILE_STREAM_INFO) std::array<BYTE, InitialBufferSize> initial = {};
     std::vector<BYTE> overflow;
     BYTE* data = initial.data();
     size_t bufferSize = initial.size();
