@@ -1,5 +1,5 @@
 #pragma once
-#include <windows.h>
+#include <Windows.h>
 
 // Non-throwing Win32 lock guard suitable for in-process shell extensions.
 class ExclusiveSrwLock
