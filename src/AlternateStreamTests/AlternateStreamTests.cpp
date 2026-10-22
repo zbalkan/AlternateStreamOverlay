@@ -41,6 +41,43 @@ namespace
         TemporaryFile& operator=(const TemporaryFile&) = delete;
     };
 
+    // Each test owns a unique registry subtree, even when assertions throw.
+    struct ScopedRegistrySandbox
+    {
+        std::wstring path;
+        HKEY handle = nullptr;
+
+        ScopedRegistrySandbox()
+        {
+            GUID id = {};
+            if (FAILED(CoCreateGuid(&id)))
+                throw std::runtime_error("Unable to generate registry sandbox ID");
+
+            WCHAR suffix[39] = {};
+            if (StringFromGUID2(id, suffix, _countof(suffix)) == 0)
+                throw std::runtime_error("Unable to format registry sandbox ID");
+
+            path = L"Software\\Classes\\AlternateStreamOverlayTests-";
+            path += suffix;
+            const LONG status = RegCreateKeyExW(HKEY_CURRENT_USER, path.c_str(),
+                0, nullptr, REG_OPTION_VOLATILE, KEY_ALL_ACCESS, nullptr,
+                &handle, nullptr);
+            if (status != ERROR_SUCCESS)
+                throw std::runtime_error("Unable to create registry sandbox");
+        }
+
+        ~ScopedRegistrySandbox()
+        {
+            if (handle != nullptr)
+                RegCloseKey(handle);
+            if (!path.empty())
+                RegDeleteTreeW(HKEY_CURRENT_USER, path.c_str());
+        }
+
+        ScopedRegistrySandbox(const ScopedRegistrySandbox&) = delete;
+        ScopedRegistrySandbox& operator=(const ScopedRegistrySandbox&) = delete;
+    };
+
     void CreateStream(const std::wstring& name)
     {
         HandleW file(CreateFileW(name.c_str(), GENERIC_WRITE,
@@ -252,35 +289,22 @@ namespace AlternateStreamTests
 
         TEST_METHOD(RegistryProbeDetectsExistingClassKeys)
         {
-            // An isolated volatile HKCU subtree avoids changing COM registration.
-            HKEY sandbox = nullptr;
-            const LONG createStatus = RegCreateKeyExW(HKEY_CURRENT_USER,
-                L"Software\\AlternateStreamOverlayTests\\RegistrationProbe",
-                0, nullptr, REG_OPTION_VOLATILE, KEY_ALL_ACCESS, nullptr,
-                &sandbox, nullptr);
-            if (createStatus != ERROR_SUCCESS)
-                Assert::Fail(L"Unable to create registration probe sandbox");
-
+            ScopedRegistrySandbox sandbox;
             constexpr std::array<LPCWSTR, 2> keys = { L"ClassA", L"ClassB" };
-            Assert::IsFalse(HasExistingComClassRegistration(sandbox, keys));
+            Assert::IsFalse(HasExistingComClassRegistration(sandbox.handle, keys));
 
             HKEY registered = nullptr;
-            const LONG classStatus = RegCreateKeyExW(sandbox, keys[1], 0,
+            const LONG classStatus = RegCreateKeyExW(sandbox.handle, keys[1], 0,
                 nullptr, REG_OPTION_VOLATILE, KEY_ALL_ACCESS, nullptr,
                 &registered, nullptr);
             if (classStatus != ERROR_SUCCESS)
-            {
-                RegCloseKey(sandbox);
                 Assert::Fail(L"Unable to create test COM class key");
-            }
             RegCloseKey(registered);
-            Assert::IsTrue(HasExistingComClassRegistration(sandbox, keys));
+
+            Assert::IsTrue(HasExistingComClassRegistration(sandbox.handle, keys));
             Assert::AreEqual(static_cast<LONG>(ERROR_SUCCESS),
-                RegDeleteKeyW(sandbox, keys[1]));
-            Assert::IsFalse(HasExistingComClassRegistration(sandbox, keys));
-            RegCloseKey(sandbox);
-            RegDeleteKeyW(HKEY_CURRENT_USER,
-                L"Software\\AlternateStreamOverlayTests\\RegistrationProbe");
+                RegDeleteKeyW(sandbox.handle, keys[1]));
+            Assert::IsFalse(HasExistingComClassRegistration(sandbox.handle, keys));
         }
 
         TEST_METHOD(RejectsForeignOrUnreadableRegistration)
