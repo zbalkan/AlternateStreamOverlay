@@ -8,8 +8,3 @@ bool hasAlternateStreams(LPCWSTR path)
 {
     return g_streamReader.HasAlternateStreams(path);
 }
-
-std::vector<std::wstring> listAlternateStreams(LPCWSTR path)
-{
-    return g_streamReader.ListAlternateStreams(path);
-}
