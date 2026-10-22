@@ -160,8 +160,7 @@ jobs:
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
           $tag = "v$env:RELEASE_VERSION"
-          $notes = "Release $tag. See CHANGELOG.md for details. Verify the attached SHA-256 checksum before using these binaries."
-          $notes | Set-Content -LiteralPath 'dist\release-notes.txt' -Encoding utf8
+          & .\src\tests\New-ReleaseNotes.ps1 -Version $env:RELEASE_VERSION -OutputPath 'dist\release-notes.txt'
           $archive = "dist/AlternateStreamOverlay-$tag-win-x64.zip"
           $checksum = "$archive.sha256"
           gh release create $tag $archive $checksum --title $tag --draft --target $env:GITHUB_SHA --notes-file 'dist\release-notes.txt'
