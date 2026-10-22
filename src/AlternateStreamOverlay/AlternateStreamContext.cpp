@@ -82,6 +82,7 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
         m_path.clear();
         m_streams.clear();
         m_isDirectory = false;
+        m_enumerationIncomplete = false;
 
         FORMATETC fmt = { CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
         if (pDataObj == nullptr)
@@ -161,19 +162,26 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
             return E_FAIL;
 
         const bool directory = PathIsDirectoryW(filePath.c_str()) != FALSE;
-        auto streams = listAlternateStreams(filePath.c_str());
-        // FILE_STREAM_INFO includes the unnamed default stream for ordinary files.
-        // The property page should present only named alternate data streams.
-        streams.erase(std::remove(streams.begin(), streams.end(), L"::$DATA"),
-                      streams.end());
-        if (streams.empty())
+        AlternateStreamReader reader;
+        auto enumeration = reader.EnumerateStreams(filePath.c_str());
+        if (enumeration.status == StreamStatus::Error)
             return E_FAIL;
 
-        // Commit the new selection only after validation succeeds. Swapping also
-        // avoids allocating while updating the COM object's stored state.
+        // An incomplete response cannot be interpreted as an empty ADS list.
+        // The Win32 call did not supply trustworthy records to preview, so
+        // expose a notice instead of inventing stream names.
+        const bool incomplete = enumeration.status == StreamStatus::Truncated;
+        auto& streams = enumeration.streams;
+        streams.erase(std::remove(streams.begin(), streams.end(), L"::$DATA"),
+                      streams.end());
+        if (streams.empty() && !incomplete)
+            return E_FAIL;
+
+        // Commit selection only after validation; avoid allocations on commit.
         m_path.swap(filePath);
         m_streams.swap(streams);
         m_isDirectory = directory;
+        m_enumerationIncomplete = incomplete;
         return S_OK;
     }
     catch (const std::bad_alloc&)
@@ -193,7 +201,8 @@ STDMETHODIMP CAlternateStreamContext::QueryContextMenu(
     UINT idCmdLast,
     UINT uFlags)
 {
-    if ((uFlags & CMF_DEFAULTONLY) || m_streams.empty())
+    if ((uFlags & CMF_DEFAULTONLY) ||
+        (m_streams.empty() && !m_enumerationIncomplete))
         return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, 0);
 
     if (hmenu == nullptr)
@@ -208,7 +217,8 @@ STDMETHODIMP CAlternateStreamContext::QueryContextMenu(
     // Alt+A when the classic context menu is open. Explorer chooses
     // whether a mnemonic is available when other commands use the same key.
     wchar_t menuText[] = L"&Alternate Streams...";
-    item.dwTypeData = menuText;
+    wchar_t incompleteText[] = L"&Alternate Streams (incomplete)...";
+    item.dwTypeData = m_enumerationIncomplete ? incompleteText : menuText;
     if (!InsertMenuItemW(hmenu, indexMenu, TRUE, &item))
         return HRESULT_FROM_WIN32(GetLastError());
 
@@ -220,7 +230,7 @@ STDMETHODIMP CAlternateStreamContext::InvokeCommand(
 {
     if (pCmdInfo == nullptr)
         return E_INVALIDARG;
-    if (m_path.empty() || m_streams.empty())
+    if (m_path.empty() || (m_streams.empty() && !m_enumerationIncomplete))
         return E_FAIL;
 
     bool invoked = false;
@@ -289,6 +299,11 @@ const std::vector<std::wstring>& CAlternateStreamContext::get_streams() const
 const std::wstring& CAlternateStreamContext::get_path() const
 {
     return m_path;
+}
+
+bool CAlternateStreamContext::is_enumeration_incomplete() const
+{
+    return m_enumerationIncomplete;
 }
 
 namespace
@@ -625,7 +640,14 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     }
 
     SendMessage(checkBox, BM_SETCHECK, BST_UNCHECKED, 0);
-    if (!streams.empty())
+    if (pthis->is_enumeration_incomplete())
+    {
+        SetWindowTextW(textBox,
+            L"Stream enumeration is incomplete.\r\n"
+            L"Stream names cannot be displayed or previewed.\r\n"
+            L"The metadata exceeds the supported limit.");
+    }
+    else if (!streams.empty())
     {
         SendMessage(comboBox, CB_SETCURSEL, 0, 0);
         SelectText(dialogState, 0, false, textBox);

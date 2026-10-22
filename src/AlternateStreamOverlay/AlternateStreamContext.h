@@ -21,6 +21,7 @@ class ATL_NO_VTABLE CAlternateStreamContext :
 private:
     std::wstring m_path;
     bool m_isDirectory;
+    bool m_enumerationIncomplete = false;
     std::vector<std::wstring> m_streams;
 public:
     CAlternateStreamContext() : m_isDirectory(false)
@@ -53,6 +54,7 @@ public:
     // Native
     const std::vector<std::wstring>& get_streams() const;
     const std::wstring& get_path() const;
+    bool is_enumeration_incomplete() const;
     // IShellExtInit
     STDMETHODIMP Initialize(LPCITEMIDLIST pidlFolder, IDataObject* pdtobj, HKEY hkeyProgId);
     // IContextMenu
