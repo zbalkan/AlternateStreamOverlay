@@ -431,7 +431,10 @@ std::wstring FormatStreamPreview(const BYTE* data, size_t size,
     // Windows replaces invalid byte sequences with U+FFFD when flags are zero.
     if (data == nullptr || size == 0 || size > static_cast<size_t>(INT_MAX))
         return {};
-    const auto byteCount = static_cast<int>(size);
+    const auto length = truncated ? CompleteUtf8PrefixLength(data, size) : size;
+    if (length == 0)
+        return {};
+    const auto byteCount = static_cast<int>(length);
     // Flawfinder: ignore
     const int count = MultiByteToWideChar(CP_UTF8, 0,
         reinterpret_cast<const char*>(data), byteCount, nullptr, 0);
