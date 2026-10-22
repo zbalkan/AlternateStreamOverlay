@@ -6,6 +6,7 @@
 #include <comdef.h>
 #include <vector>
 #include <string>
+#include <mutex>
 #include <windows.h>
 
 /* Responsible for context menu item, and property tab */
@@ -19,6 +20,7 @@ class ATL_NO_VTABLE CAlternateStreamContext :
     public IShellPropSheetExt
 {
 private:
+    mutable std::mutex m_selectionMutex;
     std::wstring m_path;
     bool m_isDirectory;
     bool m_enumerationIncomplete = false;
@@ -52,9 +54,8 @@ public:
 
 public:
     // Native
-    const std::vector<std::wstring>& get_streams() const;
-    const std::wstring& get_path() const;
-    bool is_enumeration_incomplete() const;
+    void SnapshotSelection(std::wstring& path,
+        std::vector<std::wstring>& streams, bool& incomplete) const;
     // IShellExtInit
     STDMETHODIMP Initialize(LPCITEMIDLIST pidlFolder, IDataObject* pdtobj, HKEY hkeyProgId);
     // IContextMenu
