@@ -296,13 +296,19 @@ function Test-FilesystemLifecycle {
         }
     }
 
-    # An exclusive handle may prevent stream queries. Failure to enumerate
-    # is acceptable, but the CLI must remain operational and recover.
-    $lock = [System.IO.File]::Open($path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+    # Metadata-only opens can succeed despite an exclusive data-file lock.
+    # Verify that both outcomes are handled and subsequent reads still work.
+    $lock = [System.IO.File]::Open($path, [System.IO.FileMode]::Open,
+        [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
     try {
         $lockedOutput = & $exe $path 2>&1 | Out-String
-        if ($LASTEXITCODE -eq 0 -or $lockedOutput -notmatch 'Stream enumeration failed') {
-            throw "Exclusive lock was not reported as an enumeration failure: $lockedOutput"
+        if ($LASTEXITCODE -eq 0) {
+            if (-not $lockedOutput.Contains(':cycle:$DATA')) {
+                throw "Metadata-only stream discovery failed under lock: $lockedOutput"
+            }
+        }
+        elseif ($lockedOutput -notmatch 'Stream enumeration failed') {
+            throw "Exclusive-lock error was not reported: $lockedOutput"
         }
     }
     finally {
@@ -324,24 +330,24 @@ function Test-WildcardContinuesAfterFailure {
         (Join-Path $scanDirectory '00-first.txt'),
         (Join-Path $scanDirectory 'zz-second.txt')
     )
-    foreach ($file in $files) {
-        [System.IO.File]::WriteAllText($file, 'valid')
-        [System.IO.File]::WriteAllBytes($file + ':afterfailure', [byte[]](65))
-    }
+    $targets = @(
+        (Join-Path $Root 'junction-target-first'),
+        (Join-Path $Root 'junction-target-second')
+    )
 
-    $pattern = Join-Path $scanDirectory '*.txt'
+    # Use a dangling directory junction as a deterministic per-item error.
+    # Unlike an exclusive data-file lock, opening a missing junction target
+    # cannot succeed through a metadata-only CreateFileW request.
     $observedContinuation = $false
-    # FindFirstFileW does not guarantee filename order. Lock each candidate
-    # in turn, and require at least one actual scan to print a valid result
-    # AFTER the corresponding per-file failure. The old early-return code
-    # cannot satisfy this assertion in either enumeration order.
-    foreach ($blocked in $files) {
-        $following = @($files | Where-Object { $_ -cne $blocked })[0]
-        $lock = [System.IO.File]::Open($blocked,
-            [System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite,
-            [System.IO.FileShare]::None)
+    for ($iteration = 0; $iteration -lt $files.Count; $iteration++) {
+        $blocked = $files[$iteration]
+        $following = $files[1 - $iteration]
+        [System.IO.File]::WriteAllText($following, 'valid')
+        [System.IO.File]::WriteAllBytes($following + ':afterfailure', [byte[]](65))
+
+        $junction = New-Item -ItemType Junction -Path $blocked -Target $targets[$iteration]
         try {
-            $output = & $exe $pattern 2>&1 | Out-String
+            $output = & $exe (Join-Path $scanDirectory '*.txt') 2>&1 | Out-String
             $status = $LASTEXITCODE
             if ($status -eq 0) {
                 throw "Wildcard scan did not report partial failure: $output"
@@ -362,14 +368,16 @@ function Test-WildcardContinuesAfterFailure {
                 }
             }
             if ($errorIndex -lt 0) {
-                throw "Wildcard scan omitted the locked-file error: $output"
+                throw "Wildcard scan omitted dangling-junction error: $output"
             }
             if ($resultIndex -gt $errorIndex) {
                 $observedContinuation = $true
             }
         }
         finally {
-            $lock.Dispose()
+            # Remove the junction itself, never recurse into its target.
+            [System.IO.Directory]::Delete($junction.FullName)
+            [System.IO.File]::Delete($following)
         }
     }
     if (-not $observedContinuation) {
