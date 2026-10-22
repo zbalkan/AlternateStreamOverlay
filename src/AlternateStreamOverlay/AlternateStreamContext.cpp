@@ -559,7 +559,7 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     if (lParam == 0)
         return FALSE;
 
-    PROPSHEETPAGE* ppsp = reinterpret_cast<PROPSHEETPAGE*>(lParam);
+    auto* ppsp = reinterpret_cast<PROPSHEETPAGE*>(lParam);
     CAlternateStreamContext* pthis = reinterpret_cast<CAlternateStreamContext*>(ppsp->lParam);
     if (pthis == nullptr)
         return FALSE;
