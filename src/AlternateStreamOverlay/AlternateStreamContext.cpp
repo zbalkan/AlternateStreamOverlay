@@ -19,16 +19,11 @@ class ScopedDropMedium
 {
 public:
     explicit ScopedDropMedium(STGMEDIUM& medium) : medium_(medium) {}
-    ~ScopedDropMedium() { Release(); }
-
-    void Release()
+    ~ScopedDropMedium()
     {
-        if (released_)
-            return;
         if (locked_)
             GlobalUnlock(medium_.hGlobal);
         ReleaseStgMedium(&medium_);
-        released_ = true;
     }
 
     ScopedDropMedium(const ScopedDropMedium&) = delete;
@@ -39,7 +34,6 @@ public:
 private:
     STGMEDIUM& medium_;
     bool locked_ = false;
-    bool released_ = false;
 };
 }
 
