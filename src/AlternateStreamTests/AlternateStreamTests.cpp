@@ -48,6 +48,12 @@ namespace
     };
 
     // Each test owns a unique registry subtree, even when assertions throw.
+    class RegistrySandboxError : public std::runtime_error
+    {
+    public:
+        using std::runtime_error::runtime_error;
+    };
+
     struct ScopedRegistrySandbox
     {
         std::wstring path;
@@ -57,19 +63,19 @@ namespace
         {
             GUID id = {};
             if (FAILED(CoCreateGuid(&id)))
-                throw std::runtime_error("Unable to generate registry sandbox ID");
+                throw RegistrySandboxError("Unable to generate registry sandbox ID");
 
-            WCHAR suffix[39] = {};
-            if (StringFromGUID2(id, suffix, _countof(suffix)) == 0)
-                throw std::runtime_error("Unable to format registry sandbox ID");
+            std::array<WCHAR, 39> suffix = {};
+            if (StringFromGUID2(id, suffix.data(), static_cast<int>(suffix.size())) == 0)
+                throw RegistrySandboxError("Unable to format registry sandbox ID");
 
             path = L"Software\\Classes\\AlternateStreamOverlayTests-";
-            path += suffix;
+            path += suffix.data();
             const LONG status = RegCreateKeyExW(HKEY_CURRENT_USER, path.c_str(),
                 0, nullptr, REG_OPTION_VOLATILE, KEY_ALL_ACCESS, nullptr,
                 &handle, nullptr);
             if (status != ERROR_SUCCESS)
-                throw std::runtime_error("Unable to create registry sandbox");
+                throw RegistrySandboxError("Unable to create registry sandbox");
         }
 
         ~ScopedRegistrySandbox()
