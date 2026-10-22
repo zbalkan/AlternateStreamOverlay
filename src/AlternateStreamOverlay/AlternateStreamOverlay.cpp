@@ -229,18 +229,10 @@ STDAPI DllInstall(BOOL bInstall, _In_opt_ LPCWSTR pszCmdLine)
         }
     }
 
-    if (bInstall)
-    {
-        hr = DllRegisterServer();
-        if (FAILED(hr))
-        {
-            DllUnregisterServer();
-        }
-    }
-    else
-    {
-        hr = DllUnregisterServer();
-    }
+    // DllRegisterServer owns its rollback on overlay registration failure.
+    // Calling DllUnregisterServer here would run another overlay removal,
+    // potentially deleting an existing registration after a failed install.
+    hr = bInstall ? DllRegisterServer() : DllUnregisterServer();
 
     return hr;
 }
