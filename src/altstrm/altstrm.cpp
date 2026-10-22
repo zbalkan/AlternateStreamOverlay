@@ -123,6 +123,16 @@ namespace
             return false;
         }
 
+        // A successful native query may still contain names that cannot be
+        // represented safely as Win32 paths. Never report such a scan clean.
+        if (enumeration.undisplayableNames != 0)
+        {
+            WriteError(L"Some stream names cannot be displayed for " + fullPath +
+                L" (count " + std::to_wstring(enumeration.undisplayableNames) +
+                L")\r\n");
+            return false;
+        }
+
         auto& names = enumeration.streams;
         // The unnamed default stream is not an alternate data stream.
         names.erase(std::remove(names.begin(), names.end(), L"::$DATA"), names.end());

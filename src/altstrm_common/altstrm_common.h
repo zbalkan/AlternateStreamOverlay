@@ -33,7 +33,13 @@ struct StreamEnumeration
     StreamStatus status = StreamStatus::Error;
     DWORD error = ERROR_SUCCESS;
     bool hasNamedStreams = false;
+    size_t undisplayableNames = 0;
     std::vector<std::wstring> streams;
+
+    bool NeedsNotice() const
+    {
+        return status != StreamStatus::Ok || undisplayableNames != 0;
+    }
 };
 
 // Enumerate alternate streams using the documented Windows 10+ API.

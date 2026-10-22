@@ -204,10 +204,14 @@ StreamEnumeration AlternateStreamReader::EnumerateStreams(HANDLE file, bool coll
 
         // Preserve the default stream for compatibility; collect other
         // names only when they are safe for path-based consumers.
-        if (collectNames && (defaultStream ||
-            stream_info_detail::IsNamedDataStreamName(
-                record.name, record.nameBytes / sizeof(WCHAR))))
-            result.streams.emplace_back(record.name, record.nameBytes / sizeof(WCHAR));
+        if (collectNames)
+        {
+            if (defaultStream || stream_info_detail::IsNamedDataStreamName(
+                record.name, record.nameBytes / sizeof(WCHAR)))
+                result.streams.emplace_back(record.name, record.nameBytes / sizeof(WCHAR));
+            else
+                ++result.undisplayableNames;
+        }
 
         if (record.nextOffset == 0)
             return result;
