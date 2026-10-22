@@ -380,16 +380,19 @@ namespace AlternateStreamTests
             Assert::AreEqual(static_cast<HRESULT>(E_POINTER),
                 overlay->GetPriority(nullptr));
 
-            WCHAR iconFile[MAX_PATH] = {};
+            // The loaded DLL path can exceed MAX_PATH in CI checkouts.
+            std::vector<WCHAR> iconFile(32768);
             int index = -1;
             DWORD flags = 0;
             Assert::AreEqual(static_cast<HRESULT>(E_POINTER),
-                overlay->GetOverlayInfo(nullptr, MAX_PATH, &index, &flags));
+                overlay->GetOverlayInfo(nullptr,
+                    static_cast<int>(iconFile.size()), &index, &flags));
             Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG),
-                overlay->GetOverlayInfo(iconFile, 0, &index, &flags));
+                overlay->GetOverlayInfo(iconFile.data(), 0, &index, &flags));
             Assert::AreEqual(static_cast<HRESULT>(S_OK),
-                overlay->GetOverlayInfo(iconFile, MAX_PATH, &index, &flags));
-            Assert::IsTrue(iconFile[0] != L'\\0');
+                overlay->GetOverlayInfo(iconFile.data(),
+                    static_cast<int>(iconFile.size()), &index, &flags));
+            Assert::IsTrue(iconFile[0] != L'\0');
             Assert::AreEqual(0, index);
             Assert::AreEqual(static_cast<DWORD>(ISIOI_ICONFILE | ISIOI_ICONINDEX), flags);
         }
