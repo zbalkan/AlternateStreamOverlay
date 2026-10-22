@@ -416,3 +416,30 @@ std::wstring FormatHexPreview(const BYTE* data, size_t size)
 
     return output;
 }
+
+std::wstring FormatStreamPreview(const BYTE* data, size_t size,
+                                 bool truncated, bool asHex)
+{
+    if (asHex)
+        return FormatHexPreview(data, size);
+
+    std::wstring text;
+    if (TryDecodeUtf8Preview(data, size, truncated, text))
+        return text;
+
+    // Keep the UI in text mode even if the stream contains malformed UTF-8.
+    // Windows replaces invalid byte sequences with U+FFFD when flags are zero.
+    if (data == nullptr || size == 0 || size > static_cast<size_t>(INT_MAX))
+        return {};
+    const int byteCount = static_cast<int>(size);
+    const int count = MultiByteToWideChar(CP_UTF8, 0,
+        reinterpret_cast<const char*>(data), byteCount, nullptr, 0);
+    if (count <= 0)
+        return {};
+    std::wstring decoded(static_cast<size_t>(count), L'\0');
+    if (MultiByteToWideChar(CP_UTF8, 0,
+        reinterpret_cast<const char*>(data), byteCount, &decoded[0], count) != count)
+        return {};
+    std::replace(decoded.begin(), decoded.end(), L'\0', L'\uFFFD');
+    return decoded;
+}
