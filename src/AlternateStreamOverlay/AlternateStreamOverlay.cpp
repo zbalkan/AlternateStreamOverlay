@@ -80,28 +80,45 @@ namespace
             return HRESULT_FROM_WIN32(status);
         }
 
+        // Use a single registry transaction for the ownership check and
+        // write, matching the existing transactional unregistration path.
+        const HANDLE transaction =
+            CreateTransaction(nullptr, nullptr, 0, 0, 0, 0, nullptr);
+        if (transaction == INVALID_HANDLE_VALUE)
+            return HRESULT_FROM_WIN32(GetLastError());
+
         HKEY key = nullptr;
-        const LONG status = RegCreateKeyExW(root, OverlayKey, 0, nullptr,
+        DWORD disposition = 0;
+        LONG status = RegCreateKeyTransactedW(root, OverlayKey, 0, nullptr,
             REG_OPTION_NON_VOLATILE, KEY_QUERY_VALUE | KEY_SET_VALUE,
-            nullptr, &key, nullptr);
+            nullptr, &key, &disposition, transaction, nullptr);
         if (status != ERROR_SUCCESS)
+        {
+            CloseHandle(transaction);
             return HRESULT_FROM_WIN32(status);
+        }
 
         std::array<WCHAR, 64> registeredClsid = {};
         auto bytes = static_cast<DWORD>(registeredClsid.size() * sizeof(WCHAR));
         const LONG readStatus = RegGetValueW(key, nullptr, nullptr,
             RRF_RT_REG_SZ, nullptr, registeredClsid.data(), &bytes);
-        if (!CanReplaceOverlayRegistration(readStatus, registeredClsid.data()))
+        if (!CanReplaceOverlayRegistration(readStatus, registeredClsid.data(),
+                                            OverlayClsid, disposition))
         {
             RegCloseKey(key);
-            return HRESULT_FROM_WIN32(readStatus == ERROR_SUCCESS
+            CloseHandle(transaction); // Roll back a newly created key.
+            return HRESULT_FROM_WIN32(readStatus == ERROR_SUCCESS ||
+                readStatus == ERROR_FILE_NOT_FOUND
                 ? ERROR_ALREADY_EXISTS : readStatus);
         }
 
-        const LONG valueStatus = RegSetValueExW(key, nullptr, 0, REG_SZ,
+        status = RegSetValueExW(key, nullptr, 0, REG_SZ,
             reinterpret_cast<const BYTE*>(OverlayClsid), sizeof(OverlayClsid));
         RegCloseKey(key);
-        return HRESULT_FROM_WIN32(valueStatus);
+        if (status == ERROR_SUCCESS && !CommitTransaction(transaction))
+            status = GetLastError();
+        CloseHandle(transaction);
+        return HRESULT_FROM_WIN32(status);
     }
 }
 
@@ -141,7 +158,18 @@ STDAPI DllRegisterServer(void)
     hr = PrxDllRegisterServer();
 #endif
     if (SUCCEEDED(hr))
+    {
         hr = UpdateOverlayRegistration(true);
+        if (FAILED(hr))
+        {
+            // Plain regsvr32 invokes DllRegisterServer directly. Roll back
+            // the COM registration without removing a foreign overlay key.
+            _AtlModule.DllUnregisterServer();
+#ifdef _MERGE_PROXYSTUB
+            PrxDllUnregisterServer();
+#endif
+        }
+    }
     return hr;
 }
 

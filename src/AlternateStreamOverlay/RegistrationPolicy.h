@@ -2,13 +2,14 @@
 #include <Windows.h>
 #include <cwchar>
 
-// Registration must not replace an overlay key belonging to another CLSID.
-// An absent default value on a newly created key is safe to populate.
-inline bool CanReplaceOverlayRegistration(LONG status, LPCWSTR registeredClsid)
+// Only a newly created key may have no default value. An existing key
+// must already contain our CLSID before registration can modify it.
+inline bool CanReplaceOverlayRegistration(LONG status, LPCWSTR registeredClsid,
+                                          LPCWSTR expectedClsid, DWORD disposition)
 {
     if (status == ERROR_FILE_NOT_FOUND)
-        return true;
+        return disposition == REG_CREATED_NEW_KEY;
     return status == ERROR_SUCCESS && registeredClsid != nullptr &&
-        _wcsicmp(registeredClsid,
-            L"{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}") == 0;
+        expectedClsid != nullptr &&
+        _wcsicmp(registeredClsid, expectedClsid) == 0;
 }
