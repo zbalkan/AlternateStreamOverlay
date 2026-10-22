@@ -411,6 +411,11 @@ function Test-RedirectedErrorDiagnostics {
         $processInfo.UseShellExecute = $false
         $processInfo.RedirectStandardOutput = $true
         $processInfo.RedirectStandardError = $true
+        # The CLI encodes both redirected pipes as UTF-8, regardless of the
+        # Windows locale or console code page.
+        $utf8 = [System.Text.UTF8Encoding]::new($false, $true)
+        $processInfo.StandardOutputEncoding = $utf8
+        $processInfo.StandardErrorEncoding = $utf8
 
         $process = [System.Diagnostics.Process]::Start($processInfo)
         try {
