@@ -385,6 +385,28 @@ namespace AlternateStreamTests
             }
         }
 
+        TEST_METHOD(UnsupportedStreamQueryRequiresConfirmedVolumeCapability)
+        {
+            // Inject native query errors and volume capabilities rather than
+            // relying on whichever filesystem hosts the CI temporary file.
+            const DWORD errors[] = {
+                ERROR_INVALID_PARAMETER, ERROR_INVALID_FUNCTION, ERROR_NOT_SUPPORTED
+            };
+            for (const DWORD error : errors)
+            {
+                Assert::IsTrue(stream_info_detail::IsUnsupportedStreamQuery(
+                    error, true, 0));
+                Assert::IsFalse(stream_info_detail::IsUnsupportedStreamQuery(
+                    error, true, FILE_NAMED_STREAMS));
+                Assert::IsFalse(stream_info_detail::IsUnsupportedStreamQuery(
+                    error, false, 0));
+            }
+            Assert::IsFalse(stream_info_detail::IsUnsupportedStreamQuery(
+                ERROR_ACCESS_DENIED, true, 0));
+            Assert::IsFalse(stream_info_detail::IsUnsupportedStreamQuery(
+                ERROR_MORE_DATA, true, 0));
+        }
+
         TEST_METHOD(EnumerationPreservesNamedStreamEvidence)
         {
             TemporaryFile fixture;
