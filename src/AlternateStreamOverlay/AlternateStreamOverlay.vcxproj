@@ -149,7 +149,6 @@
       </PrecompiledHeader>
       <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</CompileAsManaged>
     </ClCompile>
-    <ClCompile Include="Common.cpp" />
     <ClCompile Include="dlldatax.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
       </PrecompiledHeader>
@@ -184,7 +183,6 @@
     <ClInclude Include="AlternateStreamContext.h" />
     <ClInclude Include="AlternateStreamOverlayIcon.h" />
     <ClInclude Include="AlternateStreamOverlay_i.h" />
-    <ClInclude Include="Common.h" />
     <ClInclude Include="SrwLock.h" />
     <ClInclude Include="LocalPathPolicy.h" />
     <ClInclude Include="dlldatax.h" />
