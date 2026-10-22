@@ -869,6 +869,12 @@ namespace AlternateStreamTests
             Assert::AreEqual(PreviewLimit - 2, trimmed.size());
             Assert::AreEqual(L'A', trimmed.back());
             Assert::AreEqual(L'\uFFFD', complete.back());
+
+            // The preview limit can also split a four-byte UTF-8 character.
+            const BYTE fourByteSplit[] = { 'A', 0xF0, 0x9F, 0x98 };
+            const auto fourByteText = FormatStreamPreview(
+                fourByteSplit, sizeof(fourByteSplit), true, false);
+            Assert::AreEqual(L"A", fourByteText.c_str());
         }
 
         TEST_METHOD(InvalidUtf8TailIsNotSilentlyDiscarded)
