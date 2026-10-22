@@ -66,12 +66,13 @@ namespace
                 error == ERROR_NOT_SUPPORTED)
             {
                 // Only a confirmed lack of named-stream support means an
-                // empty inventory. Preserve the native error if this volume
-                // query fails or if the volume advertises named streams.
+                // empty inventory; retain the native error otherwise.
                 DWORD flags = 0;
-                if (GetVolumeInformationByHandleW(file, nullptr, 0, nullptr,
-                    nullptr, &flags, nullptr, 0) &&
-                    (flags & FILE_NAMED_STREAMS) == 0)
+                const bool volumeInfoAvailable =
+                    GetVolumeInformationByHandleW(file, nullptr, 0, nullptr,
+                        nullptr, &flags, nullptr, 0) != FALSE;
+                if (stream_info_detail::IsUnsupportedStreamQuery(
+                        error, volumeInfoAvailable, flags))
                 {
                     buffer.clear();
                     error = ERROR_SUCCESS;
@@ -90,6 +91,15 @@ namespace
             buffer.resize(buffer.size() * 2);
         }
     }
+}
+
+bool stream_info_detail::IsUnsupportedStreamQuery(
+    DWORD queryError, bool volumeInfoAvailable, DWORD volumeFlags)
+{
+    return volumeInfoAvailable && (volumeFlags & FILE_NAMED_STREAMS) == 0 &&
+        (queryError == ERROR_INVALID_PARAMETER ||
+         queryError == ERROR_INVALID_FUNCTION ||
+         queryError == ERROR_NOT_SUPPORTED);
 }
 
 bool stream_info_detail::ReadRecord(
