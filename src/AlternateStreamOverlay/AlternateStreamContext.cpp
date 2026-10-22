@@ -359,7 +359,11 @@ struct PreviewGate
 
 struct DialogState
 {
-    CAlternateStreamContext* context;
+    // Freeze the selection while this property page is open. Initialize()
+    // can replace the COM object's path and stream inventory independently.
+    std::wstring path;
+    std::vector<std::wstring> streams;
+    bool enumerationIncomplete = false;
     std::shared_ptr<PreviewGate> gate;
     size_t generation = 0;
 };
@@ -518,7 +522,7 @@ void SelectTextImpl(DialogState* state, size_t idx, bool asHex, HWND textBox)
 {
     if (textBox == nullptr || state == nullptr)
         return;
-    const auto& streams = state->context->get_streams();
+    const auto& streams = state->streams;
     if (idx >= streams.size())
     {
         ++state->generation;
@@ -528,7 +532,7 @@ void SelectTextImpl(DialogState* state, size_t idx, bool asHex, HWND textBox)
 
     // Construct before changing the generation: allocation failure must not
     // make an existing worker's previous path appear to be a new selection.
-    std::wstring path = state->context->get_path() + streams[idx];
+    std::wstring path = state->path + streams[idx];
     if (PreviewMessageId() == 0)
     {
         // No completion notification can be delivered without registration.
@@ -601,9 +605,13 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     std::unique_ptr<DialogState> state(new (std::nothrow) DialogState);
     if (!state)
         return FALSE;
-    state->context = pthis;
     try
     {
+        // Snapshot before publishing dialog state. A failed allocation leaves
+        // no half-initialized state attached to the window.
+        state->path = pthis->get_path();
+        state->streams = pthis->get_streams();
+        state->enumerationIncomplete = pthis->is_enumeration_incomplete();
         state->gate = std::make_shared<PreviewGate>();
     }
     catch (const std::bad_alloc&)
@@ -619,7 +627,7 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     HWND checkBox = GetDlgItem(hWnd, IDC_CHECK1);
     HWND textBox = GetDlgItem(hWnd, IDC_EDIT1);
 
-    const std::vector<std::wstring>& streams = pthis->get_streams();
+    const std::vector<std::wstring>& streams = dialogState->streams;
     for (std::vector<std::wstring>::const_iterator vit = streams.begin(); vit != streams.end(); ++vit)
     {
         SendMessage(comboBox, CB_ADDSTRING, 0, (LPARAM)vit->c_str());
@@ -640,7 +648,7 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     }
 
     SendMessage(checkBox, BM_SETCHECK, BST_UNCHECKED, 0);
-    if (pthis->is_enumeration_incomplete())
+    if (dialogState->enumerationIncomplete)
     {
         SetWindowTextW(textBox,
             L"Stream enumeration is incomplete.\r\n"
