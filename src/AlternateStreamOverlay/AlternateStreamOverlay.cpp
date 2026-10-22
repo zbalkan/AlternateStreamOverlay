@@ -4,6 +4,8 @@
 #include "dllmain.h"
 #include "dlldatax.h"
 #include <array>
+#include <ktmw32.h>
+#pragma comment(lib, "KtmW32.lib")
 
 namespace
 {
@@ -22,25 +24,58 @@ namespace
         const HKEY root = perUser ? HKEY_CURRENT_USER : HKEY_LOCAL_MACHINE;
         if (!install)
         {
-            // Best-effort ownership check: avoid deleting a registration
-            // already reassigned to a different handler. Win32 provides no
-            // ordinary conditional RegDeleteKey operation; an unrelated
-            // installer can still modify this key between read and delete.
-            std::array<WCHAR, 64> registeredClsid = {};
-            DWORD bytes = static_cast<DWORD>(registeredClsid.size() * sizeof(WCHAR));
-            const LONG query = RegGetValueW(root, OverlayKey, nullptr,
-                RRF_RT_REG_SZ, nullptr, registeredClsid.data(), &bytes);
-            if (query == ERROR_FILE_NOT_FOUND || query == ERROR_MORE_DATA ||
-                query == ERROR_UNSUPPORTED_TYPE)
-                return S_OK;
-            if (query != ERROR_SUCCESS)
-                return HRESULT_FROM_WIN32(query);
-            if (_wcsicmp(registeredClsid.data(), OverlayClsid) != 0)
-                return S_OK;
+            // Keep the ownership read and deletion in one registry transaction.
+            // A conflicting non-transacted modification aborts the transaction
+            // rather than allowing an unrelated handler to be deleted.
+            const HANDLE transaction =
+                CreateTransaction(nullptr, nullptr, 0, 0, 0, 0, nullptr);
+            if (transaction == INVALID_HANDLE_VALUE)
+                return HRESULT_FROM_WIN32(GetLastError());
 
-            const LONG status = RegDeleteKeyW(root, OverlayKey);
-            return status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND
-                ? S_OK : HRESULT_FROM_WIN32(status);
+            HKEY key = nullptr;
+            LONG status = RegOpenKeyTransactedW(root, OverlayKey, 0,
+                KEY_QUERY_VALUE, &key, transaction, nullptr);
+            if (status == ERROR_FILE_NOT_FOUND)
+            {
+                CloseHandle(transaction);
+                return S_OK;
+            }
+            if (status != ERROR_SUCCESS)
+            {
+                CloseHandle(transaction);
+                return HRESULT_FROM_WIN32(status);
+            }
+
+            std::array<WCHAR, 64> registeredClsid = {};
+            DWORD bytes = static_cast<DWORD>(
+                registeredClsid.size() * sizeof(WCHAR));
+            status = RegGetValueW(key, nullptr, nullptr, RRF_RT_REG_SZ,
+                nullptr, registeredClsid.data(), &bytes);
+            RegCloseKey(key);
+
+            // An absent, different, or unrecognizable value is not ours.
+            if (status == ERROR_FILE_NOT_FOUND ||
+                status == ERROR_MORE_DATA ||
+                status == ERROR_UNSUPPORTED_TYPE ||
+                (status == ERROR_SUCCESS &&
+                 _wcsicmp(registeredClsid.data(), OverlayClsid) != 0))
+            {
+                CloseHandle(transaction); // Uncommitted transaction rolls back.
+                return S_OK;
+            }
+            if (status == ERROR_SUCCESS)
+            {
+                status = RegDeleteKeyTransactedW(root, OverlayKey, 0, 0,
+                    transaction, nullptr);
+                if (status == ERROR_SUCCESS)
+                {
+                    if (!CommitTransaction(transaction))
+                        status = GetLastError();
+                }
+            }
+
+            CloseHandle(transaction);
+            return HRESULT_FROM_WIN32(status);
         }
 
         HKEY key = nullptr;
