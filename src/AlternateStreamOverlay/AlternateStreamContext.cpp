@@ -171,13 +171,12 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
 
         AlternateStreamReader reader;
         auto enumeration = reader.EnumerateStreams(filePath.c_str());
-        if (enumeration.status == StreamStatus::Error)
-            return E_FAIL;
-
+        // Even failed enumeration must not appear as a clean file. A notice
+        // is preferable to silently omitting the Explorer inspection UI.
         // An incomplete response cannot be interpreted as an empty ADS list.
         // The Win32 call did not supply trustworthy records to preview, so
         // expose a notice instead of inventing stream names.
-        const bool incomplete = enumeration.status == StreamStatus::Truncated;
+        const bool incomplete = enumeration.NeedsNotice();
         auto& streams = enumeration.streams;
         streams.erase(std::remove(streams.begin(), streams.end(), L"::$DATA"),
                       streams.end());
@@ -655,9 +654,9 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     if (dialogState->enumerationIncomplete)
     {
         SetWindowTextW(textBox,
-            L"Stream enumeration is incomplete.\r\n"
-            L"Stream names cannot be displayed or previewed.\r\n"
-            L"The metadata exceeds the supported limit.");
+            L"Stream enumeration is incomplete or failed.\r\n"
+            L"Some stream names may be unavailable for preview.\r\n"
+            L"Do not interpret this inventory as a clean result.");
     }
     else if (!streams.empty())
     {

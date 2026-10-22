@@ -204,10 +204,14 @@ StreamEnumeration AlternateStreamReader::EnumerateStreams(HANDLE file, bool coll
 
         // Preserve the default stream for compatibility; collect other
         // names only when they are safe for path-based consumers.
-        if (collectNames && (defaultStream ||
-            stream_info_detail::IsNamedDataStreamName(
-                record.name, record.nameBytes / sizeof(WCHAR))))
-            result.streams.emplace_back(record.name, record.nameBytes / sizeof(WCHAR));
+        if (collectNames)
+        {
+            if (defaultStream || stream_info_detail::IsNamedDataStreamName(
+                record.name, record.nameBytes / sizeof(WCHAR)))
+                result.streams.emplace_back(record.name, record.nameBytes / sizeof(WCHAR));
+            else
+                ++result.undisplayableNames;
+        }
 
         if (record.nextOffset == 0)
             return result;
@@ -244,7 +248,8 @@ StreamEnumeration AlternateStreamReader::EnumerateStreams(LPCWSTR filename, bool
 std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(HANDLE file) const
 {
     auto result = EnumerateStreams(file);
-    if (result.status != StreamStatus::Ok)
+    // The vector-only API cannot report partial or failed enumeration.
+    if (result.NeedsNotice())
         return {};
     return std::move(result.streams);
 }
@@ -252,7 +257,8 @@ std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(HANDLE fil
 std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(LPCWSTR filename) const
 {
     auto result = EnumerateStreams(filename);
-    if (result.status != StreamStatus::Ok)
+    // The vector-only API cannot report partial or failed enumeration.
+    if (result.NeedsNotice())
         return {};
     return std::move(result.streams);
 }

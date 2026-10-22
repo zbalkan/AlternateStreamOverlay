@@ -326,6 +326,28 @@ namespace AlternateStreamTests
         }
     };
 
+    TEST_CLASS(EnumerationResultTests)
+    {
+    public:
+        TEST_METHOD(UncertainAndUndisplayableResultsRequireNotice)
+        {
+            StreamEnumeration result;
+            result.status = StreamStatus::Ok;
+            Assert::IsFalse(result.NeedsNotice());
+
+            result.undisplayableNames = 1;
+            result.hasNamedStreams = true;
+            Assert::IsTrue(result.NeedsNotice());
+
+            result.undisplayableNames = 0;
+            result.status = StreamStatus::Truncated;
+            Assert::IsTrue(result.NeedsNotice());
+
+            result.status = StreamStatus::Error;
+            Assert::IsTrue(result.NeedsNotice());
+        }
+    };
+
     TEST_CLASS(StreamReaderTests)
     {
     public:
