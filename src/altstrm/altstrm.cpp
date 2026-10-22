@@ -112,7 +112,7 @@ namespace
 
     bool ReportStreams(const AlternateStreamReader& reader, const std::wstring& fullPath)
     {
-        const StreamEnumeration enumeration = reader.EnumerateStreams(fullPath.c_str());
+        auto enumeration = reader.EnumerateStreams(fullPath.c_str());
         if (enumeration.status != StreamStatus::Ok)
         {
             const std::wstring reason = enumeration.status == StreamStatus::Truncated
@@ -123,7 +123,7 @@ namespace
             return false;
         }
 
-        std::vector<std::wstring> names = enumeration.streams;
+        auto& names = enumeration.streams;
         // The unnamed default stream is not an alternate data stream.
         names.erase(std::remove(names.begin(), names.end(), L"::$DATA"), names.end());
         if (names.empty())
