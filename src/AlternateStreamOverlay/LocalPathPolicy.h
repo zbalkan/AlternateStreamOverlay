@@ -7,13 +7,13 @@
 // the drive itself is local. This is a best-effort, fail-closed guard.
 inline bool CanEnumerateExplorerPath(const std::wstring& path)
 {
-    if (path.compare(0, 2, L"\\\\") == 0 && path.compare(0, 4, L"\\\\?\\") != 0)
+    if (path.compare(0, 2, LR"(\\)") == 0 && path.compare(0, 4, LR"(\\?\)") != 0)
         return false;
 
     // CF_HDROP supplies absolute paths. Reject unrecognized path forms rather
     // than risk synchronous remote I/O in Explorer's initialization callback.
     size_t offset = 0;
-    if (path.compare(0, 4, L"\\\\?\\") == 0)
+    if (path.compare(0, 4, LR"(\\?\)") == 0)
         offset = 4;
     if (path.size() < offset + 3)
         return false;
