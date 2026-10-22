@@ -46,7 +46,7 @@ namespace
                 return HRESULT_FROM_WIN32(status);
             }
 
-            std::array<WCHAR, 64> registeredClsid = {};
+            auto registeredClsid = std::array<WCHAR, 64>{};
             DWORD bytes = static_cast<DWORD>(
                 registeredClsid.size() * sizeof(WCHAR));
             status = RegGetValueW(key, nullptr, nullptr, RRF_RT_REG_SZ,
