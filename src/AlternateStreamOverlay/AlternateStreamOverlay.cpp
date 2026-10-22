@@ -146,7 +146,7 @@ namespace
             return true; // Do not risk removing an unknown existing registration.
 
         const HKEY root = perUser ? HKEY_CURRENT_USER : HKEY_LOCAL_MACHINE;
-        constexpr LPCWSTR classKeys[] = {
+        constexpr std::array<LPCWSTR, 2> classKeys = {
             L"Software\\Classes\\CLSID\\{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}",
             L"Software\\Classes\\CLSID\\{4A26024B-5499-45BE-A23F-4A65E88888D0}"
         };
