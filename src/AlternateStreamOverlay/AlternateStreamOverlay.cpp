@@ -3,6 +3,7 @@
 #include "AlternateStreamOverlay_i.h"
 #include "dllmain.h"
 #include "dlldatax.h"
+#include "RegistrationPolicy.h"
 #include <array>
 #include <ktmw32.h>
 #pragma comment(lib, "KtmW32.lib")
@@ -81,9 +82,21 @@ namespace
 
         HKEY key = nullptr;
         const LONG status = RegCreateKeyExW(root, OverlayKey, 0, nullptr,
-            REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, nullptr, &key, nullptr);
+            REG_OPTION_NON_VOLATILE, KEY_QUERY_VALUE | KEY_SET_VALUE,
+            nullptr, &key, nullptr);
         if (status != ERROR_SUCCESS)
             return HRESULT_FROM_WIN32(status);
+
+        std::array<WCHAR, 64> registeredClsid = {};
+        DWORD bytes = static_cast<DWORD>(registeredClsid.size() * sizeof(WCHAR));
+        const LONG readStatus = RegGetValueW(key, nullptr, nullptr,
+            RRF_RT_REG_SZ, nullptr, registeredClsid.data(), &bytes);
+        if (!CanReplaceOverlayRegistration(readStatus, registeredClsid.data()))
+        {
+            RegCloseKey(key);
+            return HRESULT_FROM_WIN32(readStatus == ERROR_SUCCESS
+                ? ERROR_ALREADY_EXISTS : readStatus);
+        }
 
         const LONG valueStatus = RegSetValueExW(key, nullptr, 0, REG_SZ,
             reinterpret_cast<const BYTE*>(OverlayClsid), sizeof(OverlayClsid));
