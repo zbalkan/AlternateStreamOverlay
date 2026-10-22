@@ -11,9 +11,8 @@
 
 namespace
 {
-    // Write UTF-16 directly to a console. Redirected output is UTF-8 without
-    // a BOM, independent of the active Windows console code page. Unpaired
-    // UTF-16 surrogates in NTFS names are replaced during UTF-8 encoding.
+    // Write UTF-16 directly to a console; redirected output uses UTF-8.
+    // Caller escapes unsafe code units before formatting untrusted paths.
     bool WriteOutput(const std::wstring& text, DWORD standardHandle = STD_OUTPUT_HANDLE)
     {
         const HANDLE output = GetStdHandle(standardHandle);
@@ -67,10 +66,43 @@ namespace
         return WriteOutput(text, STD_ERROR_HANDLE);
     }
 
+    // Escape UTF-16 code units that cannot be represented unambiguously
+    // in terminal output. Keep native stream names unchanged for I/O.
+    std::wstring EscapeDisplay(const std::wstring& name)
+    {
+        constexpr wchar_t hex[] = L"0123456789ABCDEF";
+        std::wstring output;
+        for (wchar_t ch : name)
+        {
+            const auto value = static_cast<unsigned int>(ch);
+            const bool unsafe = value < 0x20 || (value >= 0x7F && value <= 0x9F) ||
+                value == 0x061C || value == 0x200E || value == 0x200F ||
+                (value >= 0x202A && value <= 0x202E) ||
+                (value >= 0x2066 && value <= 0x2069) ||
+                (value >= 0xD800 && value <= 0xDFFF);
+            if (ch == L'\\')
+            {
+                output += L"\\\\";
+                continue;
+            }
+            if (!unsafe)
+            {
+                output += ch;
+                continue;
+            }
+            output += L"\\u";
+            output += hex[(value >> 12) & 15];
+            output += hex[(value >> 8) & 15];
+            output += hex[(value >> 4) & 15];
+            output += hex[value & 15];
+        }
+        return output;
+    }
+
     void PrintUsage(int argc, wchar_t* argv[])
     {
         const std::wstring program = argc > 0 ? argv[0] : L"altstrm";
-        WriteOutput(program + L" [file path/spec]\r\n");
+        WriteOutput(EscapeDisplay(program) + L" [file path/spec]\r\n");
     }
 
     std::wstring SearchDirectory(const std::wstring& pattern)
@@ -110,33 +142,6 @@ namespace
             WriteSearchError(error);
     }
 
-    // Escape terminal controls and bidirectional formatting marks without
-    // changing the underlying UTF-16 stream-name inventory.
-    std::wstring EscapeDisplay(const std::wstring& name)
-    {
-        constexpr wchar_t hex[] = L"0123456789ABCDEF";
-        std::wstring output;
-        for (wchar_t ch : name)
-        {
-            const auto value = static_cast<unsigned int>(ch);
-            const bool unsafe = value < 0x20 || (value >= 0x7F && value <= 0x9F) ||
-                value == 0x061C || value == 0x200E || value == 0x200F ||
-                (value >= 0x202A && value <= 0x202E) ||
-                (value >= 0x2066 && value <= 0x2069);
-            if (!unsafe)
-            {
-                output += ch;
-                continue;
-            }
-            output += L"\\u";
-            output += hex[(value >> 12) & 15];
-            output += hex[(value >> 8) & 15];
-            output += hex[(value >> 4) & 15];
-            output += hex[value & 15];
-        }
-        return output;
-    }
-
     bool ReportStreams(const AlternateStreamReader& reader, const std::wstring& fullPath)
     {
         auto enumeration = reader.EnumerateStreams(fullPath.c_str());
@@ -145,7 +150,7 @@ namespace
             const std::wstring reason = enumeration.status == StreamStatus::Truncated
                 ? L"Incomplete stream enumeration"
                 : L"Stream enumeration failed";
-            WriteError(reason + L" for " + fullPath + L" (Win32 error " +
+            WriteError(reason + L" for " + EscapeDisplay(fullPath) + L" (Win32 error " +
                 std::to_wstring(enumeration.error) + L")\r\n");
             return false;
         }
@@ -203,7 +208,7 @@ int wmain(int argc, wchar_t* argv[])
     // Exact directory arguments enumerate their own streams, not children.
     const std::wstring pattern(argv[1]);
     const std::wstring directory = SearchDirectory(pattern);
-    if (!WriteOutput(L"Files with alternate streams matching " + pattern + L"\r\n"))
+    if (!WriteOutput(L"Files with alternate streams matching " + EscapeDisplay(pattern) + L"\r\n"))
         return 1;
 
     AlternateStreamReader reader;
