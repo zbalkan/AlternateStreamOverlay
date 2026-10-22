@@ -9,6 +9,7 @@
 #include <exception>
 #include "Common.h"
 #include "SrwLock.h"
+#include "stream_info_detail.h"
 
 namespace
 {
@@ -178,8 +179,12 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
         // expose a notice instead of inventing stream names.
         const bool incomplete = enumeration.NeedsNotice();
         auto& streams = enumeration.streams;
-        streams.erase(std::remove(streams.begin(), streams.end(), L"::$DATA"),
-                      streams.end());
+        streams.erase(std::remove_if(streams.begin(), streams.end(),
+            [](const std::wstring& name)
+            {
+                return name == L"::$DATA" ||
+                    !stream_info_detail::IsNamedDataStreamName(name.data(), name.size());
+            }), streams.end());
         if (streams.empty() && !incomplete)
             return E_FAIL;
 

@@ -210,8 +210,11 @@ function Assert-CliPathCase {
     $lines = $output -split '\r?\n'
     foreach ($expectedPath in $Case.ExpectedPaths) {
         $found = $false
+        # Display output doubles backslashes to distinguish literal paths
+        # from escaped UTF-16 control sequences.
+        $displayPath = $expectedPath.Replace('\', '\\')
         for ($index = 0; $index -lt $lines.Length - 1; $index++) {
-            if ($lines[$index] -ceq $expectedPath -and
+            if ($lines[$index] -ceq $displayPath -and
                 $lines[$index + 1] -ceq ' :pathcheck:$DATA') {
                 $found = $true
                 break
@@ -331,7 +334,7 @@ function Test-ScanIncludesErrorAndResult {
     # since merging two redirected pipes can interleave partial lines.
     $lines = @($Output -split '\r?\n')
     for ($i = 0; $i + 1 -lt $lines.Count; $i++) {
-        if ($lines[$i] -ceq $Following -and
+        if ($lines[$i] -ceq $Following.Replace('\', '\\') -and
             $lines[$i + 1] -ceq ' :afterfailure:$DATA') {
             return $true
         }
@@ -387,7 +390,7 @@ function Test-WildcardContinuesAfterFailure {
                 if ($process.ExitCode -eq 0) {
                     throw "Wildcard scan did not report partial failure: $stdout $stderr"
                 }
-                if (-not $stderr.Contains('Stream enumeration failed for ' + $blocked)) {
+                if (-not $stderr.Contains('Stream enumeration failed for ' + $blocked.Replace('\', '\\'))) {
                     throw "Wildcard scan omitted per-item stderr error: $stderr"
                 }
                 if (-not (Test-ScanIncludesErrorAndResult -Output $stdout -Following $following)) {
@@ -440,13 +443,13 @@ function Test-RedirectedErrorDiagnostics {
                 throw 'Partial wildcard enumeration should exit nonzero.'
             }
             if (-not $stdout.Contains(':diagnostic:$DATA') -or
-                -not $stdout.Contains($plain)) {
+                -not $stdout.Contains($plain.Replace('\', '\\'))) {
                 throw "Successful results must remain on stdout: $stdout"
             }
             if ($stdout.Contains('Stream enumeration failed')) {
                 throw "Operational error leaked into stdout: $stdout"
             }
-            if (-not $stderr.Contains('Stream enumeration failed for ' + $broken)) {
+            if (-not $stderr.Contains('Stream enumeration failed for ' + $broken.Replace('\', '\\'))) {
                 throw "Missing per-file stderr diagnostic: $stderr"
             }
         }
@@ -480,7 +483,7 @@ function Test-RedirectedUnicodeOutput {
         if ($process.ExitCode -ne 0) { throw "Unicode CLI exited $($process.ExitCode)" }
         $strictUtf8 = [System.Text.UTF8Encoding]::new($false, $true)
         $output = $strictUtf8.GetString($bytes.ToArray())
-        if (-not $output.Contains($path) -or -not $output.Contains(':' + $streamName + ':$DATA')) {
+        if (-not $output.Contains($path.Replace('\', '\\')) -or -not $output.Contains(':' + $streamName + ':$DATA')) {
             throw "Redirected UTF-8 output lost Unicode path or ADS name: $output"
         }
     }
@@ -488,6 +491,70 @@ function Test-RedirectedUnicodeOutput {
         $process.Dispose()
     }
     Write-Host 'PASS: redirected UTF-8 Unicode path and ADS name'
+}
+
+function Test-EscapedBidiStreamName {
+    param([string] $Root)
+
+    $path = Join-Path $Root 'bidi-stream.txt'
+    [NativeAdsFixture]::Create($path)
+    $rawName = 'prefix' + [char]0x202E + 'suffix'
+    [NativeAdsFixture]::Create($path + ':' + $rawName)
+    $nativeNames = [NativeAdsFixture]::Streams($path)
+    if (-not (@($nativeNames | Where-Object {
+        [string]::Equals($_, ':' + $rawName + ':$DATA', [StringComparison]::Ordinal)
+    }).Count -eq 1)) { throw 'Native API did not preserve bidi stream fixture' }
+
+    $output = & $exe $path 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0) { throw "CLI failed on bidi stream: $output" }
+    if (-not $output.Contains('prefix\u202Esuffix') -or $output.Contains([string][char]0x202E)) {
+        throw "CLI did not escape bidi formatting control: $output"
+    }
+    Write-Host 'PASS: ADS bidi control is escaped'
+}
+
+function Test-EscapedLiteralBackslash {
+    param([string] $Root)
+
+    # Backslash is a Win32 path separator, not a valid ADS-name character.
+    # Place the literal "\u202E" sequence across a directory boundary instead.
+    $folder = Join-Path $Root 'u202E'
+    [System.IO.Directory]::CreateDirectory($folder) | Out-Null
+    $path = Join-Path $folder 'literal-escape.txt'
+    [NativeAdsFixture]::Create($path)
+    [NativeAdsFixture]::Create($path + ':literal')
+    $output = & $exe $path 2>&1 | Out-String
+    $displayPath = $path.Replace('\', '\\')
+    if ($LASTEXITCODE -ne 0 -or -not $output.Contains($displayPath) -or
+        -not $output.Contains(':literal:$DATA') -or
+        $output.Contains([string][char]0x202E)) {
+        throw "Literal backslash sequence was not preserved unambiguously: $output"
+    }
+    Write-Host 'PASS: literal backslash sequence is escaped'
+}
+
+function Test-EscapedSurrogateOutput {
+    param([string] $Root)
+
+    $path = Join-Path $Root 'surrogate-output.txt'
+    [NativeAdsFixture]::Create($path)
+    $rawName = 'unit_' + [string][char]0xD800
+    [NativeAdsFixture]::Create($path + ':' + $rawName)
+    $output = & $exe $path 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0 -or -not $output.Contains('unit_\uD800')) {
+        throw "Isolated UTF-16 surrogate was lost in CLI output: $output"
+    }
+}
+
+function Test-EscapedBanner {
+    param([string] $Root)
+
+    $pattern = Join-Path $Root ('missing' + [char]0x202E + '.txt')
+    $output = & $exe $pattern 2>&1 | Out-String
+    if (-not $output.Contains('missing\u202E.txt') -or
+        $output.Contains([string][char]0x202E)) {
+        throw "File pattern printed a raw bidi control: $output"
+    }
 }
 
 function Test-UnicodeNames {
@@ -564,6 +631,10 @@ try {
     Test-RedirectedErrorDiagnostics -Root $directory
     Test-RedirectedUnicodeOutput -Root $directory
     Test-UnicodeNames -Root $directory
+    Test-EscapedBidiStreamName -Root $directory
+    Test-EscapedLiteralBackslash -Root $directory
+    Test-EscapedSurrogateOutput -Root $directory
+    Test-EscapedBanner -Root $directory
     Write-Host 'PASS: all NTFS ADS integration tests'
 }
 finally {
@@ -571,3 +642,7 @@ finally {
     # cleanup is best-effort.
     Remove-Item -LiteralPath $directory -Recurse -Force -ErrorAction SilentlyContinue
 }
+
+# Earlier negative test cases intentionally invoke the CLI with nonzero exit
+# codes. Report success explicitly after all assertions and cleanup complete.
+exit 0
