@@ -11,6 +11,28 @@ permissions:
   contents: read
 
 jobs:
+  version-consistency:
+    name: Check version matches CHANGELOG
+    runs-on: windows-2025
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check version matches CHANGELOG
+        shell: pwsh
+        run: |
+          $header = Get-Content -LiteralPath 'src/version.h' -Raw
+          $parts = foreach ($n in 'MAJOR','MINOR','PATCH','BUILD') {
+            $m = [regex]::Match($header, ('(?m)^\s*#define\s+ASO_VERSION_{0}\s+(\d+)\s*$' -f $n))
+            if (-not $m.Success) { throw "Missing ASO_VERSION_$n" }
+            $m.Groups[1].Value
+          }
+          if ($parts[3] -ne '0') { throw 'ASO_VERSION_BUILD must be zero for a tagged release.' }
+          $version = $parts[0..2] -join '.'
+          $latest = [regex]::Match((Get-Content -LiteralPath 'CHANGELOG.md' -Raw),
+            '(?m)^## \[(\d+\.\d+\.\d+)\]').Groups[1].Value
+          if ($version -ne $latest) {
+            throw "src/version.h ($version) differs from latest CHANGELOG release ($latest)."
+          }
   build:
     name: ${{ matrix.configuration }} x64
     runs-on: windows-2025
@@ -60,6 +82,35 @@ jobs:
             throw "MSBuild failed with exit code $LASTEXITCODE"
           }
 
+
+      - name: Verify Release binary version resources
+        if: matrix.configuration == 'Release'
+        shell: pwsh
+        run: |
+          $header = Get-Content -LiteralPath 'src/version.h' -Raw
+          $parts = foreach ($n in 'MAJOR', 'MINOR', 'PATCH', 'BUILD') {
+            $match = [regex]::Match($header, ('(?m)^\s*#define\s+ASO_VERSION_{0}\s+(\d+)\s*$' -f $n))
+            if (-not $match.Success) { throw "Missing ASO_VERSION_$n" }
+            [int]$match.Groups[1].Value
+          }
+          $expected = $parts -join '.'
+          $binaries = @{
+            '.\\src\\AlternateStreamOverlay\\x64\\Release\\AlternateStreamOverlay.dll' = 'AlternateStreamOverlay.dll'
+            '.\\src\\x64\\Release\\altstrm.exe' = 'altstrm.exe'
+          }
+          foreach ($binary in $binaries.Keys) {
+            if (-not (Test-Path -LiteralPath $binary)) { throw "Missing Release binary: $binary" }
+            $info = [System.Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path -LiteralPath $binary).Path)
+            $actualFile = @($info.FileMajorPart, $info.FileMinorPart, $info.FileBuildPart, $info.FilePrivatePart) -join '.'
+            $actualProduct = @($info.ProductMajorPart, $info.ProductMinorPart, $info.ProductBuildPart, $info.ProductPrivatePart) -join '.'
+            if ($actualFile -ne $expected -or $actualProduct -ne $expected) {
+              throw "$binary VERSIONINFO mismatch: expected $expected, FileVersion=$actualFile, ProductVersion=$actualProduct"
+            }
+            if ($info.InternalName -ne $binaries[$binary] -or $info.OriginalFilename -ne $binaries[$binary]) {
+              throw "$binary version string metadata mismatch: InternalName='$($info.InternalName)', OriginalFilename='$($info.OriginalFilename)'"
+            }
+            Write-Host "$binary VERSIONINFO: $actualFile; InternalName=$($info.InternalName)"
+          }
 
       - name: Verify Release PE mitigations
         if: matrix.configuration == 'Release'
