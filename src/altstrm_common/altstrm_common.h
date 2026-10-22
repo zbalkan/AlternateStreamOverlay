@@ -46,10 +46,11 @@ struct StreamEnumeration
 class AlternateStreamReader
 {
 public:
-    StreamEnumeration EnumerateStreams(LPCWSTR filename, bool collectNames = true) const;
+    StreamEnumeration EnumerateStreams(LPCWSTR filename) const;
     bool HasAlternateStreams(LPCWSTR filename) const;
 
 private:
+    StreamEnumeration EnumerateStreams(LPCWSTR filename, bool collectNames) const;
     StreamEnumeration EnumerateStreams(HANDLE file, bool collectNames) const;
 };
 
