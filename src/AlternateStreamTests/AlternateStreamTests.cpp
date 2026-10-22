@@ -255,7 +255,8 @@ namespace
         HMODULE handle;
     };
 
-    Microsoft::WRL::ComPtr<IClassFactory> GetContextClassFactory(HMODULE moduleHandle)
+    Microsoft::WRL::ComPtr<IClassFactory> GetClassFactory(
+        HMODULE moduleHandle, REFCLSID clsid)
     {
         if (moduleHandle == nullptr)
             Assert::Fail(L"Unable to load overlay DLL");
@@ -266,33 +267,26 @@ namespace
         if (getClassObject == nullptr)
             Assert::Fail(L"DllGetClassObject not exported");
 
-        // CLSID_AlternateStreamContext from AlternateStreamOverlay.idl.
-        const CLSID clsid = { 0x4A26024B, 0x5499, 0x45BE,
-            { 0xA2, 0x3F, 0x4A, 0x65, 0xE8, 0x88, 0x88, 0xD0 } };
         Microsoft::WRL::ComPtr<IClassFactory> factory;
         Assert::IsTrue(SUCCEEDED(getClassObject(clsid, __uuidof(IClassFactory),
             reinterpret_cast<void**>(factory.GetAddressOf()))));
         return factory;
     }
 
+    Microsoft::WRL::ComPtr<IClassFactory> GetContextClassFactory(HMODULE moduleHandle)
+    {
+        // CLSID_AlternateStreamContext from AlternateStreamOverlay.idl.
+        const CLSID clsid = { 0x4A26024B, 0x5499, 0x45BE,
+            { 0xA2, 0x3F, 0x4A, 0x65, 0xE8, 0x88, 0x88, 0xD0 } };
+        return GetClassFactory(moduleHandle, clsid);
+    }
+
     Microsoft::WRL::ComPtr<IClassFactory> GetOverlayClassFactory(HMODULE moduleHandle)
     {
-        if (moduleHandle == nullptr)
-            Assert::Fail(L"Unable to load overlay DLL");
-
-        using GetClassObject = HRESULT (STDAPICALLTYPE*)(REFCLSID, REFIID, void**);
-        const auto getClassObject = reinterpret_cast<GetClassObject>(
-            GetProcAddress(moduleHandle, "DllGetClassObject"));
-        if (getClassObject == nullptr)
-            Assert::Fail(L"DllGetClassObject not exported");
-
         // CLSID_AlternateStreamOverlayIcon from AlternateStreamOverlay.idl.
         const CLSID clsid = { 0xFBAB8C58, 0x59C9, 0x4522,
             { 0xB7, 0xE8, 0x1A, 0x6A, 0xA2, 0x3B, 0x31, 0x8C } };
-        Microsoft::WRL::ComPtr<IClassFactory> factory;
-        Assert::IsTrue(SUCCEEDED(getClassObject(clsid, __uuidof(IClassFactory),
-            reinterpret_cast<void**>(factory.GetAddressOf()))));
-        return factory;
+        return GetClassFactory(moduleHandle, clsid);
     }
 
     BOOL CALLBACK CapturePropertyPage(HPROPSHEETPAGE page, LPARAM context)
