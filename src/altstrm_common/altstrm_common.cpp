@@ -61,6 +61,25 @@ namespace
                 buffer.resize(InvalidParameterRetrySize);
                 continue;
             }
+            if (error == ERROR_INVALID_PARAMETER ||
+                error == ERROR_INVALID_FUNCTION ||
+                error == ERROR_NOT_SUPPORTED)
+            {
+                // Only a confirmed lack of named-stream support means an
+                // empty inventory; retain the native error otherwise.
+                DWORD flags = 0;
+                const bool volumeInfoAvailable =
+                    GetVolumeInformationByHandleW(file, nullptr, 0, nullptr,
+                        nullptr, &flags, nullptr, 0) != FALSE;
+                if (stream_info_detail::IsUnsupportedStreamQuery(
+                        error, volumeInfoAvailable, flags))
+                {
+                    buffer.clear();
+                    error = ERROR_SUCCESS;
+                    return StreamStatus::Ok;
+                }
+                return StreamStatus::Error;
+            }
             if (error != ERROR_MORE_DATA && error != ERROR_INSUFFICIENT_BUFFER)
                 return StreamStatus::Error;
             if (buffer.size() >= MaxBufferSize)
@@ -72,6 +91,15 @@ namespace
             buffer.resize(buffer.size() * 2);
         }
     }
+}
+
+bool stream_info_detail::IsUnsupportedStreamQuery(
+    DWORD queryError, bool volumeInfoAvailable, DWORD volumeFlags)
+{
+    return volumeInfoAvailable && (volumeFlags & FILE_NAMED_STREAMS) == 0 &&
+        (queryError == ERROR_INVALID_PARAMETER ||
+         queryError == ERROR_INVALID_FUNCTION ||
+         queryError == ERROR_NOT_SUPPORTED);
 }
 
 bool stream_info_detail::ReadRecord(

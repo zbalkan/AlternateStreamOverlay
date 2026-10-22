@@ -356,6 +356,57 @@ namespace AlternateStreamTests
             Assert::AreEqual(static_cast<DWORD>(ERROR_INVALID_PARAMETER), invalidPath.error);
         }
 
+        TEST_METHOD(EnumerationHonorsVolumeStreamCapability)
+        {
+            TemporaryFile fixture;
+            HandleW file(CreateFileW(fixture.path.data(), 0,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr));
+            Assert::IsTrue(file.get() != INVALID_HANDLE_VALUE);
+
+            DWORD flags = 0;
+            Assert::IsTrue(GetVolumeInformationByHandleW(file.get(), nullptr, 0,
+                nullptr, nullptr, &flags, nullptr, 0) != FALSE);
+
+            AlternateStreamReader reader;
+            const auto result = reader.EnumerateStreams(file.get());
+            if ((flags & FILE_NAMED_STREAMS) == 0)
+            {
+                // Run on FAT32/exFAT as well as NTFS: unsupported volumes
+                // contain no ADS, not an incomplete or failed ADS inventory.
+                Assert::IsTrue(result.status == StreamStatus::Ok);
+                Assert::IsFalse(result.hasNamedStreams);
+                Assert::IsTrue(result.streams.empty());
+            }
+            else
+            {
+                Assert::IsTrue(result.status == StreamStatus::Ok);
+                Assert::IsFalse(result.hasNamedStreams);
+            }
+        }
+
+        TEST_METHOD(UnsupportedStreamQueryRequiresConfirmedVolumeCapability)
+        {
+            // Inject native query errors and volume capabilities rather than
+            // relying on whichever filesystem hosts the CI temporary file.
+            const DWORD errors[] = {
+                ERROR_INVALID_PARAMETER, ERROR_INVALID_FUNCTION, ERROR_NOT_SUPPORTED
+            };
+            for (const DWORD error : errors)
+            {
+                Assert::IsTrue(stream_info_detail::IsUnsupportedStreamQuery(
+                    error, true, 0));
+                Assert::IsFalse(stream_info_detail::IsUnsupportedStreamQuery(
+                    error, true, FILE_NAMED_STREAMS));
+                Assert::IsFalse(stream_info_detail::IsUnsupportedStreamQuery(
+                    error, false, 0));
+            }
+            Assert::IsFalse(stream_info_detail::IsUnsupportedStreamQuery(
+                ERROR_ACCESS_DENIED, true, 0));
+            Assert::IsFalse(stream_info_detail::IsUnsupportedStreamQuery(
+                ERROR_MORE_DATA, true, 0));
+        }
+
         TEST_METHOD(EnumerationPreservesNamedStreamEvidence)
         {
             TemporaryFile fixture;
