@@ -510,6 +510,43 @@ function Test-EscapedBidiStreamName {
     Write-Host 'PASS: ADS bidi control is escaped'
 }
 
+function Test-EscapedLiteralBackslash {
+    param([string] $Root)
+
+    $path = Join-Path $Root 'literal-escape.txt'
+    [NativeAdsFixture]::Create($path)
+    $rawName = 'literal\u202E'
+    [NativeAdsFixture]::Create($path + ':' + $rawName)
+    $output = & $exe $path 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0 -or -not $output.Contains('literal\\u202E')) {
+        throw "Literal backslash escape sequence was ambiguous: $output"
+    }
+}
+
+function Test-EscapedSurrogateOutput {
+    param([string] $Root)
+
+    $path = Join-Path $Root 'surrogate-output.txt'
+    [NativeAdsFixture]::Create($path)
+    $rawName = 'unit_' + [string][char]0xD800
+    [NativeAdsFixture]::Create($path + ':' + $rawName)
+    $output = & $exe $path 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0 -or -not $output.Contains('unit_\uD800')) {
+        throw "Isolated UTF-16 surrogate was lost in CLI output: $output"
+    }
+}
+
+function Test-EscapedBanner {
+    param([string] $Root)
+
+    $pattern = Join-Path $Root ('missing' + [char]0x202E + '.txt')
+    $output = & $exe $pattern 2>&1 | Out-String
+    if (-not $output.Contains('missing\u202E.txt') -or
+        $output.Contains([string][char]0x202E)) {
+        throw "File pattern printed a raw bidi control: $output"
+    }
+}
+
 function Test-UnicodeNames {
     param([string] $Root)
     $high = [string][char]0xD800
@@ -585,6 +622,9 @@ try {
     Test-RedirectedUnicodeOutput -Root $directory
     Test-UnicodeNames -Root $directory
     Test-EscapedBidiStreamName -Root $directory
+    Test-EscapedLiteralBackslash -Root $directory
+    Test-EscapedSurrogateOutput -Root $directory
+    Test-EscapedBanner -Root $directory
     Write-Host 'PASS: all NTFS ADS integration tests'
 }
 finally {
