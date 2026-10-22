@@ -223,6 +223,39 @@ namespace AlternateStreamTests
     TEST_CLASS(ComInitializationTests)
     {
     public:
+        TEST_METHOD(GetCommandStringRejectsUnsupportedFlags)
+        {
+            ScopedModule module(GetOverlayDllPath().c_str());
+            Assert::IsTrue(module.handle != nullptr);
+            using GetClassObject = HRESULT (STDAPICALLTYPE*)(REFCLSID, REFIID, void**);
+            const auto getClassObject = reinterpret_cast<GetClassObject>(
+                GetProcAddress(module.handle, "DllGetClassObject"));
+            Assert::IsTrue(getClassObject != nullptr);
+            const CLSID clsid = { 0x4A26024B, 0x5499, 0x45BE,
+                { 0xA2, 0x3F, 0x4A, 0x65, 0xE8, 0x88, 0x88, 0xD0 } };
+            Microsoft::WRL::ComPtr<IClassFactory> factory;
+            Assert::IsTrue(SUCCEEDED(getClassObject(clsid, __uuidof(IClassFactory),
+                reinterpret_cast<void**>(factory.GetAddressOf()))));
+            Microsoft::WRL::ComPtr<IContextMenu> menu;
+            Assert::IsTrue(SUCCEEDED(factory->CreateInstance(nullptr,
+                __uuidof(IContextMenu),
+                reinterpret_cast<void**>(menu.GetAddressOf()))));
+
+            WCHAR buffer[64] = {};
+            auto* bytes = reinterpret_cast<LPSTR>(buffer);
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                menu->GetCommandString(0, GCS_VERBW, nullptr, bytes, 64));
+            Assert::AreEqual(L"alternatestreams", buffer);
+            Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG),
+                menu->GetCommandString(0, GCS_VERBICONW, nullptr, bytes, 64));
+            Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG),
+                menu->GetCommandString(0, GCS_VERBW | 0x40, nullptr, bytes, 64));
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                menu->GetCommandString(0, GCS_VALIDATEW, nullptr, nullptr, 0));
+            Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG),
+                menu->GetCommandString(1, GCS_VALIDATEW, nullptr, nullptr, 0));
+        }
+
         TEST_METHOD(FailedReinitializationDiscardsPreviousSelection)
         {
             const std::wstring dllPath = GetOverlayDllPath();
