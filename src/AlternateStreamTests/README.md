@@ -9,6 +9,10 @@ Explorer. The tests use temporary files on the current Windows TEMP volume;
 NTFS stream tests require a volume that supports named data streams.
 
 The tests cover named data stream enumeration, preview formatting and decoding,
-and synthetic malformed FILE_STREAM_INFO records (including invalid lengths,
-offsets, and truncated headers). COM property-page lifecycle tests remain a
-follow-up case; this project does not yet validate Explorer UI behavior.
+synthetic malformed FILE_STREAM_INFO records (including invalid lengths,
+offsets, and truncated headers), and COM interface contracts.
+
+The COM tests load the overlay DLL directly without registering it in Explorer.
+They exercise context-menu and property-page lifecycles, overlay icon metadata,
+buffer truncation, and overlay membership for a temporary file as its named
+stream is created and removed. These tests do not validate Explorer UI behavior.
