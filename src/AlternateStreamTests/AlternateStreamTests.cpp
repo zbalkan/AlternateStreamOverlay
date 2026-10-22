@@ -364,14 +364,18 @@ namespace AlternateStreamTests
         {
             TemporaryFile fixture;
             if (!CanEnumerateExplorerPath(fixture.path.data()))
+            {
+                Logger::WriteMessage(L"SKIP: temporary directory is ineligible for Explorer path probing.");
                 return;
+            }
 
             const std::wstring root = fixture.path.data();
             const std::wstring link = root + L".junction";
             const std::wstring target = root + L".target";
-            if (!CreateDirectoryW(target.c_str(), nullptr))
-                return;
+            Assert::IsTrue(CreateDirectoryW(target.c_str(), nullptr) != FALSE,
+                L"Unable to create junction target");
 
+            // Setup failures must not turn this regression into a false pass.
             // Junctions are directory reparse points, unlike plain filenames.
             const std::wstring command = L"cmd.exe /d /c mklink /J \"" +
                 link + L"\" \"" + target + L"\" >nul 2>&1";
@@ -380,22 +384,37 @@ namespace AlternateStreamTests
             STARTUPINFOW startup = {};
             startup.cb = sizeof(startup);
             PROCESS_INFORMATION process = {};
-            if (CreateProcessW(nullptr, mutableCommand.data(), nullptr, nullptr,
-                FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process))
+            const BOOL started = CreateProcessW(nullptr, mutableCommand.data(),
+                nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr,
+                &startup, &process);
+            DWORD waitResult = WAIT_FAILED;
+            DWORD exitCode = STILL_ACTIVE;
+            if (started)
             {
-                WaitForSingleObject(process.hProcess, 10000);
+                waitResult = WaitForSingleObject(process.hProcess, 10000);
+                if (waitResult == WAIT_OBJECT_0)
+                    GetExitCodeProcess(process.hProcess, &exitCode);
                 CloseHandle(process.hThread);
                 CloseHandle(process.hProcess);
-                const DWORD attributes = GetFileAttributesW(link.c_str());
-                if (attributes != INVALID_FILE_ATTRIBUTES &&
-                    (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
-                {
-                    Assert::IsFalse(CanEnumerateExplorerPath(link + L"\\child.txt"));
-                    Assert::IsFalse(CanEnumerateExplorerPath(link));
-                }
+            }
+
+            const DWORD attributes = GetFileAttributesW(link.c_str());
+            const bool isJunction = attributes != INVALID_FILE_ATTRIBUTES &&
+                (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+            if (isJunction)
+            {
+                Assert::IsFalse(CanEnumerateExplorerPath(link + L"\child.txt"));
+                Assert::IsFalse(CanEnumerateExplorerPath(link));
                 RemoveDirectoryW(link.c_str());
             }
             RemoveDirectoryW(target.c_str());
+
+            Assert::IsTrue(started != FALSE, L"Unable to launch junction setup");
+            Assert::AreEqual(static_cast<DWORD>(WAIT_OBJECT_0), waitResult,
+                L"Junction setup did not finish");
+            Assert::AreEqual(static_cast<DWORD>(0), exitCode,
+                L"mklink junction setup failed");
+            Assert::IsTrue(isJunction, L"mklink did not create a reparse point");
         }
 
         TEST_METHOD(AcceptsOrdinaryLocalFile)
