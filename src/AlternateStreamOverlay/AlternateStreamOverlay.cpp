@@ -37,7 +37,15 @@ namespace
     class RegistryKey
     {
     public:
-        ~RegistryKey() { if (handle_ != nullptr) RegCloseKey(handle_); }
+        ~RegistryKey() { Close(); }
+        void Close()
+        {
+            if (handle_ != nullptr)
+            {
+                RegCloseKey(handle_);
+                handle_ = nullptr;
+            }
+        }
         RegistryKey(const RegistryKey&) = delete;
         RegistryKey& operator=(const RegistryKey&) = delete;
         RegistryKey() = default;
@@ -84,6 +92,7 @@ namespace
         if (status != ERROR_SUCCESS)
             return HRESULT_FROM_WIN32(status);
 
+        key.Close(); // Preserve the original close-before-delete sequence.
         status = RegDeleteKeyTransactedW(root, OverlayKey, 0, 0,
             transaction.get(), nullptr);
         // Another remover may already have deleted the key.
@@ -123,6 +132,7 @@ namespace
 
         status = RegSetValueExW(key.get(), nullptr, 0, REG_SZ,
             reinterpret_cast<const BYTE*>(OverlayClsid), sizeof(OverlayClsid));
+        key.Close(); // Preserve the original close-before-commit sequence.
         if (status == ERROR_SUCCESS && !CommitTransaction(transaction.get()))
             status = GetLastError();
         return HRESULT_FROM_WIN32(status);
