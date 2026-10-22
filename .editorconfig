@@ -1,10 +1,38 @@
-# top-most EditorConfig file
+# EditorConfig for Visual C++ and PowerShell
 root = true
 
-[*.{cpp,h,c,hpp,cc,cxx}]
+# Repository-wide defaults
+[*]
 charset = utf-8
 indent_style = space
 indent_size = 4
-end_of_line = crlf
+end_of_line = lf
 insert_final_newline = true
 trim_trailing_whitespace = true
+
+# Visual C++ source and headers
+[*.{c,cc,cpp,cxx,h,hh,hpp,hxx,rc}]
+indent_size = 4
+end_of_line = crlf
+
+# PowerShell scripts, modules and manifests
+[*.{ps1,psm1,psd1,ps1xml}]
+indent_size = 4
+end_of_line = crlf
+
+# Visual Studio / MSBuild XML files
+[*.{vcxproj,props,targets,filters,resx}]
+indent_size = 2
+end_of_line = crlf
+
+# GitHub Actions, YAML and JSON
+[*.{yml,yaml,json,jsonc}]
+indent_size = 2
+
+# Markdown
+[*.{md,markdown}]
+trim_trailing_whitespace = false
+
+# Batch scripts
+[*.{bat,cmd}]
+end_of_line = crlf
