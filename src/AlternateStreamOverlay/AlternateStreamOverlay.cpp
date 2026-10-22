@@ -3,6 +3,7 @@
 #include "AlternateStreamOverlay_i.h"
 #include "dllmain.h"
 #include "dlldatax.h"
+#include <array>
 
 namespace
 {
@@ -23,16 +24,16 @@ namespace
         {
             // Do not remove a registration that another application or
             // administrator has reassigned to a different overlay handler.
-            WCHAR registeredClsid[64] = {};
-            DWORD bytes = sizeof(registeredClsid);
+            std::array<WCHAR, 64> registeredClsid = {};
+            DWORD bytes = static_cast<DWORD>(registeredClsid.size() * sizeof(WCHAR));
             const LONG query = RegGetValueW(root, OverlayKey, nullptr,
-                RRF_RT_REG_SZ, nullptr, registeredClsid, &bytes);
+                RRF_RT_REG_SZ, nullptr, registeredClsid.data(), &bytes);
             if (query == ERROR_FILE_NOT_FOUND || query == ERROR_MORE_DATA ||
                 query == ERROR_UNSUPPORTED_TYPE)
                 return S_OK;
             if (query != ERROR_SUCCESS)
                 return HRESULT_FROM_WIN32(query);
-            if (_wcsicmp(registeredClsid, OverlayClsid) != 0)
+            if (_wcsicmp(registeredClsid.data(), OverlayClsid) != 0)
                 return S_OK;
 
             const LONG status = RegDeleteKeyW(root, OverlayKey);
