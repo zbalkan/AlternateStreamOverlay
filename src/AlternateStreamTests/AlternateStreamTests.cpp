@@ -376,7 +376,7 @@ namespace AlternateStreamTests
             const std::wstring command = L"cmd.exe /d /c mklink /J \"" +
                 link + L"\" \"" + target + L"\" >nul 2>&1";
             std::vector<wchar_t> mutableCommand(command.begin(), command.end());
-            mutableCommand.push_back(L'\\0');
+            mutableCommand.push_back(L'\0');
             STARTUPINFOW startup = {};
             startup.cb = sizeof(startup);
             PROCESS_INFORMATION process = {};
