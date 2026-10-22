@@ -244,6 +244,45 @@ namespace AlternateStreamTests
     TEST_CLASS(OverlayRegistrationPolicyTests)
     {
     public:
+        TEST_METHOD(RegistrationRollbackPreservesExistingClasses)
+        {
+            Assert::IsTrue(ShouldRollbackComRegistration(false));
+            Assert::IsFalse(ShouldRollbackComRegistration(true));
+        }
+
+        TEST_METHOD(RegistryProbeDetectsExistingClassKeys)
+        {
+            // An isolated volatile HKCU subtree avoids changing COM registration.
+            HKEY sandbox = nullptr;
+            const LONG createStatus = RegCreateKeyExW(HKEY_CURRENT_USER,
+                L"Software\\AlternateStreamOverlayTests\\RegistrationProbe",
+                0, nullptr, REG_OPTION_VOLATILE, KEY_ALL_ACCESS, nullptr,
+                &sandbox, nullptr);
+            if (createStatus != ERROR_SUCCESS)
+                Assert::Fail(L"Unable to create registration probe sandbox");
+
+            constexpr LPCWSTR keys[] = { L"ClassA", L"ClassB" };
+            Assert::IsFalse(HasExistingComClassRegistration(sandbox, keys));
+
+            HKEY registered = nullptr;
+            const LONG classStatus = RegCreateKeyExW(sandbox, keys[1], 0,
+                nullptr, REG_OPTION_VOLATILE, KEY_ALL_ACCESS, nullptr,
+                &registered, nullptr);
+            if (classStatus != ERROR_SUCCESS)
+            {
+                RegCloseKey(sandbox);
+                Assert::Fail(L"Unable to create test COM class key");
+            }
+            RegCloseKey(registered);
+            Assert::IsTrue(HasExistingComClassRegistration(sandbox, keys));
+            Assert::AreEqual(static_cast<LONG>(ERROR_SUCCESS),
+                RegDeleteKeyW(sandbox, keys[1]));
+            Assert::IsFalse(HasExistingComClassRegistration(sandbox, keys));
+            RegCloseKey(sandbox);
+            RegDeleteKeyW(HKEY_CURRENT_USER,
+                L"Software\\AlternateStreamOverlayTests\\RegistrationProbe");
+        }
+
         TEST_METHOD(RejectsForeignOrUnreadableRegistration)
         {
             constexpr LPCWSTR expected = L"{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}";
