@@ -818,10 +818,14 @@ namespace AlternateStreamTests
             second->StreamName[0] = L'B';
 
             stream_info_detail::Record record = {};
-            Assert::IsTrue(stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 0, record));
+            if (!stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 0, record) ||
+                record.name == nullptr)
+                Assert::Fail(L"First aligned stream record is invalid");
             Assert::AreEqual(static_cast<size_t>(32), record.nextOffset);
             Assert::AreEqual(L'A', record.name[0]);
-            Assert::IsTrue(stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 32, record));
+            if (!stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 32, record) ||
+                record.name == nullptr)
+                Assert::Fail(L"Second aligned stream record is invalid");
             Assert::AreEqual(static_cast<size_t>(0), record.nextOffset);
             Assert::AreEqual(L'B', record.name[0]);
             Assert::IsFalse(stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 48, record));
