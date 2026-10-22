@@ -397,6 +397,51 @@ namespace AlternateStreamTests
             Assert::AreEqual(static_cast<DWORD>(ISIOI_ICONFILE | ISIOI_ICONINDEX), flags);
         }
 
+        TEST_METHOD(OverlayInfoRejectsTruncatedIconPath)
+        {
+            ScopedModule module(GetOverlayDllPath().c_str());
+            auto factory = GetOverlayClassFactory(module.handle);
+            Microsoft::WRL::ComPtr<IShellIconOverlayIdentifier> overlay;
+            Assert::IsTrue(SUCCEEDED(factory->CreateInstance(nullptr,
+                __uuidof(IShellIconOverlayIdentifier),
+                reinterpret_cast<void**>(overlay.GetAddressOf()))));
+
+            std::array<WCHAR, 1> iconFile = { L'X' };
+            int index = -1;
+            DWORD flags = 0xFFFFFFFF;
+            Assert::AreEqual(HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER),
+                overlay->GetOverlayInfo(iconFile.data(),
+                    static_cast<int>(iconFile.size()), &index, &flags));
+            Assert::AreEqual(L'\0', iconFile.front());
+            Assert::AreEqual(0, index);
+            Assert::AreEqual(static_cast<DWORD>(0), flags);
+        }
+
+        TEST_METHOD(OverlayMembershipTracksNamedDataStream)
+        {
+            ScopedModule module(GetOverlayDllPath().c_str());
+            auto factory = GetOverlayClassFactory(module.handle);
+            Microsoft::WRL::ComPtr<IShellIconOverlayIdentifier> overlay;
+            Assert::IsTrue(SUCCEEDED(factory->CreateInstance(nullptr,
+                __uuidof(IShellIconOverlayIdentifier),
+                reinterpret_cast<void**>(overlay.GetAddressOf()))));
+
+            TemporaryFile fixture;
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                overlay->IsMemberOf(fixture.path.data(), FILE_ATTRIBUTE_NORMAL));
+
+            CreateStream(std::wstring(fixture.path.data()) + L":overlay-test");
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                overlay->IsMemberOf(fixture.path.data(), FILE_ATTRIBUTE_NORMAL));
+
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                overlay->IsMemberOf(fixture.path.data(), FILE_ATTRIBUTE_OFFLINE));
+            Assert::IsTrue(DeleteFileW(
+                (std::wstring(fixture.path.data()) + L":overlay-test").c_str()) != FALSE);
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                overlay->IsMemberOf(fixture.path.data(), FILE_ATTRIBUTE_NORMAL));
+        }
+
         TEST_METHOD(GetCommandStringRejectsUnsupportedFlags)
         {
             ScopedModule module(GetOverlayDllPath().c_str());
