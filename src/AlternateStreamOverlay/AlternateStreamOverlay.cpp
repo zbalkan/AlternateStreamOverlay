@@ -3,6 +3,7 @@
 #include "AlternateStreamOverlay_i.h"
 #include "dllmain.h"
 #include "dlldatax.h"
+#include <array>
 
 namespace
 {
@@ -21,6 +22,22 @@ namespace
         const HKEY root = perUser ? HKEY_CURRENT_USER : HKEY_LOCAL_MACHINE;
         if (!install)
         {
+            // Best-effort ownership check: avoid deleting a registration
+            // already reassigned to a different handler. Win32 provides no
+            // ordinary conditional RegDeleteKey operation; an unrelated
+            // installer can still modify this key between read and delete.
+            std::array<WCHAR, 64> registeredClsid = {};
+            DWORD bytes = static_cast<DWORD>(registeredClsid.size() * sizeof(WCHAR));
+            const LONG query = RegGetValueW(root, OverlayKey, nullptr,
+                RRF_RT_REG_SZ, nullptr, registeredClsid.data(), &bytes);
+            if (query == ERROR_FILE_NOT_FOUND || query == ERROR_MORE_DATA ||
+                query == ERROR_UNSUPPORTED_TYPE)
+                return S_OK;
+            if (query != ERROR_SUCCESS)
+                return HRESULT_FROM_WIN32(query);
+            if (_wcsicmp(registeredClsid.data(), OverlayClsid) != 0)
+                return S_OK;
+
             const LONG status = RegDeleteKeyW(root, OverlayKey);
             return status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND
                 ? S_OK : HRESULT_FROM_WIN32(status);
