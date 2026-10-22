@@ -202,15 +202,13 @@ StreamEnumeration AlternateStreamReader::EnumerateStreams(HANDLE file, bool coll
         if (!defaultStream)
             result.hasNamedStreams = true;
 
-        // Preserve the default stream for compatibility; collect other
-        // names only when they are safe for path-based consumers.
+        // Inventory is lossless. Path safety belongs to the preview consumer.
         if (collectNames)
         {
-            if (defaultStream || stream_info_detail::IsNamedDataStreamName(
+            if (!defaultStream && !stream_info_detail::IsNamedDataStreamName(
                 record.name, record.nameBytes / sizeof(WCHAR)))
-                result.streams.emplace_back(record.name, record.nameBytes / sizeof(WCHAR));
-            else
                 ++result.undisplayableNames;
+            result.streams.emplace_back(record.name, record.nameBytes / sizeof(WCHAR));
         }
 
         if (record.nextOffset == 0)

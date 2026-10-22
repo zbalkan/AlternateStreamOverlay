@@ -110,6 +110,33 @@ namespace
             WriteSearchError(error);
     }
 
+    // Escape terminal controls and bidirectional formatting marks without
+    // changing the underlying UTF-16 stream-name inventory.
+    std::wstring EscapeDisplay(const std::wstring& name)
+    {
+        constexpr wchar_t hex[] = L"0123456789ABCDEF";
+        std::wstring output;
+        for (wchar_t ch : name)
+        {
+            const unsigned int value = static_cast<unsigned int>(ch);
+            const bool unsafe = value < 0x20 || (value >= 0x7F && value <= 0x9F) ||
+                value == 0x061C || value == 0x200E || value == 0x200F ||
+                (value >= 0x202A && value <= 0x202E) ||
+                (value >= 0x2066 && value <= 0x2069);
+            if (!unsafe)
+            {
+                output += ch;
+                continue;
+            }
+            output += L"\\u";
+            output += hex[(value >> 12) & 15];
+            output += hex[(value >> 8) & 15];
+            output += hex[(value >> 4) & 15];
+            output += hex[value & 15];
+        }
+        return output;
+    }
+
     bool ReportStreams(const AlternateStreamReader& reader, const std::wstring& fullPath)
     {
         auto enumeration = reader.EnumerateStreams(fullPath.c_str());
@@ -123,15 +150,8 @@ namespace
             return false;
         }
 
-        // A successful native query may still contain names that cannot be
-        // represented safely as Win32 paths. Never report such a scan clean.
-        if (enumeration.undisplayableNames != 0)
-        {
-            WriteError(L"Some stream names cannot be displayed for " + fullPath +
-                L" (count " + std::to_wstring(enumeration.undisplayableNames) +
-                L")\r\n");
-            return false;
-        }
+        // These raw names need not be usable as Win32 preview paths.
+        // Enumeration is complete even when preview-path validation fails.
 
         auto& names = enumeration.streams;
         // The unnamed default stream is not an alternate data stream.
@@ -139,9 +159,9 @@ namespace
         if (names.empty())
             return true;
 
-        std::wstring result = fullPath + L"\r\n";
+        std::wstring result = EscapeDisplay(fullPath) + L"\r\n";
         for (const auto& name : names)
-            result += L" " + name + L"\r\n";
+            result += L" " + EscapeDisplay(name) + L"\r\n";
         return WriteOutput(result);
     }
 
