@@ -158,11 +158,10 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
         if (pathLength == 0)
             return E_INVALIDARG;
 
-        std::vector<WCHAR> path(pathLength + 1);
-        if (DragQueryFileW(hDrop, 0, path.data(), static_cast<UINT>(path.size())) != pathLength)
+        std::wstring filePath(pathLength + 1, L'\0');
+        if (DragQueryFileW(hDrop, 0, &filePath[0], static_cast<UINT>(filePath.size())) != pathLength)
             return E_INVALIDARG;
-
-        std::wstring filePath(path.data(), pathLength);
+        filePath.resize(pathLength);
 
         // Do not hold the shell data object's storage during filesystem I/O.
         mediumGuard.Release();
