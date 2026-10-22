@@ -30,23 +30,47 @@ inline bool CanEnumerateExplorerPath(const std::wstring& path)
         driveType == DRIVE_NO_ROOT_DIR)
         return false;
 
-    // A drive-letter path may cross a junction or symbolic link into a
-    // remote location. Check each existing component before querying the
-    // selected item; reject reparse points instead of following them.
-    // This is a best-effort Explorer responsiveness guard, not a defense
-    // against concurrent path replacement.
+    // Reject SUBST/alias drive mappings, which may lead outside the local
+    // volume even though their drive type is reported as local.
+    const WCHAR drive[] = { letter, L':', L'\0' };
+    WCHAR target[1024] = {};
+    const DWORD targetLength = QueryDosDeviceW(drive, target, 1024);
+    if (targetLength == 0 || wcsncmp(target, LR"(\??\)", 4) == 0)
+        return false;
+
     constexpr DWORD excludedAttributes = FILE_ATTRIBUTE_REPARSE_POINT |
         FILE_ATTRIBUTE_OFFLINE | FILE_ATTRIBUTE_RECALL_ON_OPEN |
         FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS;
-    for (size_t end = offset + 3; end < path.size(); ++end)
+    const DWORD rootAttributes = GetFileAttributesW(root);
+    if (rootAttributes == INVALID_FILE_ATTRIBUTES ||
+        (rootAttributes & excludedAttributes) != 0)
+        return false;
+
+    // Sibling overlay callbacks repeatedly inspect the same ancestors.
+    // Cache only a successful directory walk, briefly and per thread.
+    // The leaf is always rechecked; this is not a security boundary.
+    const size_t lastSeparator = path.find_last_of(L"\\/");
+    if (lastSeparator == std::wstring::npos || lastSeparator < offset + 2)
+        return false;
+    const std::wstring directory = path.substr(0, lastSeparator);
+    static thread_local std::wstring cachedDirectory;
+    static thread_local DWORD cachedTick = 0;
+    const DWORD now = GetTickCount();
+    if (directory != cachedDirectory || now - cachedTick > 250)
     {
-        if (path[end] != L'\\' && path[end] != L'/')
-            continue;
-        const std::wstring parent = path.substr(0, end);
-        const DWORD attributes = GetFileAttributesW(parent.c_str());
-        if (attributes == INVALID_FILE_ATTRIBUTES ||
-            (attributes & excludedAttributes) != 0)
-            return false;
+        cachedDirectory.clear();
+        for (size_t end = offset + 3; end < path.size(); ++end)
+        {
+            if (path[end] != L'\\' && path[end] != L'/')
+                continue;
+            const std::wstring parent = path.substr(0, end);
+            const DWORD attributes = GetFileAttributesW(parent.c_str());
+            if (attributes == INVALID_FILE_ATTRIBUTES ||
+                (attributes & excludedAttributes) != 0)
+                return false;
+        }
+        cachedDirectory = directory;
+        cachedTick = now;
     }
 
     const DWORD attributes = GetFileAttributesW(path.c_str());
