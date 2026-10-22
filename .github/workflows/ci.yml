@@ -11,6 +11,27 @@ permissions:
   contents: read
 
 jobs:
+  version-consistency:
+    name: Check version matches CHANGELOG
+    runs-on: windows-2025
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check version matches CHANGELOG
+        shell: pwsh
+        run: |
+          $header = Get-Content -LiteralPath 'src/version.h' -Raw
+          $parts = foreach ($n in 'MAJOR','MINOR','PATCH') {
+            $m = [regex]::Match($header, "(?m)^\s*#define\s+ASO_VERSION_$n\s+(\d+)\s*$")
+            if (-not $m.Success) { throw "Missing ASO_VERSION_$n" }
+            $m.Groups[1].Value
+          }
+          $version = $parts -join '.'
+          $latest = [regex]::Match((Get-Content -LiteralPath 'CHANGELOG.md' -Raw),
+            '(?m)^## \[(\d+\.\d+\.\d+)\]').Groups[1].Value
+          if ($version -ne $latest) {
+            throw "src/version.h ($version) differs from latest CHANGELOG release ($latest)."
+          }
   build:
     name: ${{ matrix.configuration }} x64
     runs-on: windows-2025

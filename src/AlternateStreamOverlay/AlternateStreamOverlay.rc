@@ -57,38 +57,10 @@ END
 // Version
 //
 
-VS_VERSION_INFO VERSIONINFO
-FILEVERSION 1, 0, 0, 6
-PRODUCTVERSION 1, 0, 0, 6
-FILEFLAGSMASK 0x3fL
-#ifdef _DEBUG
-FILEFLAGS 0x1L
-#else
-FILEFLAGS 0x0L
-#endif
-FILEOS 0x4L
-FILETYPE 0x2L
-FILESUBTYPE 0x0L
-BEGIN
-BLOCK "StringFileInfo"
-BEGIN
-BLOCK "040904e4"
-BEGIN
-VALUE "CompanyName", "www.benf.org"
-VALUE "FileDescription", "Explorer plugin for Alternate stream info"
-VALUE "FileVersion", "1.0.0.6"
-VALUE "InternalName", "AlternateStreamOverlay.dll"
-VALUE "LegalCopyright", "(c) 2013 benf.org"
-VALUE "OriginalFilename", "AlternateStreamOverlay.dll"
-VALUE "ProductName", "AlternateStreamOverlay.dll"
-VALUE "ProductVersion", "1.0.0.6"
-END
-END
-BLOCK "VarFileInfo"
-BEGIN
-VALUE "Translation", 0x409, 1252
-END
-END
+#define ASO_FILE_DESCRIPTION "Explorer extension for NTFS alternate data streams"
+#define ASO_ORIGINAL_FILENAME "AlternateStreamOverlay.dll"
+#define ASO_FILETYPE VFT_DLL
+#include "..\\version.rc2"
 
 /////////////////////////////////////////////////////////////////////////////
 //
