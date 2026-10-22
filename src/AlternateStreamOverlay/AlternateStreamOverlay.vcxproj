@@ -183,6 +183,7 @@
     <ClInclude Include="AlternateStreamOverlayIcon.h" />
     <ClInclude Include="AlternateStreamOverlay_i.h" />
     <ClInclude Include="Common.h" />
+    <ClInclude Include="SrwLock.h" />
     <ClInclude Include="dlldatax.h" />
     <ClInclude Include="dllmain.h" />
     <ClInclude Include="Resource.h" />
