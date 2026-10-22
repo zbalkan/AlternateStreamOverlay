@@ -706,8 +706,6 @@ UINT CALLBACK PropPageCallbackProc(HWND, UINT uMsg, LPPROPSHEETPAGE ppsp)
     return 1;
 }
 
-typedef INT_PTR DLGRETURN;
-
 namespace
 {
 void OnPreviewReady(HWND hWnd, WPARAM wParam)
@@ -813,7 +811,7 @@ bool IsSelectionInput(UINT controlId, UINT notification)
            (controlId == IDC_CHECK1 && notification == BN_CLICKED);
 }
 
-DLGRETURN OnCommand(HWND hWnd, WPARAM wParam)
+INT_PTR OnCommand(HWND hWnd, WPARAM wParam)
 {
     if (!IsSelectionInput(LOWORD(wParam), HIWORD(wParam)))
         return FALSE;
@@ -835,7 +833,7 @@ DLGRETURN OnCommand(HWND hWnd, WPARAM wParam)
 }
 } // namespace
 
-DLGRETURN CALLBACK PropPageDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+INT_PTR CALLBACK PropPageDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     const UINT previewMessage = PreviewMessageId();
     if (previewMessage != 0 && uMsg == previewMessage)
