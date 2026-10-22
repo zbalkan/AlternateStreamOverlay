@@ -275,6 +275,26 @@ namespace
         return factory;
     }
 
+    Microsoft::WRL::ComPtr<IClassFactory> GetOverlayClassFactory(HMODULE moduleHandle)
+    {
+        if (moduleHandle == nullptr)
+            Assert::Fail(L"Unable to load overlay DLL");
+
+        using GetClassObject = HRESULT (STDAPICALLTYPE*)(REFCLSID, REFIID, void**);
+        const auto getClassObject = reinterpret_cast<GetClassObject>(
+            GetProcAddress(moduleHandle, "DllGetClassObject"));
+        if (getClassObject == nullptr)
+            Assert::Fail(L"DllGetClassObject not exported");
+
+        // CLSID_AlternateStreamOverlayIcon from AlternateStreamOverlay.idl.
+        const CLSID clsid = { 0xFBAB8C58, 0x59C9, 0x4522,
+            { 0xB7, 0xE8, 0x1A, 0x6A, 0xA2, 0x3B, 0x31, 0x8C } };
+        Microsoft::WRL::ComPtr<IClassFactory> factory;
+        Assert::IsTrue(SUCCEEDED(getClassObject(clsid, __uuidof(IClassFactory),
+            reinterpret_cast<void**>(factory.GetAddressOf()))));
+        return factory;
+    }
+
     BOOL CALLBACK CapturePropertyPage(HPROPSHEETPAGE page, LPARAM context)
     {
         *reinterpret_cast<HPROPSHEETPAGE*>(context) = page;
@@ -341,6 +361,45 @@ namespace AlternateStreamTests
     TEST_CLASS(ComInitializationTests)
     {
     public:
+        TEST_METHOD(OverlayInterfaceValidatesArguments)
+        {
+            ScopedModule module(GetOverlayDllPath().c_str());
+            auto factory = GetOverlayClassFactory(module.handle);
+            Microsoft::WRL::ComPtr<IShellIconOverlayIdentifier> overlay;
+            Assert::IsTrue(SUCCEEDED(factory->CreateInstance(nullptr,
+                __uuidof(IShellIconOverlayIdentifier),
+                reinterpret_cast<void**>(overlay.GetAddressOf()))));
+
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                overlay->IsMemberOf(nullptr, 0));
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                overlay->IsMemberOf(L"", 0));
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                overlay->IsMemberOf(L"\\\\server\\share\\file.txt", 0));
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                overlay->IsMemberOf(L"C:\\unused-file.txt", FILE_ATTRIBUTE_OFFLINE));
+
+            int priority = -1;
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                overlay->GetPriority(&priority));
+            Assert::AreEqual(10, priority);
+            Assert::AreEqual(static_cast<HRESULT>(E_POINTER),
+                overlay->GetPriority(nullptr));
+
+            WCHAR iconFile[MAX_PATH] = {};
+            int index = -1;
+            DWORD flags = 0;
+            Assert::AreEqual(static_cast<HRESULT>(E_POINTER),
+                overlay->GetOverlayInfo(nullptr, MAX_PATH, &index, &flags));
+            Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG),
+                overlay->GetOverlayInfo(iconFile, 0, &index, &flags));
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                overlay->GetOverlayInfo(iconFile, MAX_PATH, &index, &flags));
+            Assert::IsTrue(iconFile[0] != L'\\0');
+            Assert::AreEqual(0, index);
+            Assert::AreEqual(static_cast<DWORD>(ISIOI_ICONFILE | ISIOI_ICONINDEX), flags);
+        }
+
         TEST_METHOD(GetCommandStringRejectsUnsupportedFlags)
         {
             ScopedModule module(GetOverlayDllPath().c_str());
