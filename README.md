@@ -135,6 +135,10 @@ Both diagnostic scripts are read-only. They run in warning-only mode by default 
 
 The separate `shell-registration.yml` workflow validates registration on an isolated Windows runner and unregisters the extension during cleanup.
 
+## Releases
+
+Official Windows x64 release builds are staged through the manually triggered GitHub Actions workflow. See [the release procedure](docs/RELEASING.md) for version checks, release artifact verification, and publication requirements.
+
 ## Known limitations
 
 **Explorer overlay limits:** Windows Explorer supports only a limited number of shell icon overlay handlers. Other installed applications compete for these slots, so a correctly registered overlay is not guaranteed to appear.
