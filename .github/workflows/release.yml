@@ -59,6 +59,7 @@ jobs:
           if ($LASTEXITCODE -ne 1) { throw "Unable to check Git tag $tag (exit $LASTEXITCODE): $existing" }
           $existingRelease = & gh release view $tag --json id 2>&1
           if ($LASTEXITCODE -eq 0) { throw "GitHub release $tag already exists." }
+          if ($LASTEXITCODE -ne 1) { throw "Unable to check GitHub release $tag (exit $LASTEXITCODE): $existingRelease" }
           Write-Host "Release version $tag validated."
 
       - name: Set up Visual Studio 2026 MSBuild
