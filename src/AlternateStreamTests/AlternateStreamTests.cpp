@@ -699,25 +699,15 @@ namespace AlternateStreamTests
         TEST_METHOD(RejectsInvalidHandlesAndPaths)
         {
             AlternateStreamReader reader;
-            Assert::IsFalse(reader.HasAlternateStreams(static_cast<HANDLE>(nullptr)));
-            Assert::IsFalse(reader.HasAlternateStreams(INVALID_HANDLE_VALUE));
             Assert::IsFalse(reader.HasAlternateStreams(static_cast<LPCWSTR>(nullptr)));
             Assert::IsFalse(reader.HasAlternateStreams(L""));
-            Assert::IsTrue(reader.ListAlternateStreams(static_cast<HANDLE>(nullptr)).empty());
-            Assert::IsTrue(reader.ListAlternateStreams(INVALID_HANDLE_VALUE).empty());
-            Assert::IsTrue(reader.ListAlternateStreams(static_cast<LPCWSTR>(nullptr)).empty());
-            Assert::IsTrue(reader.ListAlternateStreams(L"").empty());
+            Assert::IsTrue(reader.EnumerateStreams(static_cast<LPCWSTR>(nullptr)).status == StreamStatus::Error);
+            Assert::IsTrue(reader.EnumerateStreams(L"").status == StreamStatus::Error);
         }
 
         TEST_METHOD(EnumerationReportsInvalidInput)
         {
             AlternateStreamReader reader;
-            const auto invalidHandle = reader.EnumerateStreams(INVALID_HANDLE_VALUE);
-            Assert::IsTrue(invalidHandle.status == StreamStatus::Error);
-            Assert::AreEqual(static_cast<DWORD>(ERROR_INVALID_HANDLE), invalidHandle.error);
-            Assert::IsFalse(invalidHandle.hasNamedStreams);
-            Assert::IsTrue(invalidHandle.streams.empty());
-
             const auto invalidPath = reader.EnumerateStreams(static_cast<LPCWSTR>(nullptr));
             Assert::IsTrue(invalidPath.status == StreamStatus::Error);
             Assert::AreEqual(static_cast<DWORD>(ERROR_INVALID_PARAMETER), invalidPath.error);
@@ -736,7 +726,7 @@ namespace AlternateStreamTests
                 nullptr, nullptr, &flags, nullptr, 0) != FALSE);
 
             AlternateStreamReader reader;
-            const auto result = reader.EnumerateStreams(file.get());
+            const auto result = reader.EnumerateStreams(fixture.path.data());
             if ((flags & FILE_NAMED_STREAMS) == 0)
             {
                 // Run on FAT32/exFAT as well as NTFS: unsupported volumes
@@ -801,9 +791,10 @@ namespace AlternateStreamTests
             CreateStream(namedPath);
             Assert::IsTrue(reader.HasAlternateStreams(fixture.path.data()));
 
-            const auto names = reader.ListAlternateStreams(fixture.path.data());
-            Assert::IsTrue(std::find(names.begin(), names.end(),
-                L":unit_test:$DATA") != names.end());
+            const auto inventory = reader.EnumerateStreams(fixture.path.data());
+            Assert::IsTrue(inventory.status == StreamStatus::Ok);
+            Assert::IsTrue(std::find(inventory.streams.begin(), inventory.streams.end(),
+                L":unit_test:$DATA") != inventory.streams.end());
 
             Assert::IsTrue(DeleteFileW(namedPath.c_str()) != FALSE);
             Assert::IsFalse(reader.HasAlternateStreams(fixture.path.data()));

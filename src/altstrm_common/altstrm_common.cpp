@@ -158,11 +158,6 @@ bool stream_info_detail::IsNamedDataStreamName(const WCHAR* name, size_t length)
     return true;
 }
 
-StreamEnumeration AlternateStreamReader::EnumerateStreams(HANDLE file) const
-{
-    return EnumerateStreams(file, true);
-}
-
 StreamEnumeration AlternateStreamReader::EnumerateStreams(HANDLE file, bool collectNames) const
 {
     StreamEnumeration result;
@@ -242,30 +237,6 @@ StreamEnumeration AlternateStreamReader::EnumerateStreams(LPCWSTR filename, bool
         return result;
     }
     return EnumerateStreams(file.get(), collectNames);
-}
-
-std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(HANDLE file) const
-{
-    auto result = EnumerateStreams(file);
-    // The vector-only API cannot report partial or failed enumeration.
-    if (result.NeedsNotice())
-        return {};
-    return std::move(result.streams);
-}
-
-std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(LPCWSTR filename) const
-{
-    auto result = EnumerateStreams(filename);
-    // The vector-only API cannot report partial or failed enumeration.
-    if (result.NeedsNotice())
-        return {};
-    return std::move(result.streams);
-}
-
-bool AlternateStreamReader::HasAlternateStreams(HANDLE file) const
-{
-    const auto result = EnumerateStreams(file, false);
-    return result.status == StreamStatus::Ok && result.hasNamedStreams;
 }
 
 bool AlternateStreamReader::HasAlternateStreams(LPCWSTR filename) const
