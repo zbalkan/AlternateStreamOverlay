@@ -296,13 +296,19 @@ function Test-FilesystemLifecycle {
         }
     }
 
-    # An exclusive handle may prevent stream queries. Failure to enumerate
-    # is acceptable, but the CLI must remain operational and recover.
-    $lock = [System.IO.File]::Open($path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+    # Metadata-only opens can succeed despite an exclusive data-file lock.
+    # Verify that both outcomes are handled and subsequent reads still work.
+    $lock = [System.IO.File]::Open($path, [System.IO.FileMode]::Open,
+        [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
     try {
         $lockedOutput = & $exe $path 2>&1 | Out-String
-        if ($LASTEXITCODE -ne 0) {
-            throw "CLI returned failure under exclusive lock: $lockedOutput"
+        if ($LASTEXITCODE -eq 0) {
+            if (-not $lockedOutput.Contains(':cycle:$DATA')) {
+                throw "Metadata-only stream discovery failed under lock: $lockedOutput"
+            }
+        }
+        elseif ($lockedOutput -notmatch 'Stream enumeration failed') {
+            throw "Exclusive-lock error was not reported: $lockedOutput"
         }
     }
     finally {
@@ -313,6 +319,86 @@ function Test-FilesystemLifecycle {
         throw "Stream discovery did not recover after unlock: $afterUnlock"
     }
     Write-Host 'PASS: directory negatives, ADS lifecycle, large stream, repeatability and sharing'
+}
+
+function Test-ContinuationAfterError {
+    param(
+        [string] $Output,
+        [string] $Blocked,
+        [string] $Following
+    )
+
+    $lines = @($Output -split '\r?\n')
+    $errorIndex = -1
+    $resultIndex = -1
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i].StartsWith('Stream enumeration failed for ' + $Blocked,
+                [StringComparison]::Ordinal)) {
+            $errorIndex = $i
+        }
+        if ($lines[$i] -ceq $Following -and
+            $i + 1 -lt $lines.Count -and
+            $lines[$i + 1] -ceq ' :afterfailure:$DATA') {
+            $resultIndex = $i
+        }
+    }
+    if ($errorIndex -lt 0) {
+        throw "Wildcard scan omitted dangling-junction error: $Output"
+    }
+    return $resultIndex -gt $errorIndex
+}
+
+function Test-WildcardContinuesAfterFailure {
+    param([string] $Root)
+
+    $scanDirectory = Join-Path $Root 'mixed-results'
+    [System.IO.Directory]::CreateDirectory($scanDirectory) | Out-Null
+    $files = @(
+        (Join-Path $scanDirectory '00-first.txt'),
+        (Join-Path $scanDirectory 'zz-second.txt')
+    )
+    $targets = @(
+        (Join-Path $Root 'junction-target-first'),
+        (Join-Path $Root 'junction-target-second')
+    )
+
+    # Use a dangling directory junction as a deterministic per-item error.
+    # Unlike an exclusive data-file lock, opening a missing junction target
+    # cannot succeed through a metadata-only CreateFileW request.
+    $observedContinuation = $false
+    for ($iteration = 0; $iteration -lt $files.Count; $iteration++) {
+        $blocked = $files[$iteration]
+        $following = $files[1 - $iteration]
+        [System.IO.File]::WriteAllText($following, 'valid')
+        [System.IO.File]::WriteAllBytes($following + ':afterfailure', [byte[]](65))
+
+        # PowerShell requires the target to exist when creating a junction.
+        # Remove it only after creation to obtain a dangling reparse point.
+        [System.IO.Directory]::CreateDirectory($targets[$iteration]) | Out-Null
+        $junction = New-Item -ItemType Junction -Path $blocked -Target $targets[$iteration]
+        try {
+            [System.IO.Directory]::Delete($targets[$iteration])
+            $output = & $exe (Join-Path $scanDirectory '*.txt') 2>&1 | Out-String
+            $status = $LASTEXITCODE
+            if ($status -eq 0) {
+                throw "Wildcard scan did not report partial failure: $output"
+            }
+
+            if (Test-ContinuationAfterError -Output $output -Blocked $blocked -Following $following) {
+                $observedContinuation = $true
+            }
+        }
+        finally {
+            # Remove the junction itself, never recurse into its target.
+            [System.IO.Directory]::Delete($junction.FullName)
+            [System.IO.File]::Delete($following)
+        }
+    }
+    if (-not $observedContinuation) {
+        throw 'No wildcard scan demonstrated a valid ADS result after an item error.'
+    }
+
+    Write-Host 'PASS: wildcard scan continues after an item failure and exits nonzero'
 }
 
 function Test-RedirectedUnicodeOutput {
@@ -416,6 +502,7 @@ try {
     Test-BasicEnumeration -Root $directory
     Test-CliPathForms -Root $directory
     Test-FilesystemLifecycle -Root $directory
+    Test-WildcardContinuesAfterFailure -Root $directory
     Test-RedirectedUnicodeOutput -Root $directory
     Test-UnicodeNames -Root $directory
     Write-Host 'PASS: all NTFS ADS integration tests'
