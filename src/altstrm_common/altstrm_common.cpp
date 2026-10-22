@@ -329,41 +329,6 @@ namespace
     }
 }
 
-bool TryDecodeUtf8Preview(const BYTE* data, size_t size, bool truncated,
-                          std::wstring& text)
-{
-    text.clear();
-    if (size == 0)
-        return true;
-    if (data == nullptr || size > static_cast<size_t>(INT_MAX))
-        return false;
-
-    const auto length = truncated ? CompleteUtf8PrefixLength(data, size) : size;
-    if (std::find(data, data + length, static_cast<BYTE>(0)) != data + length)
-        return false;
-    if (length == 0)
-        return true;
-
-    // Win32 takes the input length in bytes (cbMultiByte), but the output
-    // capacity in WCHAR elements (cchWideChar). Query the required character
-    // count first, then allocate exactly that many wchar_t elements.
-    const auto byteCount = static_cast<int>(length);
-    // Flawfinder: ignore
-    const auto count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
-        reinterpret_cast<const char*>(data), byteCount, nullptr, 0);
-    if (count <= 0)
-        return false;
-
-    std::wstring decoded(static_cast<size_t>(count), L'\0');
-    // Flawfinder: ignore
-    if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
-        reinterpret_cast<const char*>(data), byteCount, &decoded[0], count) != count)
-        return false;
-    text.swap(decoded);
-    return true;
-}
-
-
 std::wstring FormatHexPreview(const BYTE* data, size_t size)
 {
     // BYTE matches the Win32 stream API; these values are octets used for
@@ -422,28 +387,23 @@ std::wstring FormatStreamPreview(const BYTE* data, size_t size,
 {
     if (asHex)
         return FormatHexPreview(data, size);
-
-    std::wstring text;
-    if (TryDecodeUtf8Preview(data, size, truncated, text))
-        return text;
-
-    // Keep the UI in text mode even if the stream contains malformed UTF-8.
-    // Windows replaces invalid byte sequences with U+FFFD when flags are zero.
     if (data == nullptr || size == 0 || size > static_cast<size_t>(INT_MAX))
         return {};
-    const auto length = truncated ? CompleteUtf8PrefixLength(data, size) : size;
+
+    // Omit only an incomplete UTF-8 suffix cut by the preview limit.
+    // Malformed bytes elsewhere remain visible as replacement characters.
+    const size_t length = truncated ? CompleteUtf8PrefixLength(data, size) : size;
     if (length == 0)
         return {};
+    const auto bytes = reinterpret_cast<const char*>(data);
     const auto byteCount = static_cast<int>(length);
     // Flawfinder: ignore
-    const int count = MultiByteToWideChar(CP_UTF8, 0,
-        reinterpret_cast<const char*>(data), byteCount, nullptr, 0);
+    const int count = MultiByteToWideChar(CP_UTF8, 0, bytes, byteCount, nullptr, 0);
     if (count <= 0)
         return {};
     std::wstring decoded(static_cast<size_t>(count), L'\0');
     // Flawfinder: ignore
-    if (MultiByteToWideChar(CP_UTF8, 0,
-        reinterpret_cast<const char*>(data), byteCount, &decoded[0], count) != count)
+    if (MultiByteToWideChar(CP_UTF8, 0, bytes, byteCount, &decoded[0], count) != count)
         return {};
     std::replace(decoded.begin(), decoded.end(), L'\0', L'\uFFFD');
     return decoded;
