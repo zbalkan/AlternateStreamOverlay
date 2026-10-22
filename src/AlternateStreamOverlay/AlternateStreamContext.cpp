@@ -150,32 +150,22 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
             return E_INVALIDARG;
         mediumGuard.SetLocked();
 
-        UINT uNumFiles = DragQueryFileW(hDrop, 0xffffffff, nullptr, 0);
-        HRESULT hr = S_OK;
-        // We only handle single file case.
-        if (1 != uNumFiles)
-        {
+        // We only handle a single selected file.
+        if (DragQueryFileW(hDrop, 0xffffffff, nullptr, 0) != 1)
             return E_INVALIDARG;
-        }
 
         const UINT pathLength = DragQueryFileW(hDrop, 0, nullptr, 0);
         if (pathLength == 0)
-            hr = E_INVALIDARG;
+            return E_INVALIDARG;
 
-        std::wstring filePath;
-        if (SUCCEEDED(hr))
-        {
-            std::vector<WCHAR> path(pathLength + 1);
-            if (DragQueryFileW(hDrop, 0, path.data(), static_cast<UINT>(path.size())) != pathLength)
-                hr = E_INVALIDARG;
-            else
-                filePath.assign(path.data(), pathLength);
-        }
+        std::vector<WCHAR> path(pathLength + 1);
+        if (DragQueryFileW(hDrop, 0, path.data(), static_cast<UINT>(path.size())) != pathLength)
+            return E_INVALIDARG;
+
+        std::wstring filePath(path.data(), pathLength);
 
         // Do not hold the shell data object's storage during filesystem I/O.
         mediumGuard.Release();
-
-        if (FAILED(hr)) return hr;
         if (!CanEnumerateSynchronously(filePath))
             return E_FAIL;
 
