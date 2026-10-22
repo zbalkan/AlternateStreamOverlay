@@ -205,14 +205,14 @@ namespace
         HMODULE handle;
     };
 
-    Microsoft::WRL::ComPtr<IClassFactory> GetContextClassFactory(HMODULE module)
+    Microsoft::WRL::ComPtr<IClassFactory> GetContextClassFactory(HMODULE moduleHandle)
     {
-        if (module == nullptr)
+        if (moduleHandle == nullptr)
             Assert::Fail(L"Unable to load overlay DLL");
 
         using GetClassObject = HRESULT (STDAPICALLTYPE*)(REFCLSID, REFIID, void**);
         const auto getClassObject = reinterpret_cast<GetClassObject>(
-            GetProcAddress(module, "DllGetClassObject"));
+            GetProcAddress(moduleHandle, "DllGetClassObject"));
         if (getClassObject == nullptr)
             Assert::Fail(L"DllGetClassObject not exported");
 
