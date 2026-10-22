@@ -61,6 +61,24 @@ namespace
                 buffer.resize(InvalidParameterRetrySize);
                 continue;
             }
+            if (error == ERROR_INVALID_PARAMETER ||
+                error == ERROR_INVALID_FUNCTION ||
+                error == ERROR_NOT_SUPPORTED)
+            {
+                // Only a confirmed lack of named-stream support means an
+                // empty inventory. Preserve the native error if this volume
+                // query fails or if the volume advertises named streams.
+                DWORD flags = 0;
+                if (GetVolumeInformationByHandleW(file, nullptr, 0, nullptr,
+                    nullptr, &flags, nullptr, 0) &&
+                    (flags & FILE_NAMED_STREAMS) == 0)
+                {
+                    buffer.clear();
+                    error = ERROR_SUCCESS;
+                    return StreamStatus::Ok;
+                }
+                return StreamStatus::Error;
+            }
             if (error != ERROR_MORE_DATA && error != ERROR_INSUFFICIENT_BUFFER)
                 return StreamStatus::Error;
             if (buffer.size() >= MaxBufferSize)
