@@ -19,6 +19,7 @@
  */
 
 #include <algorithm>
+#include <array>
 #include <climits>
 #include <cstddef>
 #include <cwchar>
@@ -32,41 +33,37 @@ namespace
     constexpr size_t MaxBufferSize = 4 * 1024 * 1024;
     constexpr size_t StreamInfoHeaderSize = offsetof(FILE_STREAM_INFO, StreamName);
 
-    StreamStatus QueryStreamInfo(HANDLE file, std::vector<BYTE>& buffer, DWORD& error)
+    StreamStatus QueryStreamInfo(HANDLE file, BYTE*& data, size_t& size,
+                                 std::vector<BYTE>& overflow, DWORD& error)
     {
         error = ERROR_SUCCESS;
-        buffer.resize(InitialBufferSize);
         for (;;)
         {
             if (GetFileInformationByHandleEx(file, FileStreamInfo,
-                buffer.data(), static_cast<DWORD>(buffer.size())))
+                data, static_cast<DWORD>(size)))
             {
                 error = ERROR_SUCCESS;
                 return StreamStatus::Ok;
             }
 
             error = GetLastError();
-            // No streams can be reported as EOF by FileStreamInfo.
             if (error == ERROR_HANDLE_EOF)
             {
-                buffer.clear();
+                size = 0;
                 error = ERROR_SUCCESS;
                 return StreamStatus::Ok;
             }
-            // Retry once with a larger buffer when a long stream name
-            // triggers ERROR_INVALID_PARAMETER on the initial query.
-            if (error == ERROR_INVALID_PARAMETER &&
-                buffer.size() < InvalidParameterRetrySize)
+            if (error == ERROR_INVALID_PARAMETER && size < InvalidParameterRetrySize)
             {
-                buffer.resize(InvalidParameterRetrySize);
+                size = InvalidParameterRetrySize;
+                overflow.resize(size);
+                data = overflow.data();
                 continue;
             }
             if (error == ERROR_INVALID_PARAMETER ||
                 error == ERROR_INVALID_FUNCTION ||
                 error == ERROR_NOT_SUPPORTED)
             {
-                // Only a confirmed lack of named-stream support means an
-                // empty inventory; retain the native error otherwise.
                 DWORD flags = 0;
                 const bool volumeInfoAvailable =
                     GetVolumeInformationByHandleW(file, nullptr, 0, nullptr,
@@ -74,7 +71,7 @@ namespace
                 if (stream_info_detail::IsUnsupportedStreamQuery(
                         error, volumeInfoAvailable, flags))
                 {
-                    buffer.clear();
+                    size = 0;
                     error = ERROR_SUCCESS;
                     return StreamStatus::Ok;
                 }
@@ -82,13 +79,14 @@ namespace
             }
             if (error != ERROR_MORE_DATA && error != ERROR_INSUFFICIENT_BUFFER)
                 return StreamStatus::Error;
-            if (buffer.size() >= MaxBufferSize)
+            if (size >= MaxBufferSize)
             {
-                // Failed calls do not guarantee a valid, parseable output buffer.
-                buffer.clear();
+                size = 0;
                 return StreamStatus::Truncated;
             }
-            buffer.resize(buffer.size() * 2);
+            size *= 2;
+            overflow.resize(size);
+            data = overflow.data();
         }
     }
 }
@@ -174,18 +172,21 @@ StreamEnumeration AlternateStreamReader::EnumerateStreams(HANDLE file, bool coll
         return result;
     }
 
-    std::vector<BYTE> buffer;
-    result.status = QueryStreamInfo(file, buffer, result.error);
-    if (result.status == StreamStatus::Error)
-        return result;
-    if (buffer.empty())
+    // Most files fit the initial query: avoid allocating a heap buffer on
+    // every Explorer icon overlay callback. Grow on demand for large records.
+    alignas(FILE_STREAM_INFO) std::array<BYTE, InitialBufferSize> initial = {};
+    std::vector<BYTE> overflow;
+    BYTE* data = initial.data();
+    size_t bufferSize = initial.size();
+    result.status = QueryStreamInfo(file, data, bufferSize, overflow, result.error);
+    if (result.status == StreamStatus::Error || bufferSize == 0)
         return result;
 
     size_t offset = 0;
     for (;;)
     {
         stream_info_detail::Record record = {};
-        if (!stream_info_detail::ReadRecord(buffer.data(), buffer.size(), offset, record))
+        if (!stream_info_detail::ReadRecord(data, bufferSize, offset, record))
         {
             result.status = StreamStatus::Error;
             result.error = ERROR_INVALID_DATA;
