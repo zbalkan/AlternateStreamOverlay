@@ -1,5 +1,6 @@
 #pragma once
 #include <Windows.h>
+#include <array>
 #include <string>
 
 // Reuse recently validated ancestors for sibling Explorer callbacks.
@@ -66,10 +67,11 @@ inline bool CanEnumerateExplorerPath(const std::wstring& path)
 
     // Reject SUBST/alias drive mappings, which may lead outside the local
     // volume even though their drive type is reported as local.
-    const WCHAR drive[] = { letter, L':', L'\0' };
-    WCHAR target[1024] = {};
-    const DWORD targetLength = QueryDosDeviceW(drive, target, 1024);
-    if (targetLength == 0 || wcsncmp(target, LR"(\??\)", 4) == 0)
+    const std::wstring drive = { letter, L':' };
+    std::array<WCHAR, 1024> target = {};
+    const DWORD targetLength = QueryDosDeviceW(drive.c_str(), target.data(),
+        static_cast<DWORD>(target.size()));
+    if (targetLength == 0 || wcsncmp(target.data(), LR"(\??\)", 4) == 0)
         return false;
 
     constexpr DWORD excludedAttributes = FILE_ATTRIBUTE_REPARSE_POINT |
