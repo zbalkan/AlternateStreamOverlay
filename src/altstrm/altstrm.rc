@@ -1,5 +1,6 @@
 #include <winres.h>
 #define ASO_FILE_DESCRIPTION "Command-line NTFS alternate data stream lister"
 #define ASO_ORIGINAL_FILENAME "altstrm.exe"
+#define ASO_INTERNAL_NAME "altstrm.exe"
 #define ASO_FILETYPE VFT_APP
 #include "..\\version.rc2"
