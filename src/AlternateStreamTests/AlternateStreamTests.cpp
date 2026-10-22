@@ -226,11 +226,13 @@ namespace AlternateStreamTests
         TEST_METHOD(GetCommandStringRejectsUnsupportedFlags)
         {
             ScopedModule module(GetOverlayDllPath().c_str());
-            Assert::IsTrue(module.handle != nullptr);
+            if (module.handle == nullptr)
+                Assert::Fail(L"Unable to load overlay DLL");
             using GetClassObject = HRESULT (STDAPICALLTYPE*)(REFCLSID, REFIID, void**);
             const auto getClassObject = reinterpret_cast<GetClassObject>(
                 GetProcAddress(module.handle, "DllGetClassObject"));
-            Assert::IsTrue(getClassObject != nullptr);
+            if (getClassObject == nullptr)
+                Assert::Fail(L"DllGetClassObject not exported");
             const CLSID clsid = { 0x4A26024B, 0x5499, 0x45BE,
                 { 0xA2, 0x3F, 0x4A, 0x65, 0xE8, 0x88, 0x88, 0xD0 } };
             Microsoft::WRL::ComPtr<IClassFactory> factory;
@@ -260,11 +262,13 @@ namespace AlternateStreamTests
         {
             const std::wstring dllPath = GetOverlayDllPath();
             ScopedModule module(dllPath.c_str());
-            Assert::IsTrue(module.handle != nullptr, L"Unable to load overlay DLL");
+            if (module.handle == nullptr)
+                Assert::Fail(L"Unable to load overlay DLL");
             using GetClassObject = HRESULT (STDAPICALLTYPE*)(REFCLSID, REFIID, void**);
             const auto getClassObject = reinterpret_cast<GetClassObject>(
                 GetProcAddress(module.handle, "DllGetClassObject"));
-            Assert::IsTrue(getClassObject != nullptr, L"DllGetClassObject not exported");
+            if (getClassObject == nullptr)
+                Assert::Fail(L"DllGetClassObject not exported");
 
             // CLSID_AlternateStreamContext from AlternateStreamOverlay.idl.
             const CLSID clsid = { 0x4A26024B, 0x5499, 0x45BE,

@@ -95,6 +95,7 @@ namespace
 // Boilerplate guff
 
 // Used to determine whether the DLL can be unloaded by OLE
+_Check_return_
 STDAPI DllCanUnloadNow(void)
 {
 #ifdef _MERGE_PROXYSTUB
