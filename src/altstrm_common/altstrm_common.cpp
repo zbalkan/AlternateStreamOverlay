@@ -248,7 +248,8 @@ StreamEnumeration AlternateStreamReader::EnumerateStreams(LPCWSTR filename, bool
 std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(HANDLE file) const
 {
     auto result = EnumerateStreams(file);
-    if (result.status != StreamStatus::Ok)
+    // The vector-only API cannot report partial or failed enumeration.
+    if (result.NeedsNotice())
         return {};
     return std::move(result.streams);
 }
@@ -256,7 +257,8 @@ std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(HANDLE fil
 std::vector<std::wstring> AlternateStreamReader::ListAlternateStreams(LPCWSTR filename) const
 {
     auto result = EnumerateStreams(filename);
-    if (result.status != StreamStatus::Ok)
+    // The vector-only API cannot report partial or failed enumeration.
+    if (result.NeedsNotice())
         return {};
     return std::move(result.streams);
 }
