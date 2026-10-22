@@ -401,6 +401,55 @@ function Test-WildcardContinuesAfterFailure {
     Write-Host 'PASS: wildcard scan continues after an item failure and exits nonzero'
 }
 
+function Test-RedirectedErrorDiagnostics {
+    param([string] $Root)
+
+    $plain = Join-Path $Root 'stderr-valid.txt'
+    [System.IO.File]::WriteAllText($plain, 'base')
+    [System.IO.File]::WriteAllBytes($plain + ':diagnostic', [byte[]](65))
+
+    $target = Join-Path $Root 'stderr-junction-target'
+    $broken = Join-Path $Root 'stderr-broken.txt'
+    [System.IO.Directory]::CreateDirectory($target) | Out-Null
+    $junction = New-Item -ItemType Junction -Path $broken -Target $target
+    try {
+        [System.IO.Directory]::Delete($target)
+        $processInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $processInfo.FileName = $exe
+        $processInfo.Arguments = '"' + (Join-Path $Root 'stderr-*.txt') + '"'
+        $processInfo.UseShellExecute = $false
+        $processInfo.RedirectStandardOutput = $true
+        $processInfo.RedirectStandardError = $true
+
+        $process = [System.Diagnostics.Process]::Start($processInfo)
+        try {
+            # This fixture emits only short messages; neither pipe fills.
+            $stdout = $process.StandardOutput.ReadToEnd()
+            $stderr = $process.StandardError.ReadToEnd()
+            $process.WaitForExit()
+            if ($process.ExitCode -eq 0) {
+                throw 'Partial wildcard enumeration should exit nonzero.'
+            }
+            if (-not $stdout.Contains(':diagnostic:$DATA') -or
+                -not $stdout.Contains($plain)) {
+                throw "Successful results must remain on stdout: $stdout"
+            }
+            if ($stdout.Contains('Stream enumeration failed')) {
+                throw "Operational error leaked into stdout: $stdout"
+            }
+            if (-not $stderr.Contains('Stream enumeration failed for ' + $broken)) {
+                throw "Missing per-file stderr diagnostic: $stderr"
+            }
+        }
+        finally { $process.Dispose() }
+    }
+    finally {
+        [System.IO.Directory]::Delete($junction.FullName)
+        [System.IO.File]::Delete($plain)
+    }
+    Write-Host 'PASS: results on stdout and enumeration errors on stderr'
+}
+
 function Test-RedirectedUnicodeOutput {
     param([string] $Root)
 
@@ -503,6 +552,7 @@ try {
     Test-CliPathForms -Root $directory
     Test-FilesystemLifecycle -Root $directory
     Test-WildcardContinuesAfterFailure -Root $directory
+    Test-RedirectedErrorDiagnostics -Root $directory
     Test-RedirectedUnicodeOutput -Root $directory
     Test-UnicodeNames -Root $directory
     Write-Host 'PASS: all NTFS ADS integration tests'
