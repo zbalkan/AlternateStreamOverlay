@@ -45,6 +45,29 @@ The build produces the shell extension DLL and supporting utilities. The `Regist
 
 Both supported configurations are built by GitHub Actions.
 
+## Releases
+
+Releases are staged manually from the `main` branch through the [Manual Release workflow](https://github.com/zbalkan/AlternateStreamOverlay/actions/workflows/release.yml). The workflow creates a **draft**, not a published release; the maintainer must inspect and publish it.
+
+### Prepare a release
+
+1. Update `ASO_VERSION_MAJOR`, `ASO_VERSION_MINOR`, and `ASO_VERSION_PATCH` in `src/version.h`; keep `ASO_VERSION_BUILD` at `0`.
+2. Add the matching `## [MAJOR.MINOR.PATCH] - YYYY-MM-DD` entry at the top of the released entries in `CHANGELOG.md`, below `[Unreleased]`. Preserve the older historical changelog entries.
+3. Merge the version and changelog changes into `main` and confirm the standard CI checks pass.
+4. From **Actions → Manual Release → Run workflow**, select `main` and enter the version without the `v` prefix (for example, `2.0.0`).
+5. Inspect the completed workflow, including the native tests, ADS smoke tests, and the binary `VERSIONINFO` assertions. Download and inspect the produced ZIP and checksum if desired.
+6. Review the generated draft release, edit its notes to describe the actual changes, verify the attached assets, and publish it explicitly when ready.
+
+Do not create a release tag before running the workflow: it deliberately refuses to stage an existing tag or release. A failed workflow before the final step does not create a draft release. If the release-creation step fails after creating a tag or draft, inspect GitHub's tags and releases before retrying; do not delete or overwrite a tag without checking what it references.
+
+### Release assets
+
+The draft release contains `AlternateStreamOverlay-vMAJOR.MINOR.PATCH-win-x64.zip` and a matching `.zip.sha256` checksum file. The ZIP contains `AlternateStreamOverlay.dll`, `altstrm.exe`, `README.md`, and `CHANGELOG.md`. The archives are intended for Windows x64; Windows Server remains untested.
+
+To verify the downloaded archive in PowerShell, run `(Get-FileHash -Algorithm SHA256 -LiteralPath .\AlternateStreamOverlay-v2.0.0-win-x64.zip).Hash.ToLowerInvariant()` and compare the result with the hash in the adjacent `.sha256` file. Replace `2.0.0` with the downloaded release version.
+
+Extract the archive to a stable directory before registering the shell extension. For example, from the extracted directory run `regsvr32.exe /n /i:user .\AlternateStreamOverlay.dll` for a per-user install, or run `regsvr32.exe .\AlternateStreamOverlay.dll` from an elevated terminal for a machine-wide install. Unregister the DLL before removing or relocating it.
+
 ## Installation
 
 The extension supports machine-wide and per-user registration. Choose one registration scope.
