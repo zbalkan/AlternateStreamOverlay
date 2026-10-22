@@ -628,9 +628,10 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     HWND textBox = GetDlgItem(hWnd, IDC_EDIT1);
 
     const std::vector<std::wstring>& streams = dialogState->streams;
-    for (std::vector<std::wstring>::const_iterator vit = streams.begin(); vit != streams.end(); ++vit)
+    for (const auto& stream : streams)
     {
-        SendMessage(comboBox, CB_ADDSTRING, 0, (LPARAM)vit->c_str());
+        SendMessage(comboBox, CB_ADDSTRING, 0,
+                    reinterpret_cast<LPARAM>(stream.c_str()));
     }
 
     // Each dialog owns its preview font. The COM object may outlive the page
