@@ -321,31 +321,27 @@ function Test-FilesystemLifecycle {
     Write-Host 'PASS: directory negatives, ADS lifecycle, large stream, repeatability and sharing'
 }
 
-function Test-ContinuationAfterError {
+function Test-ScanIncludesErrorAndResult {
     param(
         [string] $Output,
         [string] $Blocked,
         [string] $Following
     )
 
+    # Stdout and stderr have no guaranteed inter-stream ordering. Both
+    # entries must appear in each pass; swapping the blocked candidate
+    # makes an early-return regression fail regardless of search order.
+    if (-not $Output.Contains('Stream enumeration failed for ' + $Blocked)) {
+        throw "Wildcard scan omitted per-item error: $Output"
+    }
     $lines = @($Output -split '\r?\n')
-    $errorIndex = -1
-    $resultIndex = -1
-    for ($i = 0; $i -lt $lines.Count; $i++) {
-        if ($lines[$i].StartsWith('Stream enumeration failed for ' + $Blocked,
-                [StringComparison]::Ordinal)) {
-            $errorIndex = $i
-        }
+    for ($i = 0; $i + 1 -lt $lines.Count; $i++) {
         if ($lines[$i] -ceq $Following -and
-            $i + 1 -lt $lines.Count -and
             $lines[$i + 1] -ceq ' :afterfailure:$DATA') {
-            $resultIndex = $i
+            return $true
         }
     }
-    if ($errorIndex -lt 0) {
-        throw "Wildcard scan omitted dangling-junction error: $Output"
-    }
-    return $resultIndex -gt $errorIndex
+    return $false
 }
 
 function Test-WildcardContinuesAfterFailure {
@@ -365,7 +361,6 @@ function Test-WildcardContinuesAfterFailure {
     # Use a dangling directory junction as a deterministic per-item error.
     # Unlike an exclusive data-file lock, opening a missing junction target
     # cannot succeed through a metadata-only CreateFileW request.
-    $observedContinuation = $false
     for ($iteration = 0; $iteration -lt $files.Count; $iteration++) {
         $blocked = $files[$iteration]
         $following = $files[1 - $iteration]
@@ -384,8 +379,8 @@ function Test-WildcardContinuesAfterFailure {
                 throw "Wildcard scan did not report partial failure: $output"
             }
 
-            if (Test-ContinuationAfterError -Output $output -Blocked $blocked -Following $following) {
-                $observedContinuation = $true
+            if (-not (Test-ScanIncludesErrorAndResult -Output $output -Blocked $blocked -Following $following)) {
+                throw "Wildcard scan omitted a successful ADS result: $output"
             }
         }
         finally {
@@ -394,11 +389,61 @@ function Test-WildcardContinuesAfterFailure {
             [System.IO.File]::Delete($following)
         }
     }
-    if (-not $observedContinuation) {
-        throw 'No wildcard scan demonstrated a valid ADS result after an item error.'
-    }
-
     Write-Host 'PASS: wildcard scan continues after an item failure and exits nonzero'
+}
+
+function Test-RedirectedErrorDiagnostics {
+    param([string] $Root)
+
+    $plain = Join-Path $Root 'stderr-valid.txt'
+    [System.IO.File]::WriteAllText($plain, 'base')
+    [System.IO.File]::WriteAllBytes($plain + ':diagnostic', [byte[]](65))
+
+    $target = Join-Path $Root 'stderr-junction-target'
+    $broken = Join-Path $Root 'stderr-broken.txt'
+    [System.IO.Directory]::CreateDirectory($target) | Out-Null
+    $junction = New-Item -ItemType Junction -Path $broken -Target $target
+    try {
+        [System.IO.Directory]::Delete($target)
+        $processInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $processInfo.FileName = $exe
+        $processInfo.Arguments = '"' + (Join-Path $Root 'stderr-*.txt') + '"'
+        $processInfo.UseShellExecute = $false
+        $processInfo.RedirectStandardOutput = $true
+        $processInfo.RedirectStandardError = $true
+        # The CLI encodes both redirected pipes as UTF-8, regardless of the
+        # Windows locale or console code page.
+        $utf8 = [System.Text.UTF8Encoding]::new($false, $true)
+        $processInfo.StandardOutputEncoding = $utf8
+        $processInfo.StandardErrorEncoding = $utf8
+
+        $process = [System.Diagnostics.Process]::Start($processInfo)
+        try {
+            # This fixture emits only short messages; neither pipe fills.
+            $stdout = $process.StandardOutput.ReadToEnd()
+            $stderr = $process.StandardError.ReadToEnd()
+            $process.WaitForExit()
+            if ($process.ExitCode -eq 0) {
+                throw 'Partial wildcard enumeration should exit nonzero.'
+            }
+            if (-not $stdout.Contains(':diagnostic:$DATA') -or
+                -not $stdout.Contains($plain)) {
+                throw "Successful results must remain on stdout: $stdout"
+            }
+            if ($stdout.Contains('Stream enumeration failed')) {
+                throw "Operational error leaked into stdout: $stdout"
+            }
+            if (-not $stderr.Contains('Stream enumeration failed for ' + $broken)) {
+                throw "Missing per-file stderr diagnostic: $stderr"
+            }
+        }
+        finally { $process.Dispose() }
+    }
+    finally {
+        [System.IO.Directory]::Delete($junction.FullName)
+        [System.IO.File]::Delete($plain)
+    }
+    Write-Host 'PASS: results on stdout and enumeration errors on stderr'
 }
 
 function Test-RedirectedUnicodeOutput {
@@ -503,6 +548,7 @@ try {
     Test-CliPathForms -Root $directory
     Test-FilesystemLifecycle -Root $directory
     Test-WildcardContinuesAfterFailure -Root $directory
+    Test-RedirectedErrorDiagnostics -Root $directory
     Test-RedirectedUnicodeOutput -Root $directory
     Test-UnicodeNames -Root $directory
     Write-Host 'PASS: all NTFS ADS integration tests'

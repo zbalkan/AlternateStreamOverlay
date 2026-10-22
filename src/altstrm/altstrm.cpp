@@ -14,9 +14,9 @@ namespace
     // Write UTF-16 directly to a console. Redirected output is UTF-8 without
     // a BOM, independent of the active Windows console code page. Unpaired
     // UTF-16 surrogates in NTFS names are replaced during UTF-8 encoding.
-    bool WriteOutput(const std::wstring& text)
+    bool WriteOutput(const std::wstring& text, DWORD standardHandle = STD_OUTPUT_HANDLE)
     {
-        const HANDLE output = GetStdHandle(STD_OUTPUT_HANDLE);
+        const HANDLE output = GetStdHandle(standardHandle);
         if (output == nullptr || output == INVALID_HANDLE_VALUE)
             return false;
 
@@ -62,6 +62,11 @@ namespace
         return true;
     }
 
+    bool WriteError(const std::wstring& text)
+    {
+        return WriteOutput(text, STD_ERROR_HANDLE);
+    }
+
     void PrintUsage(int argc, wchar_t* argv[])
     {
         const std::wstring program = argc > 0 ? argv[0] : L"altstrm";
@@ -93,7 +98,7 @@ namespace
 
     void WriteSearchError(DWORD error)
     {
-        WriteOutput(L"File search failed (Win32 error " +
+        WriteError(L"File search failed (Win32 error " +
             std::to_wstring(error) + L")\r\n");
     }
 
@@ -113,7 +118,7 @@ namespace
             const std::wstring reason = enumeration.status == StreamStatus::Truncated
                 ? L"Incomplete stream enumeration"
                 : L"Stream enumeration failed";
-            WriteOutput(reason + L" for " + fullPath + L" (Win32 error " +
+            WriteError(reason + L" for " + fullPath + L" (Win32 error " +
                 std::to_wstring(enumeration.error) + L")\r\n");
             return false;
         }
