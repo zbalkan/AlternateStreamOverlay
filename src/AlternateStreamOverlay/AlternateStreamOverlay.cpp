@@ -67,7 +67,11 @@ namespace
             {
                 status = RegDeleteKeyTransactedW(root, OverlayKey, 0, 0,
                     transaction, nullptr);
-                if (status == ERROR_SUCCESS && !CommitTransaction(transaction))
+                // Another remover may already have deleted the key.
+                // Do not mask transactional conflicts or commit failures.
+                if (status == ERROR_FILE_NOT_FOUND)
+                    status = ERROR_SUCCESS;
+                else if (status == ERROR_SUCCESS && !CommitTransaction(transaction))
                     status = GetLastError();
             }
 
