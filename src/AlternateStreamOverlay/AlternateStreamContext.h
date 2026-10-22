@@ -47,10 +47,6 @@ public:
         return S_OK;
     }
 
-    void FinalRelease()
-    {
-    }
-
 public:
     // Native
     void SnapshotSelection(std::wstring& path,

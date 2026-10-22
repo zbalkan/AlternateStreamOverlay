@@ -32,10 +32,6 @@ public:
         return S_OK;
     }
 
-    void FinalRelease()
-    {
-    }
-
 public:
     // IShellIconOverlayIdentifier
     STDMETHOD(IsMemberOf)(LPCWSTR pwszPath, DWORD dwAttrib);

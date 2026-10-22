@@ -16,6 +16,12 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
 namespace
 {
+    class TemporaryFileError : public std::runtime_error
+    {
+    public:
+        using std::runtime_error::runtime_error;
+    };
+
     struct TemporaryFile
     {
         // GetTempFileNameW requires a MAX_PATH-sized output buffer.
@@ -29,7 +35,7 @@ namespace
                 static_cast<DWORD>(directory.size()), directory.data());
             if (length == 0 || length >= directory.size() ||
                 !GetTempFileNameW(directory.data(), L"ads", 0, path.data()))
-                throw std::runtime_error("Unable to create temporary file");
+                throw TemporaryFileError("Unable to create temporary file");
         }
 
         ~TemporaryFile()
