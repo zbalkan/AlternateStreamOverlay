@@ -16,6 +16,10 @@ namespace stream_info_detail
 
     bool ReadRecord(const BYTE* buffer, size_t size, size_t offset, Record& record);
 
+    // Only names that form a single named $DATA stream may be appended to
+    // a filesystem path for preview. Length is in WCHARs, not bytes.
+    bool IsNamedDataStreamName(const WCHAR* name, size_t length);
+
     // Classification is separate from Win32 calls so unsupported-volume
     // behavior can be tested with deterministic error and capability inputs.
     bool IsUnsupportedStreamQuery(DWORD queryError, bool volumeInfoAvailable,
