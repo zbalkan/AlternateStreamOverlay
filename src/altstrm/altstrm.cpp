@@ -118,7 +118,7 @@ namespace
         std::wstring output;
         for (wchar_t ch : name)
         {
-            const unsigned int value = static_cast<unsigned int>(ch);
+            const auto value = static_cast<unsigned int>(ch);
             const bool unsafe = value < 0x20 || (value >= 0x7F && value <= 0x9F) ||
                 value == 0x061C || value == 0x200E || value == 0x200F ||
                 (value >= 0x202A && value <= 0x202E) ||
