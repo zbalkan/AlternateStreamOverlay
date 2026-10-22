@@ -324,16 +324,11 @@ function Test-FilesystemLifecycle {
 function Test-ScanIncludesErrorAndResult {
     param(
         [string] $Output,
-        [string] $Blocked,
         [string] $Following
     )
 
-    # Stdout and stderr have no guaranteed inter-stream ordering. Both
-    # entries must appear in each pass; swapping the blocked candidate
-    # makes an early-return regression fail regardless of search order.
-    if (-not $Output.Contains('Stream enumeration failed for ' + $Blocked)) {
-        throw "Wildcard scan omitted per-item error: $Output"
-    }
+    # Only scan stdout here. Diagnostics are asserted on stderr separately,
+    # since merging two redirected pipes can interleave partial lines.
     $lines = @($Output -split '\r?\n')
     for ($i = 0; $i + 1 -lt $lines.Count; $i++) {
         if ($lines[$i] -ceq $Following -and
@@ -373,15 +368,33 @@ function Test-WildcardContinuesAfterFailure {
         $junction = New-Item -ItemType Junction -Path $blocked -Target $targets[$iteration]
         try {
             [System.IO.Directory]::Delete($targets[$iteration])
-            $output = & $exe (Join-Path $scanDirectory '*.txt') 2>&1 | Out-String
-            $status = $LASTEXITCODE
-            if ($status -eq 0) {
-                throw "Wildcard scan did not report partial failure: $output"
-            }
+            $processInfo = New-Object System.Diagnostics.ProcessStartInfo
+            $processInfo.FileName = $exe
+            $processInfo.Arguments = '"' + (Join-Path $scanDirectory '*.txt') + '"'
+            $processInfo.UseShellExecute = $false
+            $processInfo.RedirectStandardOutput = $true
+            $processInfo.RedirectStandardError = $true
+            $utf8 = [System.Text.UTF8Encoding]::new($false, $true)
+            $processInfo.StandardOutputEncoding = $utf8
+            $processInfo.StandardErrorEncoding = $utf8
 
-            if (-not (Test-ScanIncludesErrorAndResult -Output $output -Blocked $blocked -Following $following)) {
-                throw "Wildcard scan omitted a successful ADS result: $output"
+            $process = [System.Diagnostics.Process]::Start($processInfo)
+            try {
+                # Bounded test output; neither pipe can fill its buffer.
+                $stdout = $process.StandardOutput.ReadToEnd()
+                $stderr = $process.StandardError.ReadToEnd()
+                $process.WaitForExit()
+                if ($process.ExitCode -eq 0) {
+                    throw "Wildcard scan did not report partial failure: $stdout $stderr"
+                }
+                if (-not $stderr.Contains('Stream enumeration failed for ' + $blocked)) {
+                    throw "Wildcard scan omitted per-item stderr error: $stderr"
+                }
+                if (-not (Test-ScanIncludesErrorAndResult -Output $stdout -Following $following)) {
+                    throw "Wildcard scan omitted a successful ADS result: $stdout"
+                }
             }
+            finally { $process.Dispose() }
         }
         finally {
             # Remove the junction itself, never recurse into its target.
