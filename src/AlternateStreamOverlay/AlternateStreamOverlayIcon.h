@@ -14,7 +14,7 @@ class ATL_NO_VTABLE CAlternateStreamOverlayIcon :
     public IShellIconOverlayIdentifier
 {
 public:
-    CAlternateStreamOverlayIcon();
+    CAlternateStreamOverlayIcon() = default;
 
     DECLARE_REGISTRY_RESOURCEID(IDR_ALTERNATESTREAMOVERLAYICON)
 

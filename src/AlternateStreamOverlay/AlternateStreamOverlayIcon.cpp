@@ -1,13 +1,6 @@
 #include "stdafx.h"
 #include "AlternateStreamOverlayIcon.h"
-#include <string>
-#include <sstream>
-#include <iostream>
 #include "Common.h"
-
-CAlternateStreamOverlayIcon::CAlternateStreamOverlayIcon()
-{
-}
 
 namespace
 {
