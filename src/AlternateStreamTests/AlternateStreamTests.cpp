@@ -255,7 +255,8 @@ namespace
         HMODULE handle;
     };
 
-    Microsoft::WRL::ComPtr<IClassFactory> GetContextClassFactory(HMODULE moduleHandle)
+    Microsoft::WRL::ComPtr<IClassFactory> GetClassFactory(
+        HMODULE moduleHandle, REFCLSID clsid)
     {
         if (moduleHandle == nullptr)
             Assert::Fail(L"Unable to load overlay DLL");
@@ -266,13 +267,26 @@ namespace
         if (getClassObject == nullptr)
             Assert::Fail(L"DllGetClassObject not exported");
 
-        // CLSID_AlternateStreamContext from AlternateStreamOverlay.idl.
-        const CLSID clsid = { 0x4A26024B, 0x5499, 0x45BE,
-            { 0xA2, 0x3F, 0x4A, 0x65, 0xE8, 0x88, 0x88, 0xD0 } };
         Microsoft::WRL::ComPtr<IClassFactory> factory;
         Assert::IsTrue(SUCCEEDED(getClassObject(clsid, __uuidof(IClassFactory),
             reinterpret_cast<void**>(factory.GetAddressOf()))));
         return factory;
+    }
+
+    Microsoft::WRL::ComPtr<IClassFactory> GetContextClassFactory(HMODULE moduleHandle)
+    {
+        // CLSID_AlternateStreamContext from AlternateStreamOverlay.idl.
+        const CLSID clsid = { 0x4A26024B, 0x5499, 0x45BE,
+            { 0xA2, 0x3F, 0x4A, 0x65, 0xE8, 0x88, 0x88, 0xD0 } };
+        return GetClassFactory(moduleHandle, clsid);
+    }
+
+    Microsoft::WRL::ComPtr<IClassFactory> GetOverlayClassFactory(HMODULE moduleHandle)
+    {
+        // CLSID_AlternateStreamOverlayIcon from AlternateStreamOverlay.idl.
+        const CLSID clsid = { 0xFBAB8C58, 0x59C9, 0x4522,
+            { 0xB7, 0xE8, 0x1A, 0x6A, 0xA2, 0x3B, 0x31, 0x8C } };
+        return GetClassFactory(moduleHandle, clsid);
     }
 
     BOOL CALLBACK CapturePropertyPage(HPROPSHEETPAGE page, LPARAM context)
@@ -341,6 +355,48 @@ namespace AlternateStreamTests
     TEST_CLASS(ComInitializationTests)
     {
     public:
+        TEST_METHOD(OverlayInterfaceValidatesArguments)
+        {
+            ScopedModule module(GetOverlayDllPath().c_str());
+            auto factory = GetOverlayClassFactory(module.handle);
+            Microsoft::WRL::ComPtr<IShellIconOverlayIdentifier> overlay;
+            Assert::IsTrue(SUCCEEDED(factory->CreateInstance(nullptr,
+                __uuidof(IShellIconOverlayIdentifier),
+                reinterpret_cast<void**>(overlay.GetAddressOf()))));
+
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                overlay->IsMemberOf(nullptr, 0));
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                overlay->IsMemberOf(L"", 0));
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                overlay->IsMemberOf(L"\\\\server\\share\\file.txt", 0));
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                overlay->IsMemberOf(L"C:\\unused-file.txt", FILE_ATTRIBUTE_OFFLINE));
+
+            int priority = -1;
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                overlay->GetPriority(&priority));
+            Assert::AreEqual(10, priority);
+            Assert::AreEqual(static_cast<HRESULT>(E_POINTER),
+                overlay->GetPriority(nullptr));
+
+            // The loaded DLL path can exceed MAX_PATH in CI checkouts.
+            std::vector<WCHAR> iconFile(32768);
+            int index = -1;
+            DWORD flags = 0;
+            Assert::AreEqual(static_cast<HRESULT>(E_POINTER),
+                overlay->GetOverlayInfo(nullptr,
+                    static_cast<int>(iconFile.size()), &index, &flags));
+            Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG),
+                overlay->GetOverlayInfo(iconFile.data(), 0, &index, &flags));
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                overlay->GetOverlayInfo(iconFile.data(),
+                    static_cast<int>(iconFile.size()), &index, &flags));
+            Assert::IsTrue(iconFile[0] != L'\0');
+            Assert::AreEqual(0, index);
+            Assert::AreEqual(static_cast<DWORD>(ISIOI_ICONFILE | ISIOI_ICONINDEX), flags);
+        }
+
         TEST_METHOD(GetCommandStringRejectsUnsupportedFlags)
         {
             ScopedModule module(GetOverlayDllPath().c_str());
