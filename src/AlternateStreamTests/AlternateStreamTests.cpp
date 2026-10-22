@@ -363,6 +363,23 @@ namespace AlternateStreamTests
     TEST_CLASS(EnumerationResultTests)
     {
     public:
+        TEST_METHOD(ExistenceProbeMatchesNamedStreamInventory)
+        {
+            TemporaryFile fixture;
+            AlternateStreamReader reader;
+            Assert::IsFalse(reader.HasAlternateStreams(fixture.path.data()));
+            CreateStream(std::wstring(fixture.path.data()) + L":probe");
+            Assert::IsTrue(reader.HasAlternateStreams(fixture.path.data()));
+
+            const auto inventory = reader.EnumerateStreams(fixture.path.data());
+            Assert::IsTrue(inventory.status == StreamStatus::Ok);
+            Assert::IsTrue(inventory.hasNamedStreams);
+            Assert::IsTrue(inventory.streams.size() >= 2);
+            Assert::IsTrue(DeleteFileW((std::wstring(fixture.path.data()) +
+                L":probe").c_str()) != FALSE);
+            Assert::IsFalse(reader.HasAlternateStreams(fixture.path.data()));
+        }
+
         TEST_METHOD(UncertainAndUndisplayableResultsRequireNotice)
         {
             StreamEnumeration result;
