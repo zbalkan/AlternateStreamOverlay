@@ -360,9 +360,49 @@ namespace AlternateStreamTests
             Assert::IsFalse(CanEnumerateExplorerPath(L""));
         }
 
+        TEST_METHOD(RejectsDirectoryJunctionAncestor)
+        {
+            TemporaryFile fixture;
+            if (!CanEnumerateExplorerPath(fixture.path.data()))
+                return;
+
+            const std::wstring root = fixture.path.data();
+            const std::wstring link = root + L".junction";
+            const std::wstring target = root + L".target";
+            if (!CreateDirectoryW(target.c_str(), nullptr))
+                return;
+
+            // Junctions are directory reparse points, unlike plain filenames.
+            const std::wstring command = L"cmd.exe /d /c mklink /J \"" +
+                link + L"\" \"" + target + L"\" >nul 2>&1";
+            std::vector<wchar_t> mutableCommand(command.begin(), command.end());
+            mutableCommand.push_back(L'\\0');
+            STARTUPINFOW startup = {};
+            startup.cb = sizeof(startup);
+            PROCESS_INFORMATION process = {};
+            if (CreateProcessW(nullptr, mutableCommand.data(), nullptr, nullptr,
+                FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process))
+            {
+                WaitForSingleObject(process.hProcess, 10000);
+                CloseHandle(process.hThread);
+                CloseHandle(process.hProcess);
+                const DWORD attributes = GetFileAttributesW(link.c_str());
+                if (attributes != INVALID_FILE_ATTRIBUTES &&
+                    (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+                {
+                    Assert::IsFalse(CanEnumerateExplorerPath(link + L"\\child.txt"));
+                    Assert::IsFalse(CanEnumerateExplorerPath(link));
+                }
+                RemoveDirectoryW(link.c_str());
+            }
+            RemoveDirectoryW(target.c_str());
+        }
+
         TEST_METHOD(AcceptsOrdinaryLocalFile)
         {
             TemporaryFile fixture;
+            if (!CanEnumerateExplorerPath(fixture.path.data()))
+                return; // TEMP may be on an ineligible drive or reparse-backed path.
             Assert::IsTrue(CanEnumerateExplorerPath(fixture.path.data()));
         }
     };
