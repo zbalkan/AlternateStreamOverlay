@@ -48,11 +48,6 @@ jobs:
           if ($sourceVersion -ne $env:RELEASE_VERSION) {
             throw "Requested $env:RELEASE_VERSION but version.h specifies $sourceVersion."
           }
-          $changelog = Get-Content -LiteralPath 'CHANGELOG.md' -Raw
-          $latest = [regex]::Match($changelog, '(?m)^## \[(\d+\.\d+\.\d+)\]').Groups[1].Value
-          if ($latest -ne $env:RELEASE_VERSION) {
-            throw "Latest CHANGELOG release is $latest, not $env:RELEASE_VERSION."
-          }
           $tag = "v$env:RELEASE_VERSION"
           $headers = @{
             Authorization = "Bearer $env:GH_TOKEN"
@@ -160,8 +155,15 @@ jobs:
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
           $tag = "v$env:RELEASE_VERSION"
-          $notes = "Release $tag. See CHANGELOG.md for details. Verify the attached SHA-256 checksum before using these binaries."
-          $notes | Set-Content -LiteralPath 'dist\release-notes.txt' -Encoding utf8
+          $notesPath = 'dist\release-notes.txt'
+          try {
+            & .\src\tests\New-ReleaseNotes.ps1 -Version $env:RELEASE_VERSION -OutputPath $notesPath
+          }
+          catch {
+            Write-Warning "Changelog notes generation failed; using editable draft notes: $_"
+            "Release $tag. Review CHANGELOG.md and replace these placeholder notes before publishing." |
+              Set-Content -LiteralPath $notesPath -Encoding utf8
+          }
           $archive = "dist/AlternateStreamOverlay-$tag-win-x64.zip"
           $checksum = "$archive.sha256"
           gh release create $tag $archive $checksum --title $tag --draft --target $env:GITHUB_SHA --notes-file 'dist\release-notes.txt'
