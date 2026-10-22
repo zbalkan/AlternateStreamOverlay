@@ -150,19 +150,7 @@ namespace
             L"Software\\Classes\\CLSID\\{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}",
             L"Software\\Classes\\CLSID\\{4A26024B-5499-45BE-A23F-4A65E88888D0}"
         };
-        for (const auto* path : classKeys)
-        {
-            HKEY key = nullptr;
-            const LONG status = RegOpenKeyExW(root, path, 0, KEY_READ, &key);
-            if (status == ERROR_SUCCESS)
-            {
-                RegCloseKey(key);
-                return true;
-            }
-            if (status != ERROR_FILE_NOT_FOUND && status != ERROR_PATH_NOT_FOUND)
-                return true;
-        }
-        return false;
+        return HasExistingComClassRegistration(root, classKeys);
     }
 
     HRESULT UpdateOverlayRegistration(bool install)
@@ -218,14 +206,14 @@ STDAPI DllRegisterServer(void)
     if (FAILED(hr))
     {
         // Only a fresh ATL registration may be undone safely here.
-        if (!existingRegistration)
+        if (ShouldRollbackComRegistration(existingRegistration))
             _AtlModule.DllUnregisterServer();
         return hr;
     }
 #endif
 
     hr = UpdateOverlayRegistration(true);
-    if (FAILED(hr) && !existingRegistration)
+    if (FAILED(hr) && ShouldRollbackComRegistration(existingRegistration))
     {
         // A foreign overlay is left untouched. Undo only new COM classes.
 #ifdef _MERGE_PROXYSTUB
