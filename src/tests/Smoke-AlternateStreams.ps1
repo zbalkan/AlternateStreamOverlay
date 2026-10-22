@@ -361,7 +361,6 @@ function Test-WildcardContinuesAfterFailure {
     # Use a dangling directory junction as a deterministic per-item error.
     # Unlike an exclusive data-file lock, opening a missing junction target
     # cannot succeed through a metadata-only CreateFileW request.
-    $observedContinuation = $false
     for ($iteration = 0; $iteration -lt $files.Count; $iteration++) {
         $blocked = $files[$iteration]
         $following = $files[1 - $iteration]
@@ -380,8 +379,8 @@ function Test-WildcardContinuesAfterFailure {
                 throw "Wildcard scan did not report partial failure: $output"
             }
 
-            if (Test-ScanIncludesErrorAndResult -Output $output -Blocked $blocked -Following $following) {
-                $observedContinuation = $true
+            if (-not (Test-ScanIncludesErrorAndResult -Output $output -Blocked $blocked -Following $following)) {
+                throw "Wildcard scan omitted a successful ADS result: $output"
             }
         }
         finally {
@@ -390,10 +389,6 @@ function Test-WildcardContinuesAfterFailure {
             [System.IO.File]::Delete($following)
         }
     }
-    if (-not $observedContinuation) {
-        throw 'No wildcard scan included both its per-item error and a valid ADS result.'
-    }
-
     Write-Host 'PASS: wildcard scan continues after an item failure and exits nonzero'
 }
 
