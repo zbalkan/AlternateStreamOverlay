@@ -59,6 +59,7 @@ END
 
 #define ASO_FILE_DESCRIPTION "Explorer extension for NTFS alternate data streams"
 #define ASO_ORIGINAL_FILENAME "AlternateStreamOverlay.dll"
+#define ASO_INTERNAL_NAME "AlternateStreamOverlay.dll"
 #define ASO_FILETYPE VFT_DLL
 #include "..\\version.rc2"
 
