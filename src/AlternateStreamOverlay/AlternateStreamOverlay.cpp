@@ -19,8 +19,7 @@ namespace
     class TransactionHandle
     {
     public:
-        TransactionHandle()
-            : handle_(CreateTransaction(nullptr, nullptr, 0, 0, 0, 0, nullptr)) {}
+        TransactionHandle() = default;
         ~TransactionHandle()
         {
             if (handle_ != INVALID_HANDLE_VALUE)
@@ -31,7 +30,7 @@ namespace
         HANDLE get() const { return handle_; }
 
     private:
-        HANDLE handle_;
+        HANDLE handle_ = CreateTransaction(nullptr, nullptr, 0, 0, 0, 0, nullptr);
     };
 
     class RegistryKey
