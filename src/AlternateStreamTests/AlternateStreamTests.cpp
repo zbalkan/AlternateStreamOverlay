@@ -2,6 +2,7 @@
 #include "altstrm_common.h"
 #include "stream_info_detail.h"
 #include "../AlternateStreamOverlay/LocalPathPolicy.h"
+#include "../AlternateStreamOverlay/RegistrationPolicy.h"
 #include <algorithm>
 #include <cstddef>
 #include <limits>
@@ -239,6 +240,24 @@ namespace
 
 namespace AlternateStreamTests
 {
+
+    TEST_CLASS(OverlayRegistrationPolicyTests)
+    {
+    public:
+        TEST_METHOD(RejectsForeignOrUnreadableRegistration)
+        {
+            Assert::IsTrue(CanReplaceOverlayRegistration(
+                ERROR_FILE_NOT_FOUND, nullptr));
+            Assert::IsTrue(CanReplaceOverlayRegistration(
+                ERROR_SUCCESS, L"{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}"));
+            Assert::IsFalse(CanReplaceOverlayRegistration(
+                ERROR_SUCCESS, L"{00000000-0000-0000-0000-000000000000}"));
+            Assert::IsFalse(CanReplaceOverlayRegistration(
+                ERROR_MORE_DATA, nullptr));
+            Assert::IsFalse(CanReplaceOverlayRegistration(
+                ERROR_UNSUPPORTED_TYPE, nullptr));
+        }
+    };
 
     TEST_CLASS(ComInitializationTests)
     {
