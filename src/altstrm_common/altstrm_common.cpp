@@ -197,16 +197,16 @@ StreamEnumeration AlternateStreamReader::EnumerateStreams(HANDLE file, bool coll
             record.nameBytes == sizeof(DefaultStream) - sizeof(WCHAR) &&
             wmemcmp(record.name, DefaultStream,
                     (sizeof(DefaultStream) / sizeof(WCHAR)) - 1) == 0;
-        const bool namedDataStream = stream_info_detail::IsNamedDataStreamName(
-            record.name, record.nameBytes / sizeof(WCHAR));
-        // Existence is independent of whether a stream name can be safely
-        // appended to a Win32 path. Do not hide an ADS overlay simply because
-        // its name is unsuitable for the preview UI.
+        // Existence is independent of whether the name can be appended to a
+        // Win32 path. Skip name classification on the Explorer overlay path.
         if (!defaultStream)
             result.hasNamedStreams = true;
-        // Keep the default stream in the public enumeration for compatibility,
-        // but exclude non-data and unsafe names from path-based consumers.
-        if (collectNames && (defaultStream || namedDataStream))
+
+        // Preserve the default stream for compatibility; collect other
+        // names only when they are safe for path-based consumers.
+        if (collectNames && (defaultStream ||
+            stream_info_detail::IsNamedDataStreamName(
+                record.name, record.nameBytes / sizeof(WCHAR))))
             result.streams.emplace_back(record.name, record.nameBytes / sizeof(WCHAR));
 
         if (record.nextOffset == 0)
