@@ -321,6 +321,33 @@ function Test-FilesystemLifecycle {
     Write-Host 'PASS: directory negatives, ADS lifecycle, large stream, repeatability and sharing'
 }
 
+function Test-ContinuationAfterError {
+    param(
+        [string] $Output,
+        [string] $Blocked,
+        [string] $Following
+    )
+
+    $lines = @($Output -split '\r?\n')
+    $errorIndex = -1
+    $resultIndex = -1
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i].StartsWith('Stream enumeration failed for ' + $Blocked,
+                [StringComparison]::Ordinal)) {
+            $errorIndex = $i
+        }
+        if ($lines[$i] -ceq $Following -and
+            $i + 1 -lt $lines.Count -and
+            $lines[$i + 1] -ceq ' :afterfailure:$DATA') {
+            $resultIndex = $i
+        }
+    }
+    if ($errorIndex -lt 0) {
+        throw "Wildcard scan omitted dangling-junction error: $Output"
+    }
+    return $resultIndex -gt $errorIndex
+}
+
 function Test-WildcardContinuesAfterFailure {
     param([string] $Root)
 
@@ -345,32 +372,19 @@ function Test-WildcardContinuesAfterFailure {
         [System.IO.File]::WriteAllText($following, 'valid')
         [System.IO.File]::WriteAllBytes($following + ':afterfailure', [byte[]](65))
 
+        # PowerShell requires the target to exist when creating a junction.
+        # Remove it only after creation to obtain a dangling reparse point.
+        [System.IO.Directory]::CreateDirectory($targets[$iteration]) | Out-Null
         $junction = New-Item -ItemType Junction -Path $blocked -Target $targets[$iteration]
         try {
+            [System.IO.Directory]::Delete($targets[$iteration])
             $output = & $exe (Join-Path $scanDirectory '*.txt') 2>&1 | Out-String
             $status = $LASTEXITCODE
             if ($status -eq 0) {
                 throw "Wildcard scan did not report partial failure: $output"
             }
 
-            $lines = @($output -split '\r?\n')
-            $errorLine = 'Stream enumeration failed for ' + $blocked
-            $errorIndex = -1
-            $resultIndex = -1
-            for ($i = 0; $i -lt $lines.Count; $i++) {
-                if ($lines[$i].StartsWith($errorLine, [StringComparison]::Ordinal)) {
-                    $errorIndex = $i
-                }
-                if ($lines[$i] -ceq $following -and
-                    $i + 1 -lt $lines.Count -and
-                    $lines[$i + 1] -ceq ' :afterfailure:$DATA') {
-                    $resultIndex = $i
-                }
-            }
-            if ($errorIndex -lt 0) {
-                throw "Wildcard scan omitted dangling-junction error: $output"
-            }
-            if ($resultIndex -gt $errorIndex) {
+            if (Test-ContinuationAfterError -Output $output -Blocked $blocked -Following $following) {
                 $observedContinuation = $true
             }
         }
