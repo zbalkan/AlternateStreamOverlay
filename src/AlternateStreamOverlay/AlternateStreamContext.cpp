@@ -543,10 +543,10 @@ void SelectText(DialogState* state, size_t idx, bool asHex, HWND textBox)
     {
         SelectTextImpl(state, idx, asHex, textBox);
     }
-    catch (const std::exception&)
+    catch (...)
     {
-        // Never propagate allocation or string construction failures through
-        // the Win32 dialog procedure. The scoped SRW guard releases on unwind.
+        // Never propagate C++ exceptions through the Win32 dialog procedure.
+        // The scoped SRW guard releases on unwind.
         if (textBox != nullptr)
             SetWindowTextW(textBox, L"Unable to start alternate stream preview.");
     }
@@ -575,8 +575,10 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
                                  state->enumerationIncomplete);
         state->gate = std::make_shared<PreviewGate>();
     }
-    catch (const std::bad_alloc&)
+    catch (...)
     {
+        // Property-page callbacks must not allow C++ exceptions across the
+        // Windows callback boundary. State has not yet been published.
         return FALSE;
     }
     state->gate->window = hWnd;
