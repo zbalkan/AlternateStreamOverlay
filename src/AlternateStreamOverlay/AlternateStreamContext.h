@@ -22,13 +22,10 @@ class ATL_NO_VTABLE CAlternateStreamContext :
 private:
     mutable std::mutex m_selectionMutex;
     std::wstring m_path;
-    bool m_isDirectory;
     bool m_enumerationIncomplete = false;
     std::vector<std::wstring> m_streams;
 public:
-    CAlternateStreamContext() : m_isDirectory(false)
-    {
-    }
+    CAlternateStreamContext() = default;
 
     DECLARE_REGISTRY_RESOURCEID(IDR_ALTERNATESTREAMCONTEXT)
 

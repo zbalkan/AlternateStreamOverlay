@@ -99,7 +99,6 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
             std::lock_guard<std::mutex> lock(m_selectionMutex);
             m_path.clear();
             m_streams.clear();
-            m_isDirectory = false;
             m_enumerationIncomplete = false;
         }
 
@@ -180,7 +179,6 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
         if (!CanEnumerateSynchronously(filePath))
             return E_FAIL;
 
-        const bool directory = PathIsDirectoryW(filePath.c_str()) != FALSE;
         AlternateStreamReader reader;
         auto enumeration = reader.EnumerateStreams(filePath.c_str());
         if (enumeration.status == StreamStatus::Error)
@@ -201,7 +199,6 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
             std::lock_guard<std::mutex> lock(m_selectionMutex);
             m_path.swap(filePath);
             m_streams.swap(streams);
-            m_isDirectory = directory;
             m_enumerationIncomplete = incomplete;
         }
         return S_OK;
