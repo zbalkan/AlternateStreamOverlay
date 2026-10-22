@@ -516,14 +516,21 @@ function Test-EscapedBidiStreamName {
 function Test-EscapedLiteralBackslash {
     param([string] $Root)
 
-    $path = Join-Path $Root 'literal-escape.txt'
+    # Backslash is a Win32 path separator, not a valid ADS-name character.
+    # Place the literal "\u202E" sequence across a directory boundary instead.
+    $folder = Join-Path $Root 'u202E'
+    [System.IO.Directory]::CreateDirectory($folder) | Out-Null
+    $path = Join-Path $folder 'literal-escape.txt'
     [NativeAdsFixture]::Create($path)
-    $rawName = 'literal\u202E'
-    [NativeAdsFixture]::Create($path + ':' + $rawName)
+    [NativeAdsFixture]::Create($path + ':literal')
     $output = & $exe $path 2>&1 | Out-String
-    if ($LASTEXITCODE -ne 0 -or -not $output.Contains('literal\\u202E')) {
-        throw "Literal backslash escape sequence was ambiguous: $output"
+    $displayPath = $path.Replace('\', '\\')
+    if ($LASTEXITCODE -ne 0 -or -not $output.Contains($displayPath) -or
+        -not $output.Contains(':literal:$DATA') -or
+        $output.Contains([string][char]0x202E)) {
+        throw "Literal backslash sequence was not preserved unambiguously: $output"
     }
+    Write-Host 'PASS: literal backslash sequence is escaped'
 }
 
 function Test-EscapedSurrogateOutput {
