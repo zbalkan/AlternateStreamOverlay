@@ -66,4 +66,9 @@ std::wstring FormatHexPreview(const BYTE* data, size_t size);
 bool TryDecodeUtf8Preview(const BYTE* data, size_t size, bool truncated,
                           std::wstring& text);
 
+// The checkbox selects the display format. In text mode, malformed UTF-8
+// is replaced rather than silently rendering a hex dump.
+std::wstring FormatStreamPreview(const BYTE* data, size_t size,
+                                 bool truncated, bool asHex);
+
 #endif // _ALTSTRM_COMMON_H_

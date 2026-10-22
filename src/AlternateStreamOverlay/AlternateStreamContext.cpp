@@ -361,18 +361,8 @@ std::wstring ReadPreview(const std::wstring& path, bool asHex)
     if (truncated)
         bytesRead = MaxPreviewBytes;
 
-    if (!asHex)
-    {
-        std::wstring text;
-        if (TryDecodeUtf8Preview(buffer.data(), bytesRead, truncated, text))
-        {
-            if (truncated)
-                text += L"\r\n[Preview truncated after 65535 bytes]";
-            return text;
-        }
-    }
-
-    std::wstring formatted = FormatHexPreview(buffer.data(), bytesRead);
+    std::wstring formatted = FormatStreamPreview(
+        buffer.data(), bytesRead, truncated, asHex);
     if (truncated)
         formatted += L"\r\n[Preview truncated after 65535 bytes]";
     return formatted;

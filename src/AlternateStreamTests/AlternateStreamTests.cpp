@@ -813,6 +813,41 @@ namespace AlternateStreamTests
     TEST_CLASS(StreamPreviewTests)
     {
     public:
+        TEST_METHOD(HexCheckboxAlwaysChangesPreviewFormat)
+        {
+            const BYTE malformed[] = { '[', 'Z', 'o', 'n', 'e', ']', 0xC0, 0xAF };
+            const auto plain = FormatStreamPreview(
+                malformed, sizeof(malformed), false, false);
+            const auto hex = FormatStreamPreview(
+                malformed, sizeof(malformed), false, true);
+            Assert::IsTrue(plain.find(L"[Zone]") == 0);
+            Assert::IsTrue(plain.find(L'\uFFFD') != std::wstring::npos);
+            Assert::IsTrue(plain.find(L"00000000") == std::wstring::npos);
+            Assert::IsTrue(hex.find(L"00000000") == 0);
+            Assert::IsTrue(plain != hex);
+
+            const BYTE nul[] = { 'A', 0, 'B' };
+            const auto text = FormatStreamPreview(nul, sizeof(nul), false, false);
+            Assert::AreEqual(static_cast<size_t>(3), text.size());
+            Assert::AreEqual(L'A', text.front());
+            Assert::AreEqual(L'\uFFFD', text[1]);
+            Assert::AreEqual(L'B', text.back());
+        }
+
+        TEST_METHOD(TruncatedMalformedTextOmitsIncompleteUtf8Tail)
+        {
+            const BYTE input[] = { 'A', 0xC0, 0xAF, 'B', 0xE2, 0x82 };
+            const auto truncatedText = FormatStreamPreview(
+                input, sizeof(input), true, false);
+            const auto completeText = FormatStreamPreview(
+                input, sizeof(input), false, false);
+
+            Assert::IsTrue(truncatedText.find(L'\uFFFD') != std::wstring::npos);
+            Assert::AreEqual(L'B', truncatedText.back());
+            Assert::IsTrue(completeText.size() > truncatedText.size());
+            Assert::AreEqual(L'\uFFFD', completeText.back());
+        }
+
         TEST_METHOD(ValidUtf8AndBinaryFallback)
         {
             std::wstring text;
