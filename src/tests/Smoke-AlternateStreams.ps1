@@ -490,6 +490,26 @@ function Test-RedirectedUnicodeOutput {
     Write-Host 'PASS: redirected UTF-8 Unicode path and ADS name'
 }
 
+function Test-EscapedBidiStreamName {
+    param([string] $Root)
+
+    $path = Join-Path $Root 'bidi-stream.txt'
+    [NativeAdsFixture]::Create($path)
+    $rawName = 'prefix' + [char]0x202E + 'suffix'
+    [NativeAdsFixture]::Create($path + ':' + $rawName)
+    $nativeNames = [NativeAdsFixture]::Streams($path)
+    if (-not (@($nativeNames | Where-Object {
+        [string]::Equals($_, ':' + $rawName + ':$DATA', [StringComparison]::Ordinal)
+    }).Count -eq 1)) { throw 'Native API did not preserve bidi stream fixture' }
+
+    $output = & $exe $path 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0) { throw "CLI failed on bidi stream: $output" }
+    if (-not $output.Contains('prefix\u202Esuffix') -or $output.Contains([string][char]0x202E)) {
+        throw "CLI did not escape bidi formatting control: $output"
+    }
+    Write-Host 'PASS: ADS bidi control is escaped'
+}
+
 function Test-UnicodeNames {
     param([string] $Root)
     $high = [string][char]0xD800
@@ -564,6 +584,7 @@ try {
     Test-RedirectedErrorDiagnostics -Root $directory
     Test-RedirectedUnicodeOutput -Root $directory
     Test-UnicodeNames -Root $directory
+    Test-EscapedBidiStreamName -Root $directory
     Write-Host 'PASS: all NTFS ADS integration tests'
 }
 finally {
