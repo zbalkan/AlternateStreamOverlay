@@ -1,5 +1,6 @@
 #pragma once
 #include <Windows.h>
+#include <array>
 #include <cwchar>
 
 // Only a newly created key may have no default value. An existing key
@@ -24,7 +25,7 @@ inline bool ShouldRollbackComRegistration(bool alreadyRegistered)
 // Access failures conservatively count as existing registration: never
 // remove COM keys whose previous state we cannot establish.
 template <size_t N>
-bool HasExistingComClassRegistration(HKEY root, const LPCWSTR (&keys)[N])
+bool HasExistingComClassRegistration(HKEY root, const std::array<LPCWSTR, N>& keys)
 {
     for (const auto* path : keys)
     {

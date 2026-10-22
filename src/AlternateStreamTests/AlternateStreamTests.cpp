@@ -261,7 +261,7 @@ namespace AlternateStreamTests
             if (createStatus != ERROR_SUCCESS)
                 Assert::Fail(L"Unable to create registration probe sandbox");
 
-            constexpr LPCWSTR keys[] = { L"ClassA", L"ClassB" };
+            constexpr std::array<LPCWSTR, 2> keys = { L"ClassA", L"ClassB" };
             Assert::IsFalse(HasExistingComClassRegistration(sandbox, keys));
 
             HKEY registered = nullptr;
