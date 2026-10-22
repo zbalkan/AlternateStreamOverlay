@@ -15,71 +15,65 @@ namespace
         L"ShellIconOverlayIdentifiers\\AlternateStreamOverlayIcon";
     constexpr WCHAR OverlayClsid[] = L"{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}";
 
-    HRESULT UpdateOverlayRegistration(bool install)
+    HRESULT RemoveOverlayRegistration(HKEY root)
     {
-        bool perUser = false;
-        const HRESULT scopeResult = AtlGetPerUserRegistration(&perUser);
-        if (FAILED(scopeResult))
-            return scopeResult;
+        // Keep the ownership read and deletion in one registry transaction.
+        // A conflicting non-transacted modification aborts the transaction
+        // rather than allowing an unrelated handler to be deleted.
+        const HANDLE transaction =
+            CreateTransaction(nullptr, nullptr, 0, 0, 0, 0, nullptr);
+        if (transaction == INVALID_HANDLE_VALUE)
+            return HRESULT_FROM_WIN32(GetLastError());
 
-        const HKEY root = perUser ? HKEY_CURRENT_USER : HKEY_LOCAL_MACHINE;
-        if (!install)
+        HKEY key = nullptr;
+        LONG status = RegOpenKeyTransactedW(root, OverlayKey, 0,
+            KEY_QUERY_VALUE, &key, transaction, nullptr);
+        if (status == ERROR_FILE_NOT_FOUND)
         {
-            // Keep the ownership read and deletion in one registry transaction.
-            // A conflicting non-transacted modification aborts the transaction
-            // rather than allowing an unrelated handler to be deleted.
-            const HANDLE transaction =
-                CreateTransaction(nullptr, nullptr, 0, 0, 0, 0, nullptr);
-            if (transaction == INVALID_HANDLE_VALUE)
-                return HRESULT_FROM_WIN32(GetLastError());
-
-            HKEY key = nullptr;
-            LONG status = RegOpenKeyTransactedW(root, OverlayKey, 0,
-                KEY_QUERY_VALUE, &key, transaction, nullptr);
-            if (status == ERROR_FILE_NOT_FOUND)
-            {
-                CloseHandle(transaction);
-                return S_OK;
-            }
-            if (status != ERROR_SUCCESS)
-            {
-                CloseHandle(transaction);
-                return HRESULT_FROM_WIN32(status);
-            }
-
-            auto registeredClsid = std::array<WCHAR, 64>{};
-            auto bytes = static_cast<DWORD>(
-                registeredClsid.size() * sizeof(WCHAR));
-            status = RegGetValueW(key, nullptr, nullptr, RRF_RT_REG_SZ,
-                nullptr, registeredClsid.data(), &bytes);
-            RegCloseKey(key);
-
-            // An absent, different, or unrecognizable value is not ours.
-            if (status == ERROR_FILE_NOT_FOUND ||
-                status == ERROR_MORE_DATA ||
-                status == ERROR_UNSUPPORTED_TYPE ||
-                (status == ERROR_SUCCESS &&
-                 _wcsicmp(registeredClsid.data(), OverlayClsid) != 0))
-            {
-                CloseHandle(transaction); // Uncommitted transaction rolls back.
-                return S_OK;
-            }
-            if (status == ERROR_SUCCESS)
-            {
-                status = RegDeleteKeyTransactedW(root, OverlayKey, 0, 0,
-                    transaction, nullptr);
-                // Another remover may already have deleted the key.
-                // Do not mask transactional conflicts or commit failures.
-                if (status == ERROR_FILE_NOT_FOUND)
-                    status = ERROR_SUCCESS;
-                else if (status == ERROR_SUCCESS && !CommitTransaction(transaction))
-                    status = GetLastError();
-            }
-
+            CloseHandle(transaction);
+            return S_OK;
+        }
+        if (status != ERROR_SUCCESS)
+        {
             CloseHandle(transaction);
             return HRESULT_FROM_WIN32(status);
         }
 
+        auto registeredClsid = std::array<WCHAR, 64>{};
+        auto bytes = static_cast<DWORD>(
+            registeredClsid.size() * sizeof(WCHAR));
+        status = RegGetValueW(key, nullptr, nullptr, RRF_RT_REG_SZ,
+            nullptr, registeredClsid.data(), &bytes);
+        RegCloseKey(key);
+
+        // An absent, different, or unrecognizable value is not ours.
+        if (status == ERROR_FILE_NOT_FOUND ||
+            status == ERROR_MORE_DATA ||
+            status == ERROR_UNSUPPORTED_TYPE ||
+            (status == ERROR_SUCCESS &&
+             _wcsicmp(registeredClsid.data(), OverlayClsid) != 0))
+        {
+            CloseHandle(transaction); // Uncommitted transaction rolls back.
+            return S_OK;
+        }
+        if (status == ERROR_SUCCESS)
+        {
+            status = RegDeleteKeyTransactedW(root, OverlayKey, 0, 0,
+                transaction, nullptr);
+            // Another remover may already have deleted the key.
+            // Do not mask transactional conflicts or commit failures.
+            if (status == ERROR_FILE_NOT_FOUND)
+                status = ERROR_SUCCESS;
+            else if (status == ERROR_SUCCESS && !CommitTransaction(transaction))
+                status = GetLastError();
+        }
+
+        CloseHandle(transaction);
+        return HRESULT_FROM_WIN32(status);
+    }
+
+    HRESULT InstallOverlayRegistration(HKEY root)
+    {
         // Use a single registry transaction for the ownership check and
         // write, matching the existing transactional unregistration path.
         const HANDLE transaction =
@@ -119,6 +113,18 @@ namespace
             status = GetLastError();
         CloseHandle(transaction);
         return HRESULT_FROM_WIN32(status);
+    }
+
+    HRESULT UpdateOverlayRegistration(bool install)
+    {
+        bool perUser = false;
+        const HRESULT scopeResult = AtlGetPerUserRegistration(&perUser);
+        if (FAILED(scopeResult))
+            return scopeResult;
+
+        const HKEY root = perUser ? HKEY_CURRENT_USER : HKEY_LOCAL_MACHINE;
+        return install ? InstallOverlayRegistration(root) :
+                         RemoveOverlayRegistration(root);
     }
 }
 
