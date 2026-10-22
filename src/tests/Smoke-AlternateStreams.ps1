@@ -334,7 +334,7 @@ function Test-ScanIncludesErrorAndResult {
     # since merging two redirected pipes can interleave partial lines.
     $lines = @($Output -split '\r?\n')
     for ($i = 0; $i + 1 -lt $lines.Count; $i++) {
-        if ($lines[$i] -ceq $Following -and
+        if ($lines[$i] -ceq $Following.Replace('\', '\\') -and
             $lines[$i + 1] -ceq ' :afterfailure:$DATA') {
             return $true
         }
@@ -390,7 +390,7 @@ function Test-WildcardContinuesAfterFailure {
                 if ($process.ExitCode -eq 0) {
                     throw "Wildcard scan did not report partial failure: $stdout $stderr"
                 }
-                if (-not $stderr.Contains('Stream enumeration failed for ' + $blocked)) {
+                if (-not $stderr.Contains('Stream enumeration failed for ' + $blocked.Replace('\', '\\'))) {
                     throw "Wildcard scan omitted per-item stderr error: $stderr"
                 }
                 if (-not (Test-ScanIncludesErrorAndResult -Output $stdout -Following $following)) {
@@ -443,13 +443,13 @@ function Test-RedirectedErrorDiagnostics {
                 throw 'Partial wildcard enumeration should exit nonzero.'
             }
             if (-not $stdout.Contains(':diagnostic:$DATA') -or
-                -not $stdout.Contains($plain)) {
+                -not $stdout.Contains($plain.Replace('\', '\\'))) {
                 throw "Successful results must remain on stdout: $stdout"
             }
             if ($stdout.Contains('Stream enumeration failed')) {
                 throw "Operational error leaked into stdout: $stdout"
             }
-            if (-not $stderr.Contains('Stream enumeration failed for ' + $broken)) {
+            if (-not $stderr.Contains('Stream enumeration failed for ' + $broken.Replace('\', '\\'))) {
                 throw "Missing per-file stderr diagnostic: $stderr"
             }
         }
@@ -483,7 +483,7 @@ function Test-RedirectedUnicodeOutput {
         if ($process.ExitCode -ne 0) { throw "Unicode CLI exited $($process.ExitCode)" }
         $strictUtf8 = [System.Text.UTF8Encoding]::new($false, $true)
         $output = $strictUtf8.GetString($bytes.ToArray())
-        if (-not $output.Contains($path) -or -not $output.Contains(':' + $streamName + ':$DATA')) {
+        if (-not $output.Contains($path.Replace('\', '\\')) -or -not $output.Contains(':' + $streamName + ':$DATA')) {
             throw "Redirected UTF-8 output lost Unicode path or ADS name: $output"
         }
     }
