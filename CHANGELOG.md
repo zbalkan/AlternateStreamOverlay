@@ -2,68 +2,50 @@
 
 All notable changes to AlternateStreamOverlay are documented in this file.
 
-Releases from version 2.0.0 onward follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+Future releases follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html). No 2.0.0 release has been published yet. Changes planned for the next release remain under **Unreleased** until the release is prepared.
 
-Historical entries from Lee Benfield's original project are preserved verbatim at the end of this document.
+Historical entries from Lee Benfield's original project are preserved verbatim below.
 
 ## [Unreleased]
 
-## [2.0.0] - 2026-10-22
-
-A modernization of AlternateStreamOverlay for contemporary Windows systems, with improved reliability, safer Explorer integration, and automated testing.
-
 ### Added
 
-- Per-user COM and Explorer overlay registration without administrator privileges.
-- Asynchronous alternate data stream previews to keep the Explorer property-page interface responsive.
-- Stream enumeration diagnostics that distinguish successful, failed, and incomplete operations.
-- Unicode-aware command-line output, including UTF-8 encoding when redirected.
-- Read-only diagnostics for context-menu, property-sheet, and icon overlay registration.
-- Automated native regression tests and PowerShell smoke tests for alternate data stream handling.
-- GitHub Actions workflows for builds, tests, static analysis, and shell registration validation.
+- Explorer's **Alternate Streams...** command provides access to the Alternate Streams tab in the file's Properties dialog for files that contain named alternate data streams.
+- Users can inspect named alternate stream contents as text or hexadecimal previews, with an indication when a preview is truncated.
+- Files with alternate streams can be identified using an Explorer icon overlay, subject to Windows overlay-handler limits.
+- Per-user installation and uninstallation without administrator privileges, alongside machine-wide registration.
+- Command-line listing with Unicode file and stream names, including UTF-8 output when redirected.
+- Diagnostics for shell integration and registrations.
 
 ### Changed
 
-- Migrated the original Visual C++ 2008 projects to modern MSVC and Windows SDK tooling.
-- Standardized native projects on C++14 and x64 Debug and Release configurations.
-- Modernized stream enumeration around the documented `GetFileInformationByHandleEx(FileStreamInfo)` API.
-- Improved handling of Unicode paths, long filenames, directory paths, and volume roots.
-- Limited stream previews to approximately 64 KiB to avoid unbounded memory consumption within Explorer.
-- Improved hexadecimal preview formatting and UTF-8 text decoding.
-- Reduced unnecessary allocations during Explorer overlay detection.
-- Reorganized the source tree and established consistent formatting, compiler warnings, and build configurations.
-- Replaced original fingerprint icon with an icon set of different sizes from icons8 website
+- The Explorer context-menu action now requests the Alternate Streams tab in the file's Properties dialog rather than opening a separate stream-content window; some Explorer versions may fall back to the default Properties tab.
+- The standard unnamed file data stream (`::$DATA`) is no longer shown as an alternate stream in Explorer or command-line results.
+- Stream previews load asynchronously so Explorer remains responsive during slower reads; previews are limited to approximately 64 KiB.
+- Stream listings and previews provide clearer feedback when enumeration is incomplete or a stream cannot be read.
+- Improved text and hexadecimal display, including UTF-8 decoding and escaping potentially confusing characters in command-line output.
+- Improved handling of directories, long and Unicode paths, drive-relative paths, and volume roots.
+- Updated the Explorer icon artwork.
 
 ### Removed
 
-- Support for legacy Windows XP-era stream enumeration.
-- 32-bit build support.
+- Compatibility with operating systems older than Windows 10 and Windows Server 2016.
+- 32-bit (x86) binaries. Only 64-bit Windows builds are provided.
+- Legacy Windows XP-era alternate stream enumeration behavior.
 
 ### Fixed
 
-- Incorrect handling of malformed or truncated stream enumeration records.
-- Incomplete enumeration results being treated as successful empty results.
-- Explorer initialization delays caused by synchronous stream preview reads.
-- Potentially blocking Explorer operations involving remote, offline, or reparse-point paths.
-- Resource ownership and cleanup errors involving COM storage media, dialogs, and worker threads.
-- Stale selection state during COM reinitialization and property-page lifecycle changes.
-- Race conditions involving asynchronous preview completion and dialog teardown.
-- Incorrect handling of command identifiers and context-menu invocation.
-- Stream-name validation and path construction edge cases.
-- Command-line enumeration errors involving relative paths, drive-relative paths, directories, and volume roots.
-- Ambiguous command-line output for stream names containing control or other unsafe Unicode characters.
-- Incorrect command-line success reporting after enumeration failures.
-- Registration failures and cleanup behavior that could affect existing or independently owned registry entries.
-- Long-path failures and large stream enumeration buffer handling.
+- Incorrect or misleading stream listings for malformed, truncated, or incomplete enumeration results.
+- Failures when working with long paths, large stream inventories, and unusual stream names.
+- Command-line error handling and exit status for failed enumerations.
+- Explorer delays and stale results when changing selection, closing the property page, or previewing streams.
+- Registration and unregistration edge cases that could affect unrelated registry entries.
 
 ### Security
 
-- Enabled Control Flow Guard (CFG), SDL security checks, and CET shadow-stack compatibility for Release binaries.
-- Strengthened validation of stream metadata, stream names, shell data objects, and Win32 API results.
-- Restricted Explorer-triggered stream enumeration on potentially remote, offline, or redirected paths.
-- Improved exception containment at COM and Windows callback boundaries.
-- Added automated static analysis using MSVC analysis, Cppcheck, clang-tidy, DevSkim, and additional security checks.
-- Enforced stricter compiler diagnostics, including warnings as errors for Release production builds.
+- Better validation of stream names and metadata and safer handling of malformed shell data.
+- Reduced potentially blocking Explorer operations on remote, offline, and redirected paths.
+- Improved isolation of failures in shell callbacks, along with additional Windows binary exploit mitigations.
 
 ## Original changelog (1.x)
 
@@ -79,5 +61,4 @@ Minor rev - 1.0.0.5 - Was missing a file close. (thanks Peter Allgaier)
 
 Minor rev - 1.0.0.6 - Re-added XP functionality - I'd switched to using a documented function, but that's only available in Vista+! n.b. now dynamically chooses to use 'official' or undocumented function, as the official one is threadsafe, so I don't have to perform external locking.(thanks Peter Allgaier - again!)
 
-[Unreleased]: https://github.com/zbalkan/AlternateStreamOverlay/compare/v2.0.0...HEAD
-[2.0.0]: https://github.com/zbalkan/AlternateStreamOverlay/compare/4d909b61d0d39dbea147a32762aac2c60f30492b...v2.0.0
+[Unreleased]: https://github.com/zbalkan/AlternateStreamOverlay/compare/4d909b61d0d39dbea147a32762aac2c60f30492b...HEAD
