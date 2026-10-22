@@ -27,7 +27,7 @@ A workflow failure is **not** a successful release. Inspect logs before retrying
 3. Extract the archive. Check that it contains `AlternateStreamOverlay.dll`, `altstrm.exe`, `README.md`, and `CHANGELOG.md`.
 4. Inspect the DLL and EXE **File version**, **Product version**, **Internal name**, and **Original filename** in file properties; both numerical versions must be `MAJOR.MINOR.PATCH.0`.
 5. Test registration, property-page behaviour, stream previews, and unregistration on a disposable Windows 10/11 x64 NTFS test machine. Automated runner tests are not a substitute for observing Explorer integration.
-6. The workflow initially creates generic draft notes. **Replace the generated draft description with the matching versioned changelog section** (or a faithful user-facing summary) before publication. Confirm that the draft points to the intended `main` commit and that its assets correspond to the validated build.
+6. The workflow generates draft notes directly from the dated versioned changelog section. **Review the generated notes for accuracy** before publication. Confirm that the draft points to the intended `main` commit and that its assets correspond to the validated build.
 
 Publish the verified draft manually. Do not rebuild or substitute assets after verification without repeating these checks.
 
