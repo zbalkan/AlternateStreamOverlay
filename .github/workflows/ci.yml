@@ -22,7 +22,7 @@ jobs:
         run: |
           $header = Get-Content -LiteralPath 'src/version.h' -Raw
           $parts = foreach ($n in 'MAJOR','MINOR','PATCH','BUILD') {
-            $m = [regex]::Match($header, "(?m)^\s*#define\s+ASO_VERSION_$n\s+(\d+)\s*$")
+            $m = [regex]::Match($header, ('(?m)^\s*#define\s+ASO_VERSION_{0}\s+(\d+)\s*$' -f $n))
             if (-not $m.Success) { throw "Missing ASO_VERSION_$n" }
             $m.Groups[1].Value
           }
