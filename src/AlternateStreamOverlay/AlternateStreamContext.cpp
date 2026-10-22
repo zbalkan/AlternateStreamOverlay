@@ -254,25 +254,23 @@ STDMETHODIMP CAlternateStreamContext::GetCommandString(
     if (idCmd != 0)
         return E_INVALIDARG;
 
-    // Match exact documented requests. Masking to the low three bits aliases
-    // GCS_VERBICONW (0x14) to GCS_VERBW (0x04), returning the wrong data.
-    const UINT kind = uFlags;
-    if (kind == GCS_VALIDATEA || kind == GCS_VALIDATEW)
+    // Match exact requests; masking uFlags would alias GCS_VERBICONW.
+    if (uFlags == GCS_VALIDATEA || uFlags == GCS_VALIDATEW)
         return S_OK;
     if (pszName == nullptr || cchMax == 0)
         return E_INVALIDARG;
 
-    if (kind == GCS_HELPTEXTA)
-        return StringCchCopyA(pszName, cchMax, "Inspect alternate data streams");
-    if (kind == GCS_HELPTEXTW)
+    const bool help = uFlags == GCS_HELPTEXTA || uFlags == GCS_HELPTEXTW;
+    const bool verb = uFlags == GCS_VERBA || uFlags == GCS_VERBW;
+    if (!help && !verb)
+        return E_INVALIDARG;
+
+    if (uFlags == GCS_HELPTEXTW || uFlags == GCS_VERBW)
         return StringCchCopyW(reinterpret_cast<LPWSTR>(pszName), cchMax,
-                              L"Inspect alternate data streams");
-    if (kind == GCS_VERBA)
-        return StringCchCopyA(pszName, cchMax, "alternatestreams");
-    if (kind == GCS_VERBW)
-        return StringCchCopyW(reinterpret_cast<LPWSTR>(pszName), cchMax,
-                              L"alternatestreams");
-    return E_INVALIDARG;
+            help ? L"Inspect alternate data streams" : L"alternatestreams");
+
+    return StringCchCopyA(pszName, cchMax,
+        help ? "Inspect alternate data streams" : "alternatestreams");
 }
 
 void CAlternateStreamContext::SnapshotSelection(
