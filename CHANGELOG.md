@@ -10,7 +10,7 @@ Historical entries from Lee Benfield's original project are preserved verbatim b
 
 ### Added
 
-- Explorer's **Alternate Streams...** command opens the Alternate Streams property page for files that contain named alternate data streams.
+- Explorer's **Alternate Streams...** command provides access to the Alternate Streams tab in the file's Properties dialog for files that contain named alternate data streams.
 - Users can inspect named alternate stream contents as text or hexadecimal previews, with an indication when a preview is truncated.
 - Files with alternate streams can be identified using an Explorer icon overlay, subject to Windows overlay-handler limits.
 - Per-user installation and uninstallation without administrator privileges, alongside machine-wide registration.
@@ -19,7 +19,7 @@ Historical entries from Lee Benfield's original project are preserved verbatim b
 
 ### Changed
 
-- The Explorer context-menu action now opens the file's alternate streams property page rather than displaying stream contents directly in the context menu.
+- The Explorer context-menu action now requests the Alternate Streams tab in the file's Properties dialog rather than opening a separate stream-content window; some Explorer versions may fall back to the default Properties tab.
 - The standard unnamed file data stream (`::$DATA`) is no longer shown as an alternate stream in Explorer or command-line results.
 - Stream previews load asynchronously so Explorer remains responsive during slower reads; previews are limited to approximately 64 KiB.
 - Stream listings and previews provide clearer feedback when enumeration is incomplete or a stream cannot be read.
