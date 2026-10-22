@@ -821,6 +821,7 @@ namespace AlternateStreamTests
             const auto hex = FormatStreamPreview(
                 malformed, sizeof(malformed), false, true);
             Assert::IsTrue(plain.find(L"[Zone]") == 0);
+            Assert::IsTrue(plain.find(L'\uFFFD') != std::wstring::npos);
             Assert::IsTrue(plain.find(L"00000000") == std::wstring::npos);
             Assert::IsTrue(hex.find(L"00000000") == 0);
             Assert::IsTrue(plain != hex);
@@ -829,6 +830,7 @@ namespace AlternateStreamTests
             const auto text = FormatStreamPreview(nul, sizeof(nul), false, false);
             Assert::AreEqual(static_cast<size_t>(3), text.size());
             Assert::AreEqual(L'A', text.front());
+            Assert::AreEqual(L'\uFFFD', text[1]);
             Assert::AreEqual(L'B', text.back());
         }
 
