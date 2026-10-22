@@ -47,7 +47,7 @@ namespace
             }
 
             auto registeredClsid = std::array<WCHAR, 64>{};
-            DWORD bytes = static_cast<DWORD>(
+            auto bytes = static_cast<DWORD>(
                 registeredClsid.size() * sizeof(WCHAR));
             status = RegGetValueW(key, nullptr, nullptr, RRF_RT_REG_SZ,
                 nullptr, registeredClsid.data(), &bytes);
