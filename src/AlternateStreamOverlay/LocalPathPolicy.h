@@ -15,8 +15,8 @@ inline bool HasEligibleExplorerAncestors(const std::wstring& path, size_t offset
         return false;
     const std::wstring directory = path.substr(0, lastSeparator);
     static thread_local std::wstring cachedDirectory;
-    static thread_local DWORD cachedTick = 0;
-    const DWORD now = GetTickCount();
+    static thread_local ULONGLONG cachedTick = 0;
+    const ULONGLONG now = GetTickCount64();
     if (directory != cachedDirectory || now - cachedTick > 250)
     {
         cachedDirectory.clear();

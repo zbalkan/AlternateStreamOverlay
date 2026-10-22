@@ -102,7 +102,7 @@ namespace
 
             // Reserve space for the path terminator and the second NUL
             // required by CF_HDROP, checking arithmetic before allocation.
-            const size_t maxCharacters =
+            constexpr size_t maxCharacters =
                 ((std::numeric_limits<size_t>::max)() - sizeof(DROPFILES)) / sizeof(WCHAR);
             if (path_.size() > maxCharacters - 2)
                 return E_OUTOFMEMORY;
@@ -205,6 +205,26 @@ namespace
         HMODULE handle;
     };
 
+    Microsoft::WRL::ComPtr<IClassFactory> GetContextClassFactory(HMODULE moduleHandle)
+    {
+        if (moduleHandle == nullptr)
+            Assert::Fail(L"Unable to load overlay DLL");
+
+        using GetClassObject = HRESULT (STDAPICALLTYPE*)(REFCLSID, REFIID, void**);
+        const auto getClassObject = reinterpret_cast<GetClassObject>(
+            GetProcAddress(moduleHandle, "DllGetClassObject"));
+        if (getClassObject == nullptr)
+            Assert::Fail(L"DllGetClassObject not exported");
+
+        // CLSID_AlternateStreamContext from AlternateStreamOverlay.idl.
+        const CLSID clsid = { 0x4A26024B, 0x5499, 0x45BE,
+            { 0xA2, 0x3F, 0x4A, 0x65, 0xE8, 0x88, 0x88, 0xD0 } };
+        Microsoft::WRL::ComPtr<IClassFactory> factory;
+        Assert::IsTrue(SUCCEEDED(getClassObject(clsid, __uuidof(IClassFactory),
+            reinterpret_cast<void**>(factory.GetAddressOf()))));
+        return factory;
+    }
+
     BOOL CALLBACK CapturePropertyPage(HPROPSHEETPAGE page, LPARAM context)
     {
         *reinterpret_cast<HPROPSHEETPAGE*>(context) = page;
@@ -226,16 +246,7 @@ namespace AlternateStreamTests
         TEST_METHOD(GetCommandStringRejectsUnsupportedFlags)
         {
             ScopedModule module(GetOverlayDllPath().c_str());
-            Assert::IsTrue(module.handle != nullptr);
-            using GetClassObject = HRESULT (STDAPICALLTYPE*)(REFCLSID, REFIID, void**);
-            const auto getClassObject = reinterpret_cast<GetClassObject>(
-                GetProcAddress(module.handle, "DllGetClassObject"));
-            Assert::IsTrue(getClassObject != nullptr);
-            const CLSID clsid = { 0x4A26024B, 0x5499, 0x45BE,
-                { 0xA2, 0x3F, 0x4A, 0x65, 0xE8, 0x88, 0x88, 0xD0 } };
-            Microsoft::WRL::ComPtr<IClassFactory> factory;
-            Assert::IsTrue(SUCCEEDED(getClassObject(clsid, __uuidof(IClassFactory),
-                reinterpret_cast<void**>(factory.GetAddressOf()))));
+            auto factory = GetContextClassFactory(module.handle);
             Microsoft::WRL::ComPtr<IContextMenu> menu;
             Assert::IsTrue(SUCCEEDED(factory->CreateInstance(nullptr,
                 __uuidof(IContextMenu),
@@ -260,18 +271,7 @@ namespace AlternateStreamTests
         {
             const std::wstring dllPath = GetOverlayDllPath();
             ScopedModule module(dllPath.c_str());
-            Assert::IsTrue(module.handle != nullptr, L"Unable to load overlay DLL");
-            using GetClassObject = HRESULT (STDAPICALLTYPE*)(REFCLSID, REFIID, void**);
-            const auto getClassObject = reinterpret_cast<GetClassObject>(
-                GetProcAddress(module.handle, "DllGetClassObject"));
-            Assert::IsTrue(getClassObject != nullptr, L"DllGetClassObject not exported");
-
-            // CLSID_AlternateStreamContext from AlternateStreamOverlay.idl.
-            const CLSID clsid = { 0x4A26024B, 0x5499, 0x45BE,
-                { 0xA2, 0x3F, 0x4A, 0x65, 0xE8, 0x88, 0x88, 0xD0 } };
-            Microsoft::WRL::ComPtr<IClassFactory> factory;
-            Assert::IsTrue(SUCCEEDED(getClassObject(clsid, __uuidof(IClassFactory),
-                reinterpret_cast<void**>(factory.GetAddressOf()))));
+            auto factory = GetContextClassFactory(module.handle);
 
             Microsoft::WRL::ComPtr<IShellExtInit> initializer;
             Assert::IsTrue(SUCCEEDED(factory->CreateInstance(nullptr,
@@ -814,10 +814,14 @@ namespace AlternateStreamTests
             second->StreamName[0] = L'B';
 
             stream_info_detail::Record record = {};
-            Assert::IsTrue(stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 0, record));
+            if (!stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 0, record) ||
+                record.name == nullptr)
+                Assert::Fail(L"First aligned stream record is invalid");
             Assert::AreEqual(static_cast<size_t>(32), record.nextOffset);
             Assert::AreEqual(L'A', record.name[0]);
-            Assert::IsTrue(stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 32, record));
+            if (!stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 32, record) ||
+                record.name == nullptr)
+                Assert::Fail(L"Second aligned stream record is invalid");
             Assert::AreEqual(static_cast<size_t>(0), record.nextOffset);
             Assert::AreEqual(L'B', record.name[0]);
             Assert::IsFalse(stream_info_detail::ReadRecord(buffer.data(), buffer.size(), 48, record));

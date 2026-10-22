@@ -534,7 +534,7 @@ void SelectTextImpl(DialogState* state, size_t idx, bool asHex, HWND textBox)
     }
     state->gate->workerActive = true;
     SubmitThreadpoolWork(work);
-    request.release();
+    (void)request.release(); // Ownership passes to PreviewWorker.
 }
 
 void SelectText(DialogState* state, size_t idx, bool asHex, HWND textBox)
@@ -582,7 +582,7 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     state->gate->window = hWnd;
     DialogState* dialogState = state.get();
     SetWindowLongPtr(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(dialogState));
-    state.release();
+    (void)state.release(); // Ownership passes to the dialog window.
 
     HWND comboBox = GetDlgItem(hWnd, IDC_COMBO1);
     HWND checkBox = GetDlgItem(hWnd, IDC_CHECK1);
@@ -610,7 +610,7 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     }
 
     SendMessage(checkBox, BM_SETCHECK, BST_UNCHECKED, 0);
-    if (dialogState->enumerationIncomplete)
+    if (dialogState->enumerationIncomplete && textBox != nullptr)
     {
         SetWindowTextW(textBox,
             L"Stream enumeration is incomplete or failed.\r\n"
