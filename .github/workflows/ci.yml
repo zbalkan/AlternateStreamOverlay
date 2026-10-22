@@ -23,6 +23,11 @@ jobs:
       - name: Check out source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      - name: Test release notes extraction
+        if: matrix.configuration == 'Release'
+        shell: pwsh
+        run: .\src\tests\Test-ReleaseNotes.ps1
+
       - name: Set up Visual Studio 2026 MSBuild
         uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
         with:
