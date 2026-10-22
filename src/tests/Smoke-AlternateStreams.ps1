@@ -642,3 +642,7 @@ finally {
     # cleanup is best-effort.
     Remove-Item -LiteralPath $directory -Recurse -Force -ErrorAction SilentlyContinue
 }
+
+# Earlier negative test cases intentionally invoke the CLI with nonzero exit
+# codes. Report success explicitly after all assertions and cleanup complete.
+exit 0
