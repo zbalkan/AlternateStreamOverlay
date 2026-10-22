@@ -813,6 +813,25 @@ namespace AlternateStreamTests
     TEST_CLASS(StreamPreviewTests)
     {
     public:
+        TEST_METHOD(HexCheckboxAlwaysChangesPreviewFormat)
+        {
+            const BYTE malformed[] = { '[', 'Z', 'o', 'n', 'e', ']', 0xC0, 0xAF };
+            const auto plain = FormatStreamPreview(
+                malformed, sizeof(malformed), false, false);
+            const auto hex = FormatStreamPreview(
+                malformed, sizeof(malformed), false, true);
+            Assert::IsTrue(plain.find(L"[Zone]") == 0);
+            Assert::IsTrue(plain.find(L"00000000") == std::wstring::npos);
+            Assert::IsTrue(hex.find(L"00000000") == 0);
+            Assert::IsTrue(plain != hex);
+
+            const BYTE nul[] = { 'A', 0, 'B' };
+            const auto text = FormatStreamPreview(nul, sizeof(nul), false, false);
+            Assert::AreEqual(static_cast<size_t>(3), text.size());
+            Assert::AreEqual(L'A', text.front());
+            Assert::AreEqual(L'B', text.back());
+        }
+
         TEST_METHOD(ValidUtf8AndBinaryFallback)
         {
             std::wstring text;
