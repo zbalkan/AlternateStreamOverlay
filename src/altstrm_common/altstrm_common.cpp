@@ -199,7 +199,10 @@ StreamEnumeration AlternateStreamReader::EnumerateStreams(HANDLE file, bool coll
                     (sizeof(DefaultStream) / sizeof(WCHAR)) - 1) == 0;
         const bool namedDataStream = stream_info_detail::IsNamedDataStreamName(
             record.name, record.nameBytes / sizeof(WCHAR));
-        if (namedDataStream)
+        // Existence is independent of whether a stream name can be safely
+        // appended to a Win32 path. Do not hide an ADS overlay simply because
+        // its name is unsuitable for the preview UI.
+        if (!defaultStream)
             result.hasNamedStreams = true;
         // Keep the default stream in the public enumeration for compatibility,
         // but exclude non-data and unsafe names from path-based consumers.
