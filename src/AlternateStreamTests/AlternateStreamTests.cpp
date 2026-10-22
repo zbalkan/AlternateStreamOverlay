@@ -834,6 +834,20 @@ namespace AlternateStreamTests
             Assert::AreEqual(L'B', text.back());
         }
 
+        TEST_METHOD(TruncatedMalformedTextOmitsIncompleteUtf8Tail)
+        {
+            const BYTE input[] = { 'A', 0xC0, 0xAF, 'B', 0xE2, 0x82 };
+            const auto truncatedText = FormatStreamPreview(
+                input, sizeof(input), true, false);
+            const auto completeText = FormatStreamPreview(
+                input, sizeof(input), false, false);
+
+            Assert::IsTrue(truncatedText.find(L'\uFFFD') != std::wstring::npos);
+            Assert::AreEqual(L'B', truncatedText.back());
+            Assert::IsTrue(completeText.size() > truncatedText.size());
+            Assert::AreEqual(L'\uFFFD', completeText.back());
+        }
+
         TEST_METHOD(ValidUtf8AndBinaryFallback)
         {
             std::wstring text;
