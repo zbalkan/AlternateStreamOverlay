@@ -477,6 +477,36 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
     }
 }
 
+void SetPreviewText(HWND textBox, bool incomplete, LPCWSTR message)
+{
+    if (textBox == nullptr)
+        return;
+    if (!incomplete)
+    {
+        SetWindowTextW(textBox, message);
+        return;
+    }
+
+    constexpr LPCWSTR warning =
+        L"Stream enumeration is incomplete or failed.\r\n"
+        L"Some stream names may be unavailable for preview.\r\n"
+        L"Do not interpret this inventory as a clean result.";
+    try
+    {
+        std::wstring display(warning);
+        if (message != nullptr && *message != L'\0')
+        {
+            display += L"\r\n\r\n";
+            display += message;
+        }
+        SetWindowTextW(textBox, display.c_str());
+    }
+    catch (...)
+    {
+        SetWindowTextW(textBox, warning);
+    }
+}
+
 void SelectTextImpl(DialogState* state, size_t idx, bool asHex, HWND textBox)
 {
     if (textBox == nullptr || state == nullptr)
@@ -485,7 +515,7 @@ void SelectTextImpl(DialogState* state, size_t idx, bool asHex, HWND textBox)
     if (idx >= streams.size())
     {
         ++state->generation;
-        SetWindowTextW(textBox, L"");
+        SetPreviewText(textBox, state->enumerationIncomplete, L"");
         return;
     }
 
@@ -495,43 +525,47 @@ void SelectTextImpl(DialogState* state, size_t idx, bool asHex, HWND textBox)
     if (PreviewMessageId() == 0)
     {
         // No completion notification can be delivered without registration.
-        SetWindowTextW(textBox, L"Unable to start alternate stream preview.");
+        SetPreviewText(textBox, state->enumerationIncomplete,
+            L"Unable to start alternate stream preview.");
         return;
     }
-    SetWindowTextW(textBox, L"Loading alternate stream...");
-    ExclusiveSrwLock lock(state->gate->lock);
-    state->gate->path.swap(path);
-    ++state->generation;
-    state->gate->generation = state->generation;
-    state->gate->asHex = asHex;
-    if (state->gate->workerActive)
-        return; // Coalesce changes into the most recent pending selection.
+    SetPreviewText(textBox, state->enumerationIncomplete, L"Loading alternate stream...");
+    bool started = false;
+    {
+        ExclusiveSrwLock lock(state->gate->lock);
+        state->gate->path.swap(path);
+        ++state->generation;
+        state->gate->generation = state->generation;
+        state->gate->asHex = asHex;
+        if (state->gate->workerActive)
+            return;
 
-    std::unique_ptr<PreviewRequest> request(new (std::nothrow) PreviewRequest);
-    if (!request)
-    {
-        SetWindowTextW(textBox, L"Unable to start alternate stream preview.");
-        return;
+        std::unique_ptr<PreviewRequest> request(new (std::nothrow) PreviewRequest);
+        if (request)
+        {
+            request->gate = state->gate;
+            HMODULE moduleHandle = nullptr;
+            if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                reinterpret_cast<LPCWSTR>(&PreviewWorker), &moduleHandle))
+            {
+                request->moduleHandle = moduleHandle;
+                PTP_WORK work = CreateThreadpoolWork(PreviewWorker, request.get(), nullptr);
+                if (work != nullptr)
+                {
+                    state->gate->workerActive = true;
+                    SubmitThreadpoolWork(work);
+                    (void)request.release();
+                    started = true;
+                }
+                else
+                    FreeLibrary(moduleHandle);
+            }
+        }
     }
-    request->gate = state->gate;
-    HMODULE moduleHandle = nullptr;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-        reinterpret_cast<LPCWSTR>(&PreviewWorker), &moduleHandle))
-    {
-        SetWindowTextW(textBox, L"Unable to start alternate stream preview.");
-        return;
-    }
-    request->moduleHandle = moduleHandle;
-    PTP_WORK work = CreateThreadpoolWork(PreviewWorker, request.get(), nullptr);
-    if (work == nullptr)
-    {
-        FreeLibrary(moduleHandle);
-        SetWindowTextW(textBox, L"Unable to start alternate stream preview.");
-        return;
-    }
-    state->gate->workerActive = true;
-    SubmitThreadpoolWork(work);
-    (void)request.release(); // Ownership passes to PreviewWorker.
+    // Never send synchronous window messages while holding the gate lock.
+    if (!started)
+        SetPreviewText(textBox, state->enumerationIncomplete,
+            L"Unable to start alternate stream preview.");
 }
 
 void SelectText(DialogState* state, size_t idx, bool asHex, HWND textBox)
@@ -545,7 +579,8 @@ void SelectText(DialogState* state, size_t idx, bool asHex, HWND textBox)
         // Never propagate C++ exceptions through the Win32 dialog procedure.
         // The scoped SRW guard releases on unwind.
         if (textBox != nullptr)
-            SetWindowTextW(textBox, L"Unable to start alternate stream preview.");
+            SetPreviewText(textBox, state->enumerationIncomplete,
+            L"Unable to start alternate stream preview.");
     }
 }
 
@@ -609,18 +644,13 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     }
 
     SendMessage(checkBox, BM_SETCHECK, BST_UNCHECKED, 0);
-    if (dialogState->enumerationIncomplete && textBox != nullptr)
-    {
-        SetWindowTextW(textBox,
-            L"Stream enumeration is incomplete or failed.\r\n"
-            L"Some stream names may be unavailable for preview.\r\n"
-            L"Do not interpret this inventory as a clean result.");
-    }
-    else if (!streams.empty())
+    if (!streams.empty())
     {
         SendMessage(comboBox, CB_SETCURSEL, 0, 0);
         SelectText(dialogState, 0, false, textBox);
     }
+    else if (dialogState->enumerationIncomplete)
+        SetPreviewText(textBox, true, L"");
     return TRUE;
 }
 
@@ -687,11 +717,13 @@ void OnPreviewReady(HWND hWnd, WPARAM wParam)
     }
 
     // Win32 control messages must not be sent while holding the SRW lock.
-    if (result)
-        SetWindowTextW(GetDlgItem(hWnd, IDC_EDIT1), result->text.c_str());
-    else if (failed)
-        SetWindowTextW(GetDlgItem(hWnd, IDC_EDIT1),
-                       L"Unable to read alternate stream.");
+    if (result || failed)
+    {
+        const auto* preview = result ? result->text.c_str() :
+            L"Unable to read alternate stream.";
+        SetPreviewText(GetDlgItem(hWnd, IDC_EDIT1),
+            state->enumerationIncomplete, preview);
+    }
 }
 
 void CloseGateAndDrain(HWND hWnd, DialogState& state)
