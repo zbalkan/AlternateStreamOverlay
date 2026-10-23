@@ -239,10 +239,18 @@ StreamEnumeration AlternateStreamReader::EnumerateStreams(LPCWSTR filename, bool
     return EnumerateStreams(file.get(), collectNames);
 }
 
+bool IndicatesAlternateStreams(const StreamEnumeration& result)
+{
+    // Bounded-enumeration contract: one unnamed ::$DATA record cannot
+    // exceed the 4 MiB FileStreamInfo buffer, so truncation indicates
+    // named streams on a conforming filesystem.
+    return result.status == StreamStatus::Truncated ||
+        (result.status == StreamStatus::Ok && result.hasNamedStreams);
+}
+
 bool AlternateStreamReader::HasAlternateStreams(LPCWSTR filename) const
 {
-    const auto result = EnumerateStreams(filename, false);
-    return result.status == StreamStatus::Ok && result.hasNamedStreams;
+    return IndicatesAlternateStreams(EnumerateStreams(filename, false));
 }
 
 namespace

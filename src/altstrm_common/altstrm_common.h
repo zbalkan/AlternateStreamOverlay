@@ -42,6 +42,9 @@ struct StreamEnumeration
     }
 };
 
+// Interpret bounded native enumeration without requiring filesystem fixtures.
+bool IndicatesAlternateStreams(const StreamEnumeration& result);
+
 // Enumerate alternate streams using the documented Windows 10+ API.
 class AlternateStreamReader
 {
