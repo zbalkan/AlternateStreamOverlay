@@ -380,6 +380,18 @@ void PostPreviewFailure(PreviewGate& gate, size_t generation)
         gate.pendingFailure = false;
 }
 
+// Called without the lock held. A superseded failure must not discard
+// the newest selection; otherwise publish failure and finish the worker.
+bool RetryAfterPreviewFailure(PreviewGate& gate, size_t generation)
+{
+    ExclusiveSrwLock lock(gate.lock);
+    if (gate.alive && generation != gate.generation)
+        return true;
+    PostPreviewFailure(gate, generation);
+    gate.workerActive = false;
+    return false;
+}
+
 VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP_WORK work)
 {
     std::unique_ptr<PreviewRequest> request(static_cast<PreviewRequest*>(parameter));
@@ -417,12 +429,8 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
         std::unique_ptr<PreviewResult> result(new (std::nothrow) PreviewResult);
         if (!result)
         {
-            ExclusiveSrwLock lock(request->gate->lock);
-            // A newer selection must still be serviced after this failed read.
-            if (request->gate->alive && generation != request->gate->generation)
+            if (RetryAfterPreviewFailure(*request->gate, generation))
                 continue;
-            PostPreviewFailure(*request->gate, generation);
-            request->gate->workerActive = false;
             return;
         }
         result->generation = generation;
@@ -432,14 +440,10 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
         }
         catch (...)
         {
-            // An error-string allocation can also fail. Use an allocation-free
-            // completion message instead of attempting another string write.
-            ExclusiveSrwLock lock(request->gate->lock);
-            // Do not abandon a newer selection because an older read failed.
-            if (request->gate->alive && generation != request->gate->generation)
+            // An error-string allocation can also fail. Do not allocate
+            // another message while handling the exception.
+            if (RetryAfterPreviewFailure(*request->gate, generation))
                 continue;
-            PostPreviewFailure(*request->gate, generation);
-            request->gate->workerActive = false;
             return;
         }
 
