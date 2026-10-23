@@ -392,6 +392,18 @@ bool RetryAfterPreviewFailure(PreviewGate& gate, size_t generation)
     return false;
 }
 
+// Called with the gate lock held. The notification carries no owning pointer.
+void PublishPreviewResult(PreviewGate& gate, std::unique_ptr<PreviewResult>& result)
+{
+    gate.pending.swap(result);
+    gate.pendingFailure = false;
+    const auto messageId = PreviewMessageId();
+    if (messageId == 0 ||
+        !PostMessageW(gate.window, messageId,
+                      static_cast<WPARAM>(gate.pending->generation), 0))
+        gate.pending.reset();
+}
+
 VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP_WORK work)
 {
     std::unique_ptr<PreviewRequest> request(static_cast<PreviewRequest*>(parameter));
@@ -456,15 +468,8 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
         if (generation != request->gate->generation)
             continue; // Skip superseded results; read only the latest selection.
 
-        // The worker hands the result to shared state, not to a message's
-        // untrusted lParam. A failed post relinquishes the result immediately.
-        request->gate->pending.swap(result);
-        request->gate->pendingFailure = false;
-        const UINT messageId = PreviewMessageId();
-        if (messageId == 0 ||
-            !PostMessageW(request->gate->window, messageId,
-                          static_cast<WPARAM>(generation), 0))
-            request->gate->pending.reset();
+        // The worker hands ownership to shared state, never to the message.
+        PublishPreviewResult(*request->gate, result);
         // A failed post usually means the dialog is gone; do not keep a
         // worker marked active when delivery was unsuccessful.
         request->gate->workerActive = false;
