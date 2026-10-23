@@ -13,11 +13,15 @@ inline bool HasEligibleExplorerAncestors(const std::wstring& path, size_t offset
     const size_t lastSeparator = path.find_last_of(L"\\/");
     if (lastSeparator == std::wstring::npos || lastSeparator < offset + 2)
         return false;
+#ifndef ASO_BENCHMARK_NO_CACHE
     const std::wstring directory = path.substr(0, lastSeparator);
+#endif
+#ifndef ASO_BENCHMARK_NO_CACHE
     static thread_local std::wstring cachedDirectory;
     static thread_local ULONGLONG cachedTick = 0;
     const ULONGLONG now = GetTickCount64();
     if (directory != cachedDirectory || now - cachedTick > 250)
+#endif
     {
         cachedDirectory.clear();
         for (size_t end = offset + 3; end < path.size(); ++end)
@@ -30,8 +34,10 @@ inline bool HasEligibleExplorerAncestors(const std::wstring& path, size_t offset
                 (attributes & excludedAttributes) != 0)
                 return false;
         }
+#ifndef ASO_BENCHMARK_NO_CACHE
         cachedDirectory = directory;
         cachedTick = now;
+#endif
     }
 
     return true;
@@ -65,6 +71,7 @@ inline bool CanEnumerateExplorerPath(const std::wstring& path)
         driveType == DRIVE_NO_ROOT_DIR)
         return false;
 
+#ifndef ASO_BENCHMARK_NO_CACHE
     // Reject SUBST/alias drive mappings, which may lead outside the local
     // volume even though their drive type is reported as local.
     const std::wstring drive = { letter, L':' };
@@ -73,6 +80,7 @@ inline bool CanEnumerateExplorerPath(const std::wstring& path)
         static_cast<DWORD>(target.size()));
     if (targetLength == 0 || wcsncmp(target.data(), LR"(\??\)", 4) == 0)
         return false;
+#endif
 
     constexpr DWORD excludedAttributes = FILE_ATTRIBUTE_REPARSE_POINT |
         FILE_ATTRIBUTE_OFFLINE | FILE_ATTRIBUTE_RECALL_ON_OPEN |
