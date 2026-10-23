@@ -15,15 +15,15 @@ inline bool HasEligibleExplorerAncestors(const std::wstring& path, size_t offset
         return false;
 #ifndef ASO_BENCHMARK_NO_CACHE
     const std::wstring directory = path.substr(0, lastSeparator);
-#endif
-#ifndef ASO_BENCHMARK_NO_CACHE
     static thread_local std::wstring cachedDirectory;
     static thread_local ULONGLONG cachedTick = 0;
     const ULONGLONG now = GetTickCount64();
     if (directory != cachedDirectory || now - cachedTick > 250)
 #endif
     {
+#ifndef ASO_BENCHMARK_NO_CACHE
         cachedDirectory.clear();
+#endif
         for (size_t end = offset + 3; end < path.size(); ++end)
         {
             if (path[end] != L'\\' && path[end] != L'/')
