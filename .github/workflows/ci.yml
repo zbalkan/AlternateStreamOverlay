@@ -161,8 +161,7 @@ jobs:
           cl /nologo /EHsc /std:c++14 /O2 /W4 /WX /Fe:benchmark-policy.exe src\tests\Benchmark-LocalPathPolicy.cpp
           if errorlevel 1 exit /b 1
           benchmark-policy.exe > path-policy-baseline.csv
-          set "BENCHMARK_EXIT=%ERRORLEVEL%"
-          echo %BENCHMARK_EXIT%>benchmark-exit.txt
+          > benchmark-exit.txt echo %ERRORLEVEL%
           if exist path-policy-baseline.csv type path-policy-baseline.csv
 
       - name: Build and run candidate policy benchmark
@@ -175,8 +174,7 @@ jobs:
           cl /nologo /EHsc /std:c++14 /O2 /W4 /WX /DASO_BENCHMARK_NO_CACHE /Fe:benchmark-policy-no-cache.exe src\tests\Benchmark-LocalPathPolicy.cpp
           if errorlevel 1 exit /b 1
           benchmark-policy-no-cache.exe > path-policy-candidate.csv
-          set "CANDIDATE_EXIT=%ERRORLEVEL%"
-          echo %CANDIDATE_EXIT%>candidate-exit.txt
+          > candidate-exit.txt echo %ERRORLEVEL%
           if exist path-policy-candidate.csv type path-policy-candidate.csv
 
       - name: Publish benchmark summary
@@ -189,7 +187,7 @@ jobs:
           }
           $data = @(Import-Csv -LiteralPath 'path-policy-baseline.csv')
           if (Test-Path -LiteralPath 'path-policy-candidate.csv') { $data += @(Import-Csv -LiteralPath 'path-policy-candidate.csv') }
-          $lines = @('### Path policy baseline (temporary)', '', 'Windows hosted runner; timing is indicative, not a performance SLA.', '', '| Configuration | Files | Calls | Accepted | p50 (µs) | p95 (µs) | p99 (µs) | Max (µs) |', '|---|---:|---:|---:|---:|---:|---:|---:|')
+          $lines = @('### Path policy comparison (temporary)', '', 'Windows hosted runner; timing is indicative, not a performance SLA.', '', '| Configuration | Files | Calls | Accepted | p50 (µs) | p95 (µs) | p99 (µs) | Max (µs) |', '|---|---:|---:|---:|---:|---:|---:|---:|')
           foreach ($row in $data) {
             $lines += "| $($row.configuration) | $($row.files) | $($row.calls) | $($row.accepted) | $($row.p50_us) | $($row.p95_us) | $($row.p99_us) | $($row.max_us) |"
           }
@@ -199,7 +197,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: path-policy-baseline
+          name: path-policy-comparison
           path: |
             path-policy-baseline.csv
             path-policy-candidate.csv
