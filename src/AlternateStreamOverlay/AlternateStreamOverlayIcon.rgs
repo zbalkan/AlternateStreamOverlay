@@ -19,7 +19,6 @@ HKCR
 			{
 				val ThreadingModel = s 'Both'
 			}
-			'TypeLib' = s '{C0034A83-7FA3-43A7-82DD-3ADF66F0086C}'
 		}
 	}
 }
