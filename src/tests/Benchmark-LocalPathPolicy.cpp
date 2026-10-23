@@ -65,8 +65,13 @@ int wmain()
             fraction * static_cast<double>(durations.size() - 1))];
     };
     std::printf("configuration,files,passes,calls,accepted,p50_us,p95_us,p99_us,max_us\n");
-    std::printf("baseline,%d,%d,%zu,%d,%.3f,%.3f,%.3f,%.3f\n",
-        FileCount, Samples, durations.size(), accepted, percentile(0.50),
+    #ifdef ASO_BENCHMARK_NO_CACHE
+    constexpr const char* configuration = "no_cache_no_subst";
+#else
+    constexpr const char* configuration = "baseline";
+#endif
+    std::printf("%s,%d,%d,%zu,%d,%.3f,%.3f,%.3f,%.3f\n",
+        configuration, FileCount, Samples, durations.size(), accepted, percentile(0.50),
         percentile(0.95), percentile(0.99), durations.back());
 
     for (const auto& file : files)
