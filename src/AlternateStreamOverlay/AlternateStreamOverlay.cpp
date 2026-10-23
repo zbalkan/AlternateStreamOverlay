@@ -229,7 +229,7 @@ STDAPI DllUnregisterServer(void)
     return FAILED(hr) ? hr : overlayResult;
 }
 
-// Only machine-wide registration is supported; user-scoped switches are rejected.
+// Only machine-wide registration is supported; all non-empty install arguments are rejected.
 STDAPI DllInstall(BOOL bInstall, _In_opt_ LPCWSTR pszCmdLine)
 {
     if (pszCmdLine != nullptr && *pszCmdLine != L'\0')
