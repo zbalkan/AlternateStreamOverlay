@@ -394,14 +394,8 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
         bool asHex = false;
         {
             ExclusiveSrwLock lock(request->gate->lock);
-            if (!request->gate->alive)
-            {
-                request->gate->workerActive = false;
-                return;
-            }
-            // A cleared selection invalidates queued work without starting a
-            // preview for an empty stream path.
-            if (request->gate->path.empty())
+            // A closed page or cleared selection must not start a preview.
+            if (!request->gate->alive || request->gate->path.empty())
             {
                 request->gate->workerActive = false;
                 return;
