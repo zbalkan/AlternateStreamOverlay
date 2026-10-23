@@ -477,6 +477,36 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
     }
 }
 
+void SetPreviewText(HWND textBox, bool incomplete, LPCWSTR message)
+{
+    if (textBox == nullptr)
+        return;
+    if (!incomplete)
+    {
+        SetWindowTextW(textBox, message);
+        return;
+    }
+
+    constexpr LPCWSTR warning =
+        L"Stream enumeration is incomplete or failed.\r\n"
+        L"Some stream names may be unavailable for preview.\r\n"
+        L"Do not interpret this inventory as a clean result.";
+    try
+    {
+        std::wstring display(warning);
+        if (message != nullptr && *message != L'\0')
+        {
+            display += L"\r\n\r\n";
+            display += message;
+        }
+        SetWindowTextW(textBox, display.c_str());
+    }
+    catch (...)
+    {
+        SetWindowTextW(textBox, warning);
+    }
+}
+
 void SelectTextImpl(DialogState* state, size_t idx, bool asHex, HWND textBox)
 {
     if (textBox == nullptr || state == nullptr)
@@ -485,7 +515,7 @@ void SelectTextImpl(DialogState* state, size_t idx, bool asHex, HWND textBox)
     if (idx >= streams.size())
     {
         ++state->generation;
-        SetWindowTextW(textBox, L"");
+        SetPreviewText(textBox, state->enumerationIncomplete, L"");
         return;
     }
 
@@ -495,10 +525,11 @@ void SelectTextImpl(DialogState* state, size_t idx, bool asHex, HWND textBox)
     if (PreviewMessageId() == 0)
     {
         // No completion notification can be delivered without registration.
-        SetWindowTextW(textBox, L"Unable to start alternate stream preview.");
+        SetPreviewText(textBox, state->enumerationIncomplete,
+            L"Unable to start alternate stream preview.");
         return;
     }
-    SetWindowTextW(textBox, L"Loading alternate stream...");
+    SetPreviewText(textBox, state->enumerationIncomplete, L"Loading alternate stream...");
     bool started = false;
     {
         ExclusiveSrwLock lock(state->gate->lock);
@@ -533,7 +564,8 @@ void SelectTextImpl(DialogState* state, size_t idx, bool asHex, HWND textBox)
     }
     // Never send synchronous window messages while holding the gate lock.
     if (!started)
-        SetWindowTextW(textBox, L"Unable to start alternate stream preview.");
+        SetPreviewText(textBox, state->enumerationIncomplete,
+            L"Unable to start alternate stream preview.");
 }
 
 void SelectText(DialogState* state, size_t idx, bool asHex, HWND textBox)
@@ -547,7 +579,8 @@ void SelectText(DialogState* state, size_t idx, bool asHex, HWND textBox)
         // Never propagate C++ exceptions through the Win32 dialog procedure.
         // The scoped SRW guard releases on unwind.
         if (textBox != nullptr)
-            SetWindowTextW(textBox, L"Unable to start alternate stream preview.");
+            SetPreviewText(textBox, state->enumerationIncomplete,
+            L"Unable to start alternate stream preview.");
     }
 }
 
@@ -616,13 +649,8 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
         SendMessage(comboBox, CB_SETCURSEL, 0, 0);
         SelectText(dialogState, 0, false, textBox);
     }
-    else if (dialogState->enumerationIncomplete && textBox != nullptr)
-    {
-        SetWindowTextW(textBox,
-            L"Stream enumeration is incomplete or failed.\r\n"
-            L"Some stream names may be unavailable for preview.\r\n"
-            L"Do not interpret this inventory as a clean result.");
-    }
+    else if (dialogState->enumerationIncomplete)
+        SetPreviewText(textBox, true, L"");
     return TRUE;
 }
 
@@ -693,25 +721,8 @@ void OnPreviewReady(HWND hWnd, WPARAM wParam)
     {
         const auto* preview = result ? result->text.c_str() :
             L"Unable to read alternate stream.";
-        const auto textBox = GetDlgItem(hWnd, IDC_EDIT1);
-        if (!state->enumerationIncomplete)
-        {
-            SetWindowTextW(textBox, preview);
-            return;
-        }
-        try
-        {
-            std::wstring display =
-                L"Stream enumeration is incomplete or failed.\r\n"
-                L"Some stream names may be unavailable for preview.\r\n"
-                L"Do not interpret this inventory as a clean result.\r\n\r\n";
-            display += preview;
-            SetWindowTextW(textBox, display.c_str());
-        }
-        catch (...)
-        {
-            SetWindowTextW(textBox, L"Stream enumeration is incomplete or failed.");
-        }
+        SetPreviewText(GetDlgItem(hWnd, IDC_EDIT1),
+            state->enumerationIncomplete, preview);
     }
 }
 
