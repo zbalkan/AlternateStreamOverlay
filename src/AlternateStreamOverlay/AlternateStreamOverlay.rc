@@ -46,7 +46,6 @@ END
 
 3 TEXTINCLUDE
 BEGIN
-"1 TYPELIB ""AlternateStreamOverlay.tlb""\r\n"
 "\0"
 END
 
