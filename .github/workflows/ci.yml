@@ -159,9 +159,8 @@ jobs:
         shell: bash
         run: |
           cppcheck --version
-          # Linux Cppcheck cannot expand Windows MIDL proxy or MSTest macros.
-          # Analyze production code; generated proxy and test harness are built on Windows CI.
-          # ATL registration metadata is irrelevant to the source-level analysis.
+          # Analyze production code on Linux; the native MSTest harness
+          # uses Windows-specific test infrastructure and runs in Windows CI.
           cppcheck --enable=warning,performance,portability --error-exitcode=0 \
             --suppress=missingIncludeSystem \
             '-DDECLARE_REGISTRY_RESOURCEID(x)=' \
@@ -172,7 +171,6 @@ jobs:
             '-DEND_COM_MAP()=' \
             '-DDECLARE_PROTECT_FINAL_CONSTRUCT()=' \
             '-DOBJECT_ENTRY_AUTO(x,y)=' \
-            -isrc/AlternateStreamOverlay/dlldata.c \
             -isrc/AlternateStreamTests \
             --xml --xml-version=2 src 2> cppcheck-results.xml
           cat cppcheck-results.xml
