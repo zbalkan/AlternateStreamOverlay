@@ -362,8 +362,45 @@ namespace AlternateStreamTests
             const auto install = reinterpret_cast<DllInstallFunction>(
                 GetProcAddress(module.handle, "DllInstall"));
             Assert::IsTrue(install != nullptr);
+            // A rejected install must not create, alter, or delete any legacy
+            // per-user COM classes or Explorer overlay registration.
+            constexpr std::array<LPCWSTR, 3> paths = {
+                L"Software\\Classes\\CLSID\\{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}",
+                L"Software\\Classes\\CLSID\\{4A26024B-5499-45BE-A23F-4A65E88888D0}",
+                L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ShellIconOverlayIdentifiers\\AlternateStreamOverlayIcon"
+            };
+            const auto snapshot = [&paths]()
+            {
+                std::array<std::pair<LONG, std::vector<BYTE>>, paths.size()> state;
+                for (size_t i = 0; i < paths.size(); ++i)
+                {
+                    HKEY key = nullptr;
+                    const auto status = RegOpenKeyExW(HKEY_CURRENT_USER, paths[i],
+                        0, KEY_QUERY_VALUE, &key);
+                    state[i].first = status;
+                    if (status != ERROR_SUCCESS)
+                        continue;
+                    DWORD bytes = 0;
+                    auto valueStatus = RegQueryValueExW(key, nullptr, nullptr,
+                        nullptr, nullptr, &bytes);
+                    if (valueStatus == ERROR_SUCCESS)
+                    {
+                        state[i].second.resize(bytes);
+                        valueStatus = RegQueryValueExW(key, nullptr, nullptr,
+                            nullptr, state[i].second.data(), &bytes);
+                        state[i].second.resize(bytes);
+                    }
+                    RegCloseKey(key);
+                    // Encode absent/malformed values distinctly from valid values.
+                    state[i].first = valueStatus;
+                }
+                return state;
+            };
+            const auto before = snapshot();
             Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG), install(TRUE, L"user"));
+            Assert::IsTrue(before == snapshot());
             Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG), install(FALSE, L"user"));
+            Assert::IsTrue(before == snapshot());
         }
 
         TEST_METHOD(OverlayInterfaceValidatesArguments)
