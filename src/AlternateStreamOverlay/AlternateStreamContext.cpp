@@ -399,6 +399,13 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
                 request->gate->workerActive = false;
                 return;
             }
+            // A cleared selection invalidates queued work without starting a
+            // preview for an empty stream path.
+            if (request->gate->path.empty())
+            {
+                request->gate->workerActive = false;
+                return;
+            }
             generation = request->gate->generation;
             asHex = request->gate->asHex;
             try
@@ -475,7 +482,16 @@ void SelectTextImpl(DialogState* state, size_t idx, bool asHex, HWND textBox)
     const auto& streams = state->streams;
     if (idx >= streams.size())
     {
-        ++state->generation;
+        // Invalidate both the dialog and worker generations. Drop any pending
+        // completion so an invalid selection cannot revive an old preview.
+        {
+            ExclusiveSrwLock lock(state->gate->lock);
+            ++state->generation;
+            state->gate->generation = state->generation;
+            state->gate->path.clear();
+            state->gate->pending.reset();
+            state->gate->pendingFailure = false;
+        }
         SetWindowTextW(textBox, L"");
         return;
     }
