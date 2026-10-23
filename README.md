@@ -16,7 +16,7 @@ This project is a maintained fork of Lee Benfield's original [AlternateStreamOve
 - **Icon overlay:** Identifies files containing alternate data streams in Windows Explorer.
 - **Property page:** Displays alternate data streams associated with a file.
 - **Context-menu integration:** Provides access to the extension through Explorer.
-- **Per-user installation:** Supports registration without administrative privileges.
+- **Machine-wide installation:** Requires administrator privileges to register Explorer and COM components.
 - **Native Windows integration:** Uses the documented `GetFileInformationByHandleEx(FileStreamInfo)` API to enumerate streams.
 - **Registration diagnostics:** Includes read-only scripts for inspecting shell handler and overlay registration.
 
@@ -47,55 +47,25 @@ Both supported configurations are built by GitHub Actions.
 
 ## Installation
 
-The extension supports machine-wide and per-user registration. Choose one registration scope.
-
-### Machine-wide installation
-
-Run the following command from an **elevated** terminal:
+The extension supports **machine-wide installation only**, requiring an elevated terminal.
 
 ```powershell
 regsvr32.exe .\src\AlternateStreamOverlay\x64\Release\AlternateStreamOverlay.dll
 ```
 
-This registers the extension for all users through the machine-wide COM and Explorer registration locations.
-
-### Per-user installation
-
-Administrative privileges are not required for current-user registration:
-
-```powershell
-regsvr32.exe /n /i:user .\src\AlternateStreamOverlay\x64\Release\AlternateStreamOverlay.dll
-```
-
-The `/n` option suppresses the default `DllRegisterServer` invocation, while `/i:user` requests per-user installation through `DllInstall`.
-
-Per-user COM registrations are redirected to `HKCU\Software\Classes`. The overlay identifier is registered separately under:
-
-```text
-HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers
-```
-
-Machine-wide overlay identifiers use the corresponding `HKLM` location.
-
-The examples assume a Release build and that commands are executed from the repository root.
+This registers the COM classes and Explorer overlay for all users. Per-user registration (including `/n /i:user`) is not supported.
 
 ## Uninstallation
 
-Use the command corresponding to the original installation scope.
-
-**Machine-wide** (elevated terminal):
+Run from an **elevated** terminal:
 
 ```powershell
 regsvr32.exe /u .\src\AlternateStreamOverlay\x64\Release\AlternateStreamOverlay.dll
 ```
 
-**Current user:**
+Unregister the extension before deleting its DLL. The examples assume a Release build and commands executed from the repository root.
 
-```powershell
-regsvr32.exe /u /n /i:user .\src\AlternateStreamOverlay\x64\Release\AlternateStreamOverlay.dll
-```
-
-Unregister the extension before deleting its DLL.
+**Migration from earlier per-user installations:** Machine-wide unregistration does not remove legacy HKCU registration entries. Before treating an upgrade or uninstall as complete, inspect `HKCU\\Software\\Classes\\CLSID\\{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}` (overlay COM class), `HKCU\\Software\\Classes\\CLSID\\{4A26024B-5499-45BE-A23F-4A65E88888D0}` (context COM class), and `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ShellIconOverlayIdentifiers\\AlternateStreamOverlayIcon` (overlay identifier) for each account that previously installed the extension. The legacy per-user installer also wrote shell-handler entries under `HKCU\\Software\\Classes\\*\\ShellEx` and `HKCU\\Software\\Classes\\Directory\\ShellEx`. Remove only entries confirmed to belong to this extension; do not delete shared parent keys or unrelated handlers.
 
 ## Testing and diagnostics
 
@@ -123,7 +93,7 @@ The script checks registrations for files and directories, including the associa
 
 ### Explorer overlay registration
 
-Inspect machine-wide and per-user overlay registrations:
+Inspect overlay registrations (the extension installs machine-wide):
 
 ```powershell
 .\src\tests\Get-OverlayRegistration.ps1

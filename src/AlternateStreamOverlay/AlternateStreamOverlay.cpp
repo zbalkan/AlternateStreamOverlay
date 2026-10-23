@@ -141,11 +141,7 @@ namespace
     // registration spans multiple keys and is not itself transactional.
     bool ComRegistrationExists()
     {
-        bool perUser = false;
-        if (FAILED(AtlGetPerUserRegistration(&perUser)))
-            return true; // Do not risk removing an unknown existing registration.
-
-        const HKEY root = perUser ? HKEY_CURRENT_USER : HKEY_LOCAL_MACHINE;
+        const auto root = HKEY_LOCAL_MACHINE;
         constexpr std::array<LPCWSTR, 2> classKeys = {
             L"Software\\Classes\\CLSID\\{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}",
             L"Software\\Classes\\CLSID\\{4A26024B-5499-45BE-A23F-4A65E88888D0}"
@@ -155,15 +151,10 @@ namespace
 
     HRESULT UpdateOverlayRegistration(bool install)
     {
-        bool perUser = false;
-        const HRESULT scopeResult = AtlGetPerUserRegistration(&perUser);
-        if (FAILED(scopeResult))
-            return scopeResult;
-
-        const HKEY root = perUser ? HKEY_CURRENT_USER : HKEY_LOCAL_MACHINE;
-        return install ? InstallOverlayRegistration(root) :
-                         RemoveOverlayRegistration(root);
+        return install ? InstallOverlayRegistration(HKEY_LOCAL_MACHINE) :
+                         RemoveOverlayRegistration(HKEY_LOCAL_MACHINE);
     }
+
 }
 
 // Boilerplate guff
@@ -194,6 +185,7 @@ STDAPI DllGetClassObject(_In_ REFCLSID rclsid, _In_ REFIID riid, _Outptr_ LPVOID
 // DllRegisterServer - Adds entries to the system registry
 STDAPI DllRegisterServer(void)
 {
+    AtlSetPerUserRegistration(false);
     // Do not unregister pre-existing COM classes when re-registration fails.
     const bool existingRegistration = ComRegistrationExists();
 
@@ -227,6 +219,7 @@ STDAPI DllRegisterServer(void)
 // DllUnregisterServer - Removes entries from the system registry
 STDAPI DllUnregisterServer(void)
 {
+    AtlSetPerUserRegistration(false);
     const HRESULT overlayResult = UpdateOverlayRegistration(false);
     HRESULT hr = _AtlModule.DllUnregisterServer();
 #ifdef _MERGE_PROXYSTUB
@@ -236,25 +229,12 @@ STDAPI DllUnregisterServer(void)
     return FAILED(hr) ? hr : overlayResult;
 }
 
-// DllInstall - Adds/Removes entries to the system registry per user
-//              per machine.
+// Only machine-wide registration is supported; all non-empty install arguments are rejected.
 STDAPI DllInstall(BOOL bInstall, _In_opt_ LPCWSTR pszCmdLine)
 {
-    auto hr = E_FAIL;
-    static const wchar_t szUserSwitch[] = _T("user");
+    if (pszCmdLine != nullptr && *pszCmdLine != L'\0')
+        return E_INVALIDARG;
 
-    if (pszCmdLine != nullptr)
-    {
-        if (_wcsnicmp(pszCmdLine, szUserSwitch, _countof(szUserSwitch)) == 0)
-        {
-            AtlSetPerUserRegistration(true);
-        }
-    }
-
-    // DllRegisterServer owns its rollback on overlay registration failure.
-    // Calling DllUnregisterServer here would run another overlay removal,
-    // potentially deleting an existing registration after a failed install.
-    hr = bInstall ? DllRegisterServer() : DllUnregisterServer();
-
-    return hr;
+    AtlSetPerUserRegistration(false);
+    return bInstall ? DllRegisterServer() : DllUnregisterServer();
 }
