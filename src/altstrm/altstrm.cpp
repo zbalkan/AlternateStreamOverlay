@@ -155,9 +155,6 @@ namespace
             return false;
         }
 
-        // These raw names need not be usable as Win32 preview paths.
-        // Enumeration is complete even when preview-path validation fails.
-
         auto& names = enumeration.streams;
         // The unnamed default stream is not an alternate data stream.
         names.erase(std::remove(names.begin(), names.end(), L"::$DATA"), names.end());

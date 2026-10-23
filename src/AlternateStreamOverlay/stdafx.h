@@ -18,6 +18,5 @@
 #include "resource.h"
 #include <atlbase.h>
 #include <atlcom.h>
-#include <atlctl.h>
 
 using namespace ATL;
