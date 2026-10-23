@@ -805,6 +805,9 @@ namespace AlternateStreamTests
         {
             constexpr size_t PreviewLimit = 65535;
             std::vector<BYTE> data(PreviewLimit, 'A');
+            const auto complete = FormatStreamPreview(data.data(), data.size(), false);
+            Assert::AreEqual(PreviewLimit, complete.size());
+            Assert::AreEqual(L'A', complete.back());
             data[PreviewLimit - 2] = 0xE2;
             data[PreviewLimit - 1] = 0x82;
             const auto text = FormatStreamPreview(data.data(), data.size(), false);
