@@ -28,17 +28,11 @@
     <ClCompile Include="AlternateStreamOverlayIcon.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="dlldatax.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="dllmain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="stdafx.cpp">
       <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="AlternateStreamOverlay_i.c">
-      <Filter>Generated Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -53,9 +47,6 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <Midl Include="AlternateStreamOverlay.idl">
-      <Filter>Source Files</Filter>
-    </Midl>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AlternateStreamContext.h">
@@ -70,9 +61,6 @@
     <ClInclude Include="LocalPathPolicy.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="dlldatax.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="dllmain.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -84,9 +72,6 @@
     </ClInclude>
     <ClInclude Include="targetver.h">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="AlternateStreamOverlay_i.h">
-      <Filter>Generated Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
