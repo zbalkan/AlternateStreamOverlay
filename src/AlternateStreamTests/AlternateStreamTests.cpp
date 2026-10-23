@@ -355,6 +355,17 @@ namespace AlternateStreamTests
     TEST_CLASS(ComInitializationTests)
     {
     public:
+        TEST_METHOD(RejectsPerUserInstallation)
+        {
+            ScopedModule module(GetOverlayDllPath().c_str());
+            using DllInstallFunction = HRESULT (STDAPICALLTYPE*)(BOOL, LPCWSTR);
+            const auto install = reinterpret_cast<DllInstallFunction>(
+                GetProcAddress(module.handle, "DllInstall"));
+            Assert::IsTrue(install != nullptr);
+            Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG), install(TRUE, L"user"));
+            Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG), install(FALSE, L"user"));
+        }
+
         TEST_METHOD(OverlayInterfaceValidatesArguments)
         {
             ScopedModule module(GetOverlayDllPath().c_str());
