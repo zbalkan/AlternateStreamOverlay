@@ -197,7 +197,7 @@ namespace
     }
 }
 
-int wmain(int argc, wchar_t* argv[])
+int Run(int argc, wchar_t* argv[])
 {
     if (argc != 2)
     {
@@ -227,4 +227,19 @@ int wmain(int argc, wchar_t* argv[])
     const bool success = ReportMatches(reader, search, findData, directory);
     FindClose(search);
     return success ? 0 : 1;
+}
+
+
+// Keep exceptions from escaping the C runtime entry point.
+int wmain(int argc, wchar_t* argv[])
+{
+    try
+    {
+        return Run(argc, argv);
+    }
+    catch (...)
+    {
+        WriteError(L"Unexpected failure while enumerating alternate streams.\r\n");
+        return 1;
+    }
 }
