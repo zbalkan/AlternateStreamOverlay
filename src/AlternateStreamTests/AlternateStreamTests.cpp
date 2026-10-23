@@ -830,6 +830,37 @@ namespace AlternateStreamTests
                 L":status_test:$DATA") != after.streams.end());
         }
 
+        TEST_METHOD(NativeStreamNamesRoundTripThroughValidation)
+        {
+            TemporaryFile fixture;
+            AlternateStreamReader reader;
+            // Exercise actual filesystem names, not only synthetic FILE_STREAM_INFO.
+            // Skip volumes without named-stream support.
+            HandleW file(CreateFileW(fixture.path.data(), 0,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr));
+            Assert::IsTrue(file.get() != INVALID_HANDLE_VALUE);
+            DWORD flags = 0;
+            Assert::IsTrue(GetVolumeInformationByHandleW(file.get(), nullptr, 0,
+                nullptr, nullptr, &flags, nullptr, 0) != FALSE);
+            if ((flags & FILE_NAMED_STREAMS) == 0)
+                return;
+
+            const std::wstring streamName = L":g2-\u00E9\u6F22\u5B57";
+            const auto streamPath = std::wstring(fixture.path.data()) + streamName;
+            CreateStream(streamPath);
+
+            const auto inventory = reader.EnumerateStreams(fixture.path.data());
+            Assert::IsTrue(inventory.status == StreamStatus::Ok);
+            const auto expected = streamName + L":$DATA";
+            Assert::IsTrue(std::find(inventory.streams.begin(), inventory.streams.end(),
+                expected) != inventory.streams.end());
+            Assert::IsTrue(stream_info_detail::IsNamedDataStreamName(
+                expected.data(), expected.size()));
+
+            Assert::IsTrue(DeleteFileW(streamPath.c_str()) != FALSE);
+        }
+
         TEST_METHOD(DistinguishesUnnamedFromNamedStreams)
         {
             TemporaryFile fixture;
