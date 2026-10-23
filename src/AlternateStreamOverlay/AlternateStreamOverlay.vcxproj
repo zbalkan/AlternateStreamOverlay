@@ -173,7 +173,6 @@
   <ItemGroup>
     <None Include="AlternateStreamContext.rgs" />
     <None Include="AlternateStreamOverlay.def" />
-    <None Include="AlternateStreamOverlay.rgs" />
     <None Include="AlternateStreamOverlayIcon.rgs" />
   </ItemGroup>
   <ItemGroup>

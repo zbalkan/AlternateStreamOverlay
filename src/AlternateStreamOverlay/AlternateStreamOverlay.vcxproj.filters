@@ -48,9 +48,6 @@
     <None Include="AlternateStreamContext.rgs">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="AlternateStreamOverlay.rgs">
-      <Filter>Resource Files</Filter>
-    </None>
     <None Include="AlternateStreamOverlayIcon.rgs">
       <Filter>Resource Files</Filter>
     </None>
