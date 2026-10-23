@@ -13,7 +13,7 @@ Historical entries from Lee Benfield's original project are preserved verbatim b
 - Explorer's **Alternate Streams...** command provides access to the Alternate Streams tab in the file's Properties dialog for files that contain named alternate data streams.
 - Users can inspect named alternate stream contents as text or hexadecimal previews, with an indication when a preview is truncated.
 - Files with alternate streams can be identified using an Explorer icon overlay, subject to Windows overlay-handler limits.
-- Per-user installation and uninstallation without administrator privileges, alongside machine-wide registration.
+- Machine-wide installation and uninstallation through elevated COM registration.
 - Command-line listing with Unicode file and stream names, including UTF-8 output when redirected.
 - Diagnostics for shell integration and registrations.
 
