@@ -394,8 +394,7 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
         bool asHex = false;
         {
             ExclusiveSrwLock lock(request->gate->lock);
-            // A closed page or cleared selection must not start a preview.
-            if (!request->gate->alive || request->gate->path.empty())
+            if (!request->gate->alive)
             {
                 request->gate->workerActive = false;
                 return;
@@ -476,16 +475,7 @@ void SelectTextImpl(DialogState* state, size_t idx, bool asHex, HWND textBox)
     const auto& streams = state->streams;
     if (idx >= streams.size())
     {
-        // Invalidate both the dialog and worker generations. Drop any pending
-        // completion so an invalid selection cannot revive an old preview.
-        {
-            ExclusiveSrwLock lock(state->gate->lock);
-            ++state->generation;
-            state->gate->generation = state->generation;
-            state->gate->path.clear();
-            state->gate->pending.reset();
-            state->gate->pendingFailure = false;
-        }
+        ++state->generation;
         SetWindowTextW(textBox, L"");
         return;
     }
