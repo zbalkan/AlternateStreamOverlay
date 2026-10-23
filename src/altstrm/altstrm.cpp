@@ -239,7 +239,15 @@ int wmain(int argc, wchar_t* argv[])
     }
     catch (...)
     {
-        WriteError(L"Unexpected failure while enumerating alternate streams.\r\n");
+        // Even diagnostics can allocate and throw during exception handling.
+        try
+        {
+            WriteError(L"Unexpected failure while enumerating alternate streams.\r\n");
+        }
+        catch (...)
+        {
+            // Preserve the failure exit status if reporting also fails.
+        }
         return 1;
     }
 }
