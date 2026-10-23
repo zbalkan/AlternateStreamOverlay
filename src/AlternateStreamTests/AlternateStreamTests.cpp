@@ -769,9 +769,9 @@ namespace AlternateStreamTests
         {
             const BYTE malformed[] = { '[', 'Z', 'o', 'n', 'e', ']', 0xC0, 0xAF };
             const auto plain = FormatStreamPreview(
-                malformed, sizeof(malformed), false, false);
+                malformed, sizeof(malformed), false);
             const auto hex = FormatStreamPreview(
-                malformed, sizeof(malformed), false, true);
+                malformed, sizeof(malformed), true);
             Assert::IsTrue(plain.find(L"[Zone]") == 0);
             Assert::IsTrue(plain.find(L'\uFFFD') != std::wstring::npos);
             Assert::IsTrue(plain.find(L"00000000") == std::wstring::npos);
@@ -779,54 +779,42 @@ namespace AlternateStreamTests
             Assert::IsTrue(plain != hex);
 
             const BYTE nul[] = { 'A', 0, 'B' };
-            const auto text = FormatStreamPreview(nul, sizeof(nul), false, false);
+            const auto text = FormatStreamPreview(nul, sizeof(nul), false);
             Assert::AreEqual(static_cast<size_t>(3), text.size());
             Assert::AreEqual(L'A', text.front());
             Assert::AreEqual(L'\uFFFD', text[1]);
             Assert::AreEqual(L'B', text.back());
         }
 
-        TEST_METHOD(TruncatedMalformedTextOmitsIncompleteUtf8Tail)
+        TEST_METHOD(IncompleteUtf8TailUsesReplacementCharacter)
         {
             const BYTE input[] = { 'A', 0xC0, 0xAF, 'B', 0xE2, 0x82 };
-            const auto truncatedText = FormatStreamPreview(
-                input, sizeof(input), true, false);
-            const auto completeText = FormatStreamPreview(
-                input, sizeof(input), false, false);
-
-            Assert::IsTrue(truncatedText.find(L'\uFFFD') != std::wstring::npos);
-            Assert::AreEqual(L'B', truncatedText.back());
-            Assert::IsTrue(completeText.size() > truncatedText.size());
-            Assert::AreEqual(L'\uFFFD', completeText.back());
+            const auto text = FormatStreamPreview(input, sizeof(input), false);
+            Assert::IsTrue(text.find(L'\uFFFD') != std::wstring::npos);
+            Assert::AreEqual(L'\uFFFD', text.back());
         }
 
         TEST_METHOD(ValidUtf8Preview)
         {
             const BYTE valid[] = { 'A', 0xE2, 0x82, 0xAC };
-            const auto text = FormatStreamPreview(valid, sizeof(valid), false, false);
+            const auto text = FormatStreamPreview(valid, sizeof(valid), false);
             Assert::AreEqual(L"A\u20AC", text.c_str());
         }
 
-        TEST_METHOD(TruncatedBoundaryDoesNotShowPartialCharacter)
+        TEST_METHOD(BoundedPreviewBoundaryShowsReplacementCharacter)
         {
             constexpr size_t PreviewLimit = 65535;
             std::vector<BYTE> data(PreviewLimit, 'A');
-            Assert::AreEqual(PreviewLimit,
-                FormatStreamPreview(data.data(), data.size(), false, false).size());
-
             data[PreviewLimit - 2] = 0xE2;
             data[PreviewLimit - 1] = 0x82;
-            const auto trimmed = FormatStreamPreview(data.data(), data.size(), true, false);
-            const auto complete = FormatStreamPreview(data.data(), data.size(), false, false);
-            Assert::AreEqual(PreviewLimit - 2, trimmed.size());
-            Assert::AreEqual(L'A', trimmed.back());
-            Assert::AreEqual(L'\uFFFD', complete.back());
+            const auto text = FormatStreamPreview(data.data(), data.size(), false);
+            Assert::AreEqual(PreviewLimit - 1, text.size());
+            Assert::AreEqual(L'\uFFFD', text.back());
 
-            // The preview limit can also split a four-byte UTF-8 character.
             const BYTE fourByteSplit[] = { 'A', 0xF0, 0x9F, 0x98 };
             const auto fourByteText = FormatStreamPreview(
-                fourByteSplit, sizeof(fourByteSplit), true, false);
-            Assert::AreEqual(L"A", fourByteText.c_str());
+                fourByteSplit, sizeof(fourByteSplit), false);
+            Assert::AreEqual(L'\uFFFD', fourByteText.back());
         }
 
         TEST_METHOD(InvalidUtf8TailIsNotSilentlyDiscarded)
@@ -834,9 +822,9 @@ namespace AlternateStreamTests
             const BYTE invalidSecond[] = { 'A', 0xE0, 0x80 };
             const BYTE loneContinuation[] = { 'A', 0x80 };
             const auto malformed = FormatStreamPreview(
-                invalidSecond, sizeof(invalidSecond), true, false);
+                invalidSecond, sizeof(invalidSecond), false);
             const auto orphan = FormatStreamPreview(
-                loneContinuation, sizeof(loneContinuation), true, false);
+                loneContinuation, sizeof(loneContinuation), false);
             Assert::AreEqual(L'\uFFFD', malformed.back());
             Assert::AreEqual(L'\uFFFD', orphan.back());
         }
