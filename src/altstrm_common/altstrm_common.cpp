@@ -253,61 +253,6 @@ bool AlternateStreamReader::HasAlternateStreams(LPCWSTR filename) const
     return IndicatesAlternateStreams(EnumerateStreams(filename, false));
 }
 
-namespace
-{
-    // Windows uses BYTE for ReadFile buffers. Keep that API boundary and
-    // classify individual octets without introducing a C++17 requirement.
-    bool IsContinuation(BYTE value)
-    {
-        return (value & 0xC0) == 0x80;
-    }
-
-    size_t Utf8SequenceLength(BYTE lead)
-    {
-        if (lead >= 0xC2 && lead <= 0xDF) return 2;
-        if (lead >= 0xE0 && lead <= 0xEF) return 3;
-        if (lead >= 0xF0 && lead <= 0xF4) return 4;
-        return 0;
-    }
-
-    bool IsValidInitialContinuation(BYTE lead, BYTE second)
-    {
-        if (!IsContinuation(second)) return false;
-        if (lead == 0xE0 && second < 0xA0) return false;
-        if (lead == 0xED && second > 0x9F) return false;
-        if (lead == 0xF0 && second < 0x90) return false;
-        if (lead == 0xF4 && second > 0x8F) return false;
-        return true;
-    }
-
-    size_t CompleteUtf8PrefixLength(const BYTE* data, size_t length)
-    {
-        // At most three trailing continuation bytes can belong to a UTF-8
-        // sequence cut by the preview limit.
-        size_t lead = length;
-        while (lead > 0 && length - lead < 3 && IsContinuation(data[lead - 1]))
-            --lead;
-        if (lead == 0)
-            return length;
-        --lead;
-
-        const size_t required = Utf8SequenceLength(data[lead]);
-        const size_t available = length - lead;
-        if (required == 0 || available >= required)
-            return length;
-        if (available >= 2 &&
-            !IsValidInitialContinuation(data[lead], data[lead + 1]))
-            return length;
-
-        for (size_t i = lead + 2; i < length; ++i)
-        {
-            if (!IsContinuation(data[i]))
-                return length;
-        }
-        return lead;
-    }
-}
-
 std::wstring FormatHexPreview(const BYTE* data, size_t size)
 {
     // BYTE matches the Win32 stream API; these values are octets used for
@@ -362,20 +307,15 @@ std::wstring FormatHexPreview(const BYTE* data, size_t size)
 }
 
 std::wstring FormatStreamPreview(const BYTE* data, size_t size,
-                                 bool truncated, bool asHex)
+                                 bool asHex)
 {
     if (asHex)
         return FormatHexPreview(data, size);
     if (data == nullptr || size == 0 || size > static_cast<size_t>(INT_MAX))
         return {};
 
-    // Omit only an incomplete UTF-8 suffix cut by the preview limit.
-    // Malformed bytes elsewhere remain visible as replacement characters.
-    const size_t length = truncated ? CompleteUtf8PrefixLength(data, size) : size;
-    if (length == 0)
-        return {};
     const auto bytes = reinterpret_cast<const char*>(data);
-    const auto byteCount = static_cast<int>(length);
+    const auto byteCount = static_cast<int>(size);
     // Flawfinder: ignore
     const int count = MultiByteToWideChar(CP_UTF8, 0, bytes, byteCount, nullptr, 0);
     if (count <= 0)
