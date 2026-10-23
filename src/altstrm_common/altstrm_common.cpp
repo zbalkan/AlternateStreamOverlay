@@ -253,6 +253,32 @@ bool AlternateStreamReader::HasAlternateStreams(LPCWSTR filename) const
     return IndicatesAlternateStreams(EnumerateStreams(filename, false));
 }
 
+std::wstring FormatPreviewDisplayText(bool incomplete, bool unsafeNames,
+                                      LPCWSTR message)
+{
+    std::wstring display;
+    if (incomplete)
+    {
+        display =
+            L"Stream enumeration is incomplete or failed.\r\n"
+            L"Some stream names may be unavailable for preview.\r\n"
+            L"Do not interpret this inventory as a clean result.";
+    }
+    if (unsafeNames)
+    {
+        if (!display.empty())
+            display += L"\r\n";
+        display += L"Some stream names cannot be previewed safely.";
+    }
+    if (message != nullptr && *message != L'\0')
+    {
+        if (!display.empty())
+            display += L"\r\n\r\n";
+        display += message;
+    }
+    return display;
+}
+
 std::wstring FormatHexPreview(const BYTE* data, size_t size)
 {
     // BYTE matches the Win32 stream API; these values are octets used for
