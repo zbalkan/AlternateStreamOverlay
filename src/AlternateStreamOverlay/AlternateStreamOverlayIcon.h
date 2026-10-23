@@ -3,14 +3,12 @@
 
 #include <shlobj.h>
 #include <comdef.h>
-#include "AlternateStreamOverlay_i.h"
 
 /* Like the name implies, responsible for overlaying icon ... */
 
-class ATL_NO_VTABLE CAlternateStreamOverlayIcon :
+class ATL_NO_VTABLE __declspec(uuid("FBAB8C58-59C9-4522-B7E8-1A6AA23B318C")) CAlternateStreamOverlayIcon :
     public CComObjectRootEx<CComMultiThreadModel>,
-    public CComCoClass<CAlternateStreamOverlayIcon, &CLSID_AlternateStreamOverlayIcon>,
-    public IAlternateStreamOverlayIcon,
+    public CComCoClass<CAlternateStreamOverlayIcon, &__uuidof(CAlternateStreamOverlayIcon)>,
     public IShellIconOverlayIdentifier
 {
 public:
@@ -21,7 +19,6 @@ public:
     DECLARE_NOT_AGGREGATABLE(CAlternateStreamOverlayIcon)
 
     BEGIN_COM_MAP(CAlternateStreamOverlayIcon)
-        COM_INTERFACE_ENTRY(IAlternateStreamOverlayIcon)
         COM_INTERFACE_ENTRY(IShellIconOverlayIdentifier)
     END_COM_MAP()
 
@@ -39,4 +36,4 @@ public:
     STDMETHOD(GetPriority)(int* pIPriority);
 };
 
-OBJECT_ENTRY_AUTO(__uuidof(AlternateStreamOverlayIcon), CAlternateStreamOverlayIcon)
+OBJECT_ENTRY_AUTO(__uuidof(CAlternateStreamOverlayIcon), CAlternateStreamOverlayIcon)

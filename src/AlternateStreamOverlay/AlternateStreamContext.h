@@ -1,7 +1,6 @@
 #pragma once
 #include "resource.h"       // main symbols
 
-#include "AlternateStreamOverlay_i.h"
 #include <shlobj.h>
 #include <comdef.h>
 #include <vector>
@@ -11,10 +10,9 @@
 
 /* Responsible for context menu item, and property tab */
 
-class ATL_NO_VTABLE CAlternateStreamContext :
+class ATL_NO_VTABLE __declspec(uuid("4A26024B-5499-45BE-A23F-4A65E88888D0")) CAlternateStreamContext :
     public CComObjectRootEx<CComMultiThreadModel>,
-    public CComCoClass<CAlternateStreamContext, &CLSID_AlternateStreamContext>,
-    public IAlternateStreamContext,
+    public CComCoClass<CAlternateStreamContext, &__uuidof(CAlternateStreamContext)>,
     public IShellExtInit,
     public IContextMenu,
     public IShellPropSheetExt
@@ -34,7 +32,6 @@ public:
     DECLARE_NOT_AGGREGATABLE(CAlternateStreamContext)
 
     BEGIN_COM_MAP(CAlternateStreamContext)
-        COM_INTERFACE_ENTRY(IAlternateStreamContext)
         COM_INTERFACE_ENTRY(IShellExtInit)
         COM_INTERFACE_ENTRY(IContextMenu)
         COM_INTERFACE_ENTRY(IShellPropSheetExt)
@@ -78,4 +75,4 @@ public:
         LPARAM lParam);
 };
 
-OBJECT_ENTRY_AUTO(__uuidof(AlternateStreamContext), CAlternateStreamContext)
+OBJECT_ENTRY_AUTO(__uuidof(CAlternateStreamContext), CAlternateStreamContext)
