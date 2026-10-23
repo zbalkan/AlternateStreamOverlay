@@ -632,6 +632,26 @@ namespace AlternateStreamTests
             Assert::IsFalse(reader.HasAlternateStreams(fixture.path.data()));
         }
 
+        TEST_METHOD(BoundedEnumerationIndicatesAlternateStreams)
+        {
+            StreamEnumeration result;
+            result.status = StreamStatus::Ok;
+            result.hasNamedStreams = true;
+            Assert::IsTrue(IndicatesAlternateStreams(result));
+
+            result.hasNamedStreams = false;
+            Assert::IsFalse(IndicatesAlternateStreams(result));
+
+            // The bounded native query exceeds 4 MiB. One unnamed stream
+            // cannot account for that amount of FILE_STREAM_INFO data.
+            result.status = StreamStatus::Truncated;
+            Assert::IsTrue(IndicatesAlternateStreams(result));
+
+            result.status = StreamStatus::Error;
+            result.hasNamedStreams = true;
+            Assert::IsFalse(IndicatesAlternateStreams(result));
+        }
+
         TEST_METHOD(UncertainAndUndisplayableResultsRequireNotice)
         {
             StreamEnumeration result;
