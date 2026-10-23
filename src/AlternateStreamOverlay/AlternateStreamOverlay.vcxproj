@@ -55,22 +55,11 @@
     <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
       <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <Midl>
-      <PreprocessorDefinitions>_WIN32_WINNT=0x0A00;WINVER=0x0A00;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <MkTypLibCompatible>false</MkTypLibCompatible>
-      <TargetEnvironment>X64</TargetEnvironment>
-      <GenerateStublessProxies>true</GenerateStublessProxies>
-      <TypeLibraryName>$(IntDir)AlternateStreamOverlay.tlb</TypeLibraryName>
-      <HeaderFileName>AlternateStreamOverlay_i.h</HeaderFileName>
-      <DllDataFileName />
-      <InterfaceIdentifierFileName>AlternateStreamOverlay_i.c</InterfaceIdentifierFileName>
-      <ProxyFileName>AlternateStreamOverlay_p.c</ProxyFileName>
-    </Midl>
     <ClCompile>
       <LanguageStandard>stdcpp14</LanguageStandard>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>..\altstrm_common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>_WIN32_WINNT=0x0A00;WINVER=0x0A00;_WINDOWS;_DEBUG;_USRDLL;_MERGE_PROXYSTUB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_WIN32_WINNT=0x0A00;WINVER=0x0A00;_WINDOWS;_DEBUG;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -93,24 +82,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <Midl>
-      <PreprocessorDefinitions>_WIN32_WINNT=0x0A00;WINVER=0x0A00;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <MkTypLibCompatible>false</MkTypLibCompatible>
-      <TargetEnvironment>X64</TargetEnvironment>
-      <GenerateStublessProxies>true</GenerateStublessProxies>
-      <TypeLibraryName>$(IntDir)AlternateStreamOverlay.tlb</TypeLibraryName>
-      <HeaderFileName>AlternateStreamOverlay_i.h</HeaderFileName>
-      <DllDataFileName />
-      <InterfaceIdentifierFileName>AlternateStreamOverlay_i.c</InterfaceIdentifierFileName>
-      <ProxyFileName>AlternateStreamOverlay_p.c</ProxyFileName>
-    </Midl>
     <ClCompile>
       <LanguageStandard>stdcpp14</LanguageStandard>
       <SDLCheck>true</SDLCheck>
       <AdditionalOptions>/guard:cf %(AdditionalOptions)</AdditionalOptions>
       <Optimization>MaxSpeed</Optimization>
       <AdditionalIncludeDirectories>..\altstrm_common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>_WIN32_WINNT=0x0A00;WINVER=0x0A00;_WINDOWS;NDEBUG;_USRDLL;_MERGE_PROXYSTUB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_WIN32_WINNT=0x0A00;WINVER=0x0A00;_WINDOWS;NDEBUG;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
@@ -141,22 +119,6 @@
     <ClCompile Include="AlternateStreamContext.cpp" />
     <ClCompile Include="AlternateStreamOverlay.cpp" />
     <ClCompile Include="AlternateStreamOverlayIcon.cpp" />
-    <ClCompile Include="AlternateStreamOverlay_i.c">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-      </PrecompiledHeader>
-      <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</CompileAsManaged>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-      </PrecompiledHeader>
-      <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</CompileAsManaged>
-    </ClCompile>
-    <ClCompile Include="dlldatax.c">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-      </PrecompiledHeader>
-      <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</CompileAsManaged>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-      </PrecompiledHeader>
-      <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</CompileAsManaged>
-    </ClCompile>
     <ClCompile Include="dllmain.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
       </PrecompiledHeader>
@@ -176,15 +138,10 @@
     <None Include="AlternateStreamOverlayIcon.rgs" />
   </ItemGroup>
   <ItemGroup>
-    <Midl Include="AlternateStreamOverlay.idl" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="AlternateStreamContext.h" />
     <ClInclude Include="AlternateStreamOverlayIcon.h" />
-    <ClInclude Include="AlternateStreamOverlay_i.h" />
     <ClInclude Include="SrwLock.h" />
     <ClInclude Include="LocalPathPolicy.h" />
-    <ClInclude Include="dlldatax.h" />
     <ClInclude Include="dllmain.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="stdafx.h" />
