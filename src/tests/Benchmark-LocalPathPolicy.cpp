@@ -67,6 +67,8 @@ int wmain()
     std::printf("configuration,files,passes,calls,accepted,p50_us,p95_us,p99_us,max_us\n");
     #ifdef ASO_BENCHMARK_NO_CACHE
     constexpr const char* configuration = "no_cache_no_subst";
+#elif defined(ASO_BENCHMARK_NO_SUBST)
+    constexpr const char* configuration = "cache_no_subst";
 #else
     constexpr const char* configuration = "baseline";
 #endif
