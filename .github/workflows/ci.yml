@@ -154,11 +154,11 @@ jobs:
       - name: Build and run native path-policy benchmark
         shell: cmd
         run: |
-          for /f "usebackq delims=" %%V in (`"%ProgramFiles(x86)%\\Microsoft Visual Studio\\Installer\\vswhere.exe" -latest -products * -property installationPath`) do set "VSPATH=%%V"
+          for /f "usebackq delims=" %%V in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath`) do set "VSPATH=%%V"
           if not defined VSPATH exit /b 1
-          call "%VSPATH%\\Common7\\Tools\\VsDevCmd.bat" -arch=x64 -host_arch=x64
+          call "%VSPATH%\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
           if errorlevel 1 exit /b 1
-          cl /nologo /EHsc /std:c++14 /O2 /W4 /WX /Fe:benchmark-policy.exe src\\tests\\Benchmark-LocalPathPolicy.cpp
+          cl /nologo /EHsc /std:c++14 /O2 /W4 /WX /Fe:benchmark-policy.exe src\tests\Benchmark-LocalPathPolicy.cpp
           if errorlevel 1 exit /b 1
           benchmark-policy.exe > path-policy-baseline.csv
           if errorlevel 1 exit /b 1
