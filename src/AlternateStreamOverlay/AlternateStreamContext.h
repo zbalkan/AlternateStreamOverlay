@@ -75,4 +75,4 @@ public:
         LPARAM lParam);
 };
 
-OBJECT_ENTRY_AUTO(__uuidof(AlternateStreamContext), CAlternateStreamContext)
+OBJECT_ENTRY_AUTO(__uuidof(CAlternateStreamContext), CAlternateStreamContext)
