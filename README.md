@@ -49,8 +49,6 @@ Both supported configurations are built by GitHub Actions.
 
 The extension supports **machine-wide installation only**, requiring an elevated terminal.
 
-### Installation
-
 ```powershell
 regsvr32.exe .\src\AlternateStreamOverlay\x64\Release\AlternateStreamOverlay.dll
 ```
