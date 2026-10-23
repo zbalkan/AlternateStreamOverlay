@@ -509,29 +509,27 @@ void SelectTextImpl(DialogState* state, size_t idx, bool asHex, HWND textBox)
         if (state->gate->workerActive)
             return;
 
-        const auto startWorker = [&]() -> bool
+        std::unique_ptr<PreviewRequest> request(new (std::nothrow) PreviewRequest);
+        if (request)
         {
-            std::unique_ptr<PreviewRequest> request(new (std::nothrow) PreviewRequest);
-            if (!request)
-                return false;
             request->gate = state->gate;
             HMODULE moduleHandle = nullptr;
-            if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+            if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
                 reinterpret_cast<LPCWSTR>(&PreviewWorker), &moduleHandle))
-                return false;
-            request->moduleHandle = moduleHandle;
-            PTP_WORK work = CreateThreadpoolWork(PreviewWorker, request.get(), nullptr);
-            if (work == nullptr)
             {
-                FreeLibrary(moduleHandle);
-                return false;
+                request->moduleHandle = moduleHandle;
+                PTP_WORK work = CreateThreadpoolWork(PreviewWorker, request.get(), nullptr);
+                if (work != nullptr)
+                {
+                    state->gate->workerActive = true;
+                    SubmitThreadpoolWork(work);
+                    (void)request.release();
+                    started = true;
+                }
+                else
+                    FreeLibrary(moduleHandle);
             }
-            state->gate->workerActive = true;
-            SubmitThreadpoolWork(work);
-            (void)request.release();
-            return true;
-        };
-        started = startWorker();
+        }
     }
     // Never send synchronous window messages while holding the gate lock.
     if (!started)
