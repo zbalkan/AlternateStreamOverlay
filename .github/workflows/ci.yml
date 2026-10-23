@@ -143,7 +143,6 @@ jobs:
           & .\src\tests\Smoke-AlternateStreams.ps1 -ExePath $exe
           if (-not $?) { throw 'ADS smoke tests failed' }
 
-
   cppcheck:
     name: Cppcheck (Linux)
     runs-on: ubuntu-24.04
