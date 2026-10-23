@@ -161,12 +161,18 @@ jobs:
           cl /nologo /EHsc /std:c++14 /O2 /W4 /WX /Fe:benchmark-policy.exe src\tests\Benchmark-LocalPathPolicy.cpp
           if errorlevel 1 exit /b 1
           benchmark-policy.exe > path-policy-baseline.csv
-          if errorlevel 1 exit /b 1
-          type path-policy-baseline.csv
+          set "BENCHMARK_EXIT=%ERRORLEVEL%"
+          echo %BENCHMARK_EXIT%>benchmark-exit.txt
+          if exist path-policy-baseline.csv type path-policy-baseline.csv
 
       - name: Publish benchmark summary
+        if: always()
         shell: pwsh
         run: |
+          if (-not (Test-Path -LiteralPath 'path-policy-baseline.csv')) {
+            Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value '### Path policy baseline: CSV unavailable'
+            exit 0
+          }
           $data = Import-Csv -LiteralPath 'path-policy-baseline.csv'
           $lines = @('### Path policy baseline (temporary)', '', 'Windows hosted runner; timing is indicative, not a performance SLA.', '', '| Configuration | Files | Calls | Accepted | p50 (µs) | p95 (µs) | p99 (µs) | Max (µs) |', '|---|---:|---:|---:|---:|---:|---:|---:|')
           foreach ($row in $data) {
@@ -175,10 +181,21 @@ jobs:
           Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ($lines -join "`n")
 
       - name: Upload benchmark data
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: path-policy-baseline
-          path: path-policy-baseline.csv
+          path: |
+            path-policy-baseline.csv
+            benchmark-exit.txt
+          if-no-files-found: warn
+
+      - name: Enforce benchmark outcome
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -LiteralPath 'benchmark-exit.txt')) { throw 'Benchmark did not run' }
+          $exitCode = [int](Get-Content -LiteralPath 'benchmark-exit.txt' -Raw).Trim()
+          if ($exitCode -ne 0) { throw "Benchmark returned exit code $exitCode" }
 
   cppcheck:
     name: Cppcheck (Linux)
