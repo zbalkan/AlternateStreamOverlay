@@ -16,7 +16,7 @@ This project is a maintained fork of Lee Benfield's original [AlternateStreamOve
 - **Icon overlay:** Identifies files containing alternate data streams in Windows Explorer.
 - **Property page:** Displays alternate data streams associated with a file.
 - **Context-menu integration:** Provides access to the extension through Explorer.
-- **Per-user installation:** Supports registration without administrative privileges.
+- **Machine-wide installation:** Requires administrator privileges to register Explorer and COM components.
 - **Native Windows integration:** Uses the documented `GetFileInformationByHandleEx(FileStreamInfo)` API to enumerate streams.
 - **Registration diagnostics:** Includes read-only scripts for inspecting shell handler and overlay registration.
 
@@ -47,55 +47,25 @@ Both supported configurations are built by GitHub Actions.
 
 ## Installation
 
-The extension supports machine-wide and per-user registration. Choose one registration scope.
+The extension supports **machine-wide installation only**, requiring an elevated terminal.
 
-### Machine-wide installation
-
-Run the following command from an **elevated** terminal:
+### Installation
 
 ```powershell
 regsvr32.exe .\src\AlternateStreamOverlay\x64\Release\AlternateStreamOverlay.dll
 ```
 
-This registers the extension for all users through the machine-wide COM and Explorer registration locations.
-
-### Per-user installation
-
-Administrative privileges are not required for current-user registration:
-
-```powershell
-regsvr32.exe /n /i:user .\src\AlternateStreamOverlay\x64\Release\AlternateStreamOverlay.dll
-```
-
-The `/n` option suppresses the default `DllRegisterServer` invocation, while `/i:user` requests per-user installation through `DllInstall`.
-
-Per-user COM registrations are redirected to `HKCU\Software\Classes`. The overlay identifier is registered separately under:
-
-```text
-HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers
-```
-
-Machine-wide overlay identifiers use the corresponding `HKLM` location.
-
-The examples assume a Release build and that commands are executed from the repository root.
+This registers the COM classes and Explorer overlay for all users. Per-user registration (including `/n /i:user`) is not supported.
 
 ## Uninstallation
 
-Use the command corresponding to the original installation scope.
-
-**Machine-wide** (elevated terminal):
+Run from an **elevated** terminal:
 
 ```powershell
 regsvr32.exe /u .\src\AlternateStreamOverlay\x64\Release\AlternateStreamOverlay.dll
 ```
 
-**Current user:**
-
-```powershell
-regsvr32.exe /u /n /i:user .\src\AlternateStreamOverlay\x64\Release\AlternateStreamOverlay.dll
-```
-
-Unregister the extension before deleting its DLL.
+Unregister the extension before deleting its DLL. The examples assume a Release build and commands executed from the repository root.
 
 ## Testing and diagnostics
 
@@ -123,7 +93,7 @@ The script checks registrations for files and directories, including the associa
 
 ### Explorer overlay registration
 
-Inspect machine-wide and per-user overlay registrations:
+Inspect overlay registrations (the extension installs machine-wide):
 
 ```powershell
 .\src\tests\Get-OverlayRegistration.ps1
