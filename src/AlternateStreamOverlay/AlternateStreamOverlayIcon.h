@@ -36,4 +36,4 @@ public:
     STDMETHOD(GetPriority)(int* pIPriority);
 };
 
-OBJECT_ENTRY_AUTO(__uuidof(AlternateStreamOverlayIcon), CAlternateStreamOverlayIcon)
+OBJECT_ENTRY_AUTO(__uuidof(CAlternateStreamOverlayIcon), CAlternateStreamOverlayIcon)
