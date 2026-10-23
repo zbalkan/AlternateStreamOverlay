@@ -2,7 +2,6 @@
 #include "altstrm_common.h"
 #include "stream_info_detail.h"
 #include "../AlternateStreamOverlay/LocalPathPolicy.h"
-#include "../AlternateStreamOverlay/RegistrationPolicy.h"
 #include <algorithm>
 #include <cstddef>
 #include <limits>
@@ -49,48 +48,6 @@ namespace
     };
 
     // Each test owns a unique registry subtree, even when assertions throw.
-    class RegistrySandboxError : public std::runtime_error
-    {
-    public:
-        using std::runtime_error::runtime_error;
-    };
-
-    struct ScopedRegistrySandbox
-    {
-        std::wstring path;
-        HKEY handle = nullptr;
-
-        ScopedRegistrySandbox()
-        {
-            GUID id = {};
-            if (FAILED(CoCreateGuid(&id)))
-                throw RegistrySandboxError("Unable to generate registry sandbox ID");
-
-            std::array<WCHAR, 39> suffix = {};
-            if (StringFromGUID2(id, suffix.data(), static_cast<int>(suffix.size())) == 0)
-                throw RegistrySandboxError("Unable to format registry sandbox ID");
-
-            path = L"Software\\Classes\\AlternateStreamOverlayTests-";
-            path += suffix.data();
-            const LONG status = RegCreateKeyExW(HKEY_CURRENT_USER, path.c_str(),
-                0, nullptr, REG_OPTION_VOLATILE, KEY_ALL_ACCESS, nullptr,
-                &handle, nullptr);
-            if (status != ERROR_SUCCESS)
-                throw RegistrySandboxError("Unable to create registry sandbox");
-        }
-
-        ~ScopedRegistrySandbox()
-        {
-            if (handle != nullptr)
-                RegCloseKey(handle);
-            if (!path.empty())
-                RegDeleteTreeW(HKEY_CURRENT_USER, path.c_str());
-        }
-
-        ScopedRegistrySandbox(const ScopedRegistrySandbox&) = delete;
-        ScopedRegistrySandbox& operator=(const ScopedRegistrySandbox&) = delete;
-    };
-
     void CreateStream(const std::wstring& name)
     {
         HandleW file(CreateFileW(name.c_str(), GENERIC_WRITE,
@@ -305,105 +262,9 @@ namespace
 namespace AlternateStreamTests
 {
 
-    TEST_CLASS(OverlayRegistrationPolicyTests)
-    {
-    public:
-        TEST_METHOD(RegistrationRollbackPreservesExistingClasses)
-        {
-            Assert::IsTrue(ShouldRollbackComRegistration(false));
-            Assert::IsFalse(ShouldRollbackComRegistration(true));
-        }
-
-        TEST_METHOD(RegistryProbeDetectsExistingClassKeys)
-        {
-            ScopedRegistrySandbox sandbox;
-            constexpr std::array<LPCWSTR, 2> keys = { L"ClassA", L"ClassB" };
-            Assert::IsFalse(HasExistingComClassRegistration(sandbox.handle, keys));
-
-            HKEY registered = nullptr;
-            const LONG classStatus = RegCreateKeyExW(sandbox.handle, keys[1], 0,
-                nullptr, REG_OPTION_VOLATILE, KEY_ALL_ACCESS, nullptr,
-                &registered, nullptr);
-            if (classStatus != ERROR_SUCCESS)
-                Assert::Fail(L"Unable to create test COM class key");
-            RegCloseKey(registered);
-
-            Assert::IsTrue(HasExistingComClassRegistration(sandbox.handle, keys));
-            Assert::AreEqual(static_cast<LONG>(ERROR_SUCCESS),
-                RegDeleteKeyW(sandbox.handle, keys[1]));
-            Assert::IsFalse(HasExistingComClassRegistration(sandbox.handle, keys));
-        }
-
-        TEST_METHOD(RejectsForeignOrUnreadableRegistration)
-        {
-            constexpr LPCWSTR expected = L"{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}";
-            Assert::IsTrue(CanReplaceOverlayRegistration(
-                ERROR_FILE_NOT_FOUND, nullptr, expected, REG_CREATED_NEW_KEY));
-            Assert::IsFalse(CanReplaceOverlayRegistration(
-                ERROR_FILE_NOT_FOUND, nullptr, expected, REG_OPENED_EXISTING_KEY));
-            Assert::IsTrue(CanReplaceOverlayRegistration(
-                ERROR_SUCCESS, expected, expected, REG_OPENED_EXISTING_KEY));
-            Assert::IsFalse(CanReplaceOverlayRegistration(
-                ERROR_SUCCESS, L"{00000000-0000-0000-0000-000000000000}",
-                expected, REG_OPENED_EXISTING_KEY));
-            Assert::IsFalse(CanReplaceOverlayRegistration(
-                ERROR_MORE_DATA, nullptr, expected, REG_CREATED_NEW_KEY));
-            Assert::IsFalse(CanReplaceOverlayRegistration(
-                ERROR_UNSUPPORTED_TYPE, nullptr, expected, REG_OPENED_EXISTING_KEY));
-        }
-    };
-
     TEST_CLASS(ComInitializationTests)
     {
     public:
-        TEST_METHOD(RejectsPerUserInstallation)
-        {
-            ScopedModule module(GetOverlayDllPath().c_str());
-            using DllInstallFunction = HRESULT (STDAPICALLTYPE*)(BOOL, LPCWSTR);
-            const auto install = reinterpret_cast<DllInstallFunction>(
-                GetProcAddress(module.handle, "DllInstall"));
-            Assert::IsTrue(install != nullptr);
-            // A rejected install must not create, alter, or delete any legacy
-            // per-user COM classes or Explorer overlay registration.
-            constexpr std::array<LPCWSTR, 3> paths = {
-                L"Software\\Classes\\CLSID\\{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}",
-                L"Software\\Classes\\CLSID\\{4A26024B-5499-45BE-A23F-4A65E88888D0}",
-                L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ShellIconOverlayIdentifiers\\AlternateStreamOverlayIcon"
-            };
-            const auto snapshot = [&paths]()
-            {
-                std::array<std::pair<LONG, std::vector<BYTE>>, 3> state;
-                for (size_t i = 0; i < paths.size(); ++i)
-                {
-                    HKEY key = nullptr;
-                    const auto status = RegOpenKeyExW(HKEY_CURRENT_USER, paths[i],
-                        0, KEY_QUERY_VALUE, &key);
-                    state[i].first = status;
-                    if (status != ERROR_SUCCESS)
-                        continue;
-                    DWORD bytes = 0;
-                    auto valueStatus = RegQueryValueExW(key, nullptr, nullptr,
-                        nullptr, nullptr, &bytes);
-                    if (valueStatus == ERROR_SUCCESS)
-                    {
-                        state[i].second.resize(bytes);
-                        valueStatus = RegQueryValueExW(key, nullptr, nullptr,
-                            nullptr, state[i].second.data(), &bytes);
-                        state[i].second.resize(bytes);
-                    }
-                    RegCloseKey(key);
-                    // Encode absent/malformed values distinctly from valid values.
-                    state[i].first = valueStatus;
-                }
-                return state;
-            };
-            const auto before = snapshot();
-            Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG), install(TRUE, L"user"));
-            Assert::IsTrue(before == snapshot());
-            Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG), install(FALSE, L"user"));
-            Assert::IsTrue(before == snapshot());
-        }
-
         TEST_METHOD(OverlayInterfaceValidatesArguments)
         {
             ScopedModule module(GetOverlayDllPath().c_str());

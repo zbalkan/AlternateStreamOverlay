@@ -3,159 +3,6 @@
 #include "AlternateStreamOverlay_i.h"
 #include "dllmain.h"
 #include "dlldatax.h"
-#include "RegistrationPolicy.h"
-#include <array>
-#include <ktmw32.h>
-#pragma comment(lib, "KtmW32.lib")
-
-namespace
-{
-    constexpr LPCWSTR OverlayKey =
-        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\"
-        L"ShellIconOverlayIdentifiers\\AlternateStreamOverlayIcon";
-    constexpr WCHAR OverlayClsid[] = L"{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}";
-
-    // Scoped Win32 ownership keeps aborted registry transactions uncommitted.
-    class TransactionHandle
-    {
-    public:
-        TransactionHandle() = default;
-        ~TransactionHandle()
-        {
-            if (handle_ != INVALID_HANDLE_VALUE)
-                CloseHandle(handle_);
-        }
-        TransactionHandle(const TransactionHandle&) = delete;
-        TransactionHandle& operator=(const TransactionHandle&) = delete;
-        HANDLE get() const { return handle_; }
-
-    private:
-        HANDLE handle_ = CreateTransaction(nullptr, nullptr, 0, 0, 0, 0, nullptr);
-    };
-
-    class RegistryKey
-    {
-    public:
-        ~RegistryKey() { Close(); }
-        void Close()
-        {
-            if (handle_ != nullptr)
-            {
-                RegCloseKey(handle_);
-                handle_ = nullptr;
-            }
-        }
-        RegistryKey(const RegistryKey&) = delete;
-        RegistryKey& operator=(const RegistryKey&) = delete;
-        RegistryKey() = default;
-        HKEY* put() { return &handle_; }
-        HKEY get() const { return handle_; }
-
-    private:
-        HKEY handle_ = nullptr;
-    };
-
-    LONG ReadRegisteredClsid(HKEY key, std::array<WCHAR, 64>& clsid)
-    {
-        auto bytes = static_cast<DWORD>(clsid.size() * sizeof(WCHAR));
-        return RegGetValueW(key, nullptr, nullptr, RRF_RT_REG_SZ,
-            nullptr, clsid.data(), &bytes);
-    }
-
-    HRESULT RemoveOverlayRegistration(HKEY root)
-    {
-        // Keep the ownership read and deletion in one registry transaction.
-        TransactionHandle transaction;
-        if (transaction.get() == INVALID_HANDLE_VALUE)
-            return HRESULT_FROM_WIN32(GetLastError());
-
-        RegistryKey key;
-        LONG status = RegOpenKeyTransactedW(root, OverlayKey, 0,
-            KEY_QUERY_VALUE, key.put(), transaction.get(), nullptr);
-        if (status == ERROR_FILE_NOT_FOUND)
-            return S_OK;
-        if (status != ERROR_SUCCESS)
-            return HRESULT_FROM_WIN32(status);
-
-        std::array<WCHAR, 64> registeredClsid = {};
-        status = ReadRegisteredClsid(key.get(), registeredClsid);
-
-        // An absent, different, or unrecognizable value is not ours.
-        if (status == ERROR_FILE_NOT_FOUND ||
-            status == ERROR_MORE_DATA ||
-            status == ERROR_UNSUPPORTED_TYPE ||
-            (status == ERROR_SUCCESS &&
-             _wcsicmp(registeredClsid.data(), OverlayClsid) != 0))
-            return S_OK;
-
-        if (status != ERROR_SUCCESS)
-            return HRESULT_FROM_WIN32(status);
-
-        key.Close(); // Preserve the original close-before-delete sequence.
-        status = RegDeleteKeyTransactedW(root, OverlayKey, 0, 0,
-            transaction.get(), nullptr);
-        // Another remover may already have deleted the key.
-        // Do not mask transactional conflicts or commit failures.
-        if (status == ERROR_FILE_NOT_FOUND)
-            return S_OK;
-        if (status == ERROR_SUCCESS && !CommitTransaction(transaction.get()))
-            status = GetLastError();
-        return HRESULT_FROM_WIN32(status);
-    }
-
-    HRESULT InstallOverlayRegistration(HKEY root)
-    {
-        // Ownership validation and the write share one transaction.
-        TransactionHandle transaction;
-        if (transaction.get() == INVALID_HANDLE_VALUE)
-            return HRESULT_FROM_WIN32(GetLastError());
-
-        RegistryKey key;
-        DWORD disposition = 0;
-        LONG status = RegCreateKeyTransactedW(root, OverlayKey, 0, nullptr,
-            REG_OPTION_NON_VOLATILE, KEY_QUERY_VALUE | KEY_SET_VALUE,
-            nullptr, key.put(), &disposition, transaction.get(), nullptr);
-        if (status != ERROR_SUCCESS)
-            return HRESULT_FROM_WIN32(status);
-
-        std::array<WCHAR, 64> registeredClsid = {};
-        const LONG readStatus = ReadRegisteredClsid(key.get(), registeredClsid);
-        if (!CanReplaceOverlayRegistration(readStatus, registeredClsid.data(),
-                                            OverlayClsid, disposition))
-        {
-            // An uncommitted transaction rolls back newly created keys.
-            return HRESULT_FROM_WIN32(readStatus == ERROR_SUCCESS ||
-                readStatus == ERROR_FILE_NOT_FOUND
-                ? ERROR_ALREADY_EXISTS : readStatus);
-        }
-
-        status = RegSetValueExW(key.get(), nullptr, 0, REG_SZ,
-            reinterpret_cast<const BYTE*>(OverlayClsid), sizeof(OverlayClsid));
-        key.Close(); // Preserve the original close-before-commit sequence.
-        if (status == ERROR_SUCCESS && !CommitTransaction(transaction.get()))
-            status = GetLastError();
-        return HRESULT_FROM_WIN32(status);
-    }
-
-    // Preserve existing registrations on a failed re-registration. ATL
-    // registration spans multiple keys and is not itself transactional.
-    bool ComRegistrationExists()
-    {
-        const auto root = HKEY_LOCAL_MACHINE;
-        constexpr std::array<LPCWSTR, 2> classKeys = {
-            L"Software\\Classes\\CLSID\\{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}",
-            L"Software\\Classes\\CLSID\\{4A26024B-5499-45BE-A23F-4A65E88888D0}"
-        };
-        return HasExistingComClassRegistration(root, classKeys);
-    }
-
-    HRESULT UpdateOverlayRegistration(bool install)
-    {
-        return install ? InstallOverlayRegistration(HKEY_LOCAL_MACHINE) :
-                         RemoveOverlayRegistration(HKEY_LOCAL_MACHINE);
-    }
-
-}
 
 // Boilerplate guff
 
@@ -182,59 +29,23 @@ STDAPI DllGetClassObject(_In_ REFCLSID rclsid, _In_ REFIID riid, _Outptr_ LPVOID
     return _AtlModule.DllGetClassObject(rclsid, riid, ppv);
 }
 
-// DllRegisterServer - Adds entries to the system registry
+// ATL registry scripts own the COM classes and machine-wide overlay key.
 STDAPI DllRegisterServer(void)
 {
-    AtlSetPerUserRegistration(false);
-    // Do not unregister pre-existing COM classes when re-registration fails.
-    const bool existingRegistration = ComRegistrationExists();
-
-    HRESULT hr = _AtlModule.DllRegisterServer();
-    if (FAILED(hr))
-        return hr;
-
+    auto hr = _AtlModule.DllRegisterServer();
 #ifdef _MERGE_PROXYSTUB
-    hr = PrxDllRegisterServer();
-    if (FAILED(hr))
-    {
-        // Only a fresh ATL registration may be undone safely here.
-        if (ShouldRollbackComRegistration(existingRegistration))
-            _AtlModule.DllUnregisterServer();
-        return hr;
-    }
+    if (SUCCEEDED(hr))
+        hr = PrxDllRegisterServer();
 #endif
-
-    hr = UpdateOverlayRegistration(true);
-    if (FAILED(hr) && ShouldRollbackComRegistration(existingRegistration))
-    {
-        // A foreign overlay is left untouched. Undo only new COM classes.
-#ifdef _MERGE_PROXYSTUB
-        PrxDllUnregisterServer();
-#endif
-        _AtlModule.DllUnregisterServer();
-    }
     return hr;
 }
 
-// DllUnregisterServer - Removes entries from the system registry
 STDAPI DllUnregisterServer(void)
 {
-    AtlSetPerUserRegistration(false);
-    const HRESULT overlayResult = UpdateOverlayRegistration(false);
-    HRESULT hr = _AtlModule.DllUnregisterServer();
+    auto hr = _AtlModule.DllUnregisterServer();
 #ifdef _MERGE_PROXYSTUB
     if (SUCCEEDED(hr))
         hr = PrxDllUnregisterServer();
 #endif
-    return FAILED(hr) ? hr : overlayResult;
-}
-
-// Only machine-wide registration is supported; all non-empty install arguments are rejected.
-STDAPI DllInstall(BOOL bInstall, _In_opt_ LPCWSTR pszCmdLine)
-{
-    if (pszCmdLine != nullptr && *pszCmdLine != L'\0')
-        return E_INVALIDARG;
-
-    AtlSetPerUserRegistration(false);
-    return bInstall ? DllRegisterServer() : DllUnregisterServer();
+    return hr;
 }
