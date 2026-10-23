@@ -9,6 +9,7 @@
 #include <string>
 #include <stdexcept>
 #include <vector>
+#include <utility>
 #include <ShlObj.h>
 #include <wrl/client.h>
 
@@ -371,7 +372,7 @@ namespace AlternateStreamTests
             };
             const auto snapshot = [&paths]()
             {
-                std::array<std::pair<LONG, std::vector<BYTE>>, paths.size()> state;
+                std::array<std::pair<LONG, std::vector<BYTE>>, 3> state;
                 for (size_t i = 0; i < paths.size(); ++i)
                 {
                     HKEY key = nullptr;
