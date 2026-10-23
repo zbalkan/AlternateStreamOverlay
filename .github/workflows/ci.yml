@@ -143,6 +143,43 @@ jobs:
           & .\src\tests\Smoke-AlternateStreams.ps1 -ExePath $exe
           if (-not $?) { throw 'ADS smoke tests failed' }
 
+
+  benchmark-path-policy:
+    name: Path policy baseline (temporary)
+    runs-on: windows-2025
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Build and run native path-policy benchmark
+        shell: cmd
+        run: |
+          for /f "usebackq delims=" %%V in (`"%ProgramFiles(x86)%\\Microsoft Visual Studio\\Installer\\vswhere.exe" -latest -products * -property installationPath`) do set "VSPATH=%%V"
+          if not defined VSPATH exit /b 1
+          call "%VSPATH%\\Common7\\Tools\\VsDevCmd.bat" -arch=x64 -host_arch=x64
+          if errorlevel 1 exit /b 1
+          cl /nologo /EHsc /std:c++14 /O2 /W4 /WX /Fe:benchmark-policy.exe src\\tests\\Benchmark-LocalPathPolicy.cpp
+          if errorlevel 1 exit /b 1
+          benchmark-policy.exe > path-policy-baseline.csv
+          if errorlevel 1 exit /b 1
+          type path-policy-baseline.csv
+
+      - name: Publish benchmark summary
+        shell: pwsh
+        run: |
+          $data = Import-Csv -LiteralPath 'path-policy-baseline.csv'
+          $lines = @('### Path policy baseline (temporary)', '', 'Windows hosted runner; timing is indicative, not a performance SLA.', '', '| Configuration | Files | Calls | Accepted | p50 (µs) | p95 (µs) | p99 (µs) | Max (µs) |', '|---|---:|---:|---:|---:|---:|---:|---:|')
+          foreach ($row in $data) {
+            $lines += "| $($row.configuration) | $($row.files) | $($row.calls) | $($row.accepted) | $($row.p50_us) | $($row.p95_us) | $($row.p99_us) | $($row.max_us) |"
+          }
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ($lines -join "`n")
+
+      - name: Upload benchmark data
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607f # v4
+        with:
+          name: path-policy-baseline
+          path: path-policy-baseline.csv
+
   cppcheck:
     name: Cppcheck (Linux)
     runs-on: ubuntu-24.04
