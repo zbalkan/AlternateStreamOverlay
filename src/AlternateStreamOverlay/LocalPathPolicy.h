@@ -71,7 +71,7 @@ inline bool CanEnumerateExplorerPath(const std::wstring& path)
         driveType == DRIVE_NO_ROOT_DIR)
         return false;
 
-#ifndef ASO_BENCHMARK_NO_CACHE
+#if !defined(ASO_BENCHMARK_NO_CACHE) && !defined(ASO_BENCHMARK_NO_SUBST)
     // Reject SUBST/alias drive mappings, which may lead outside the local
     // volume even though their drive type is reported as local.
     const std::wstring drive = { letter, L':' };
