@@ -65,6 +65,8 @@ regsvr32.exe /u .\src\AlternateStreamOverlay\x64\Release\AlternateStreamOverlay.
 
 Unregister the extension before deleting its DLL. The examples assume a Release build and commands executed from the repository root.
 
+**Migration from earlier per-user installations:** Machine-wide unregistration does not remove legacy HKCU registration entries. Before treating an upgrade or uninstall as complete, inspect `HKCU\\Software\\Classes\\CLSID\\{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}` (overlay COM class), `HKCU\\Software\\Classes\\CLSID\\{4A26024B-5499-45BE-A23F-4A65E88888D0}` (context COM class), and `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ShellIconOverlayIdentifiers\\AlternateStreamOverlayIcon` (overlay identifier) for each account that previously installed the extension. The legacy per-user installer also wrote shell-handler entries under `HKCU\\Software\\Classes\\*\\ShellEx` and `HKCU\\Software\\Classes\\Directory\\ShellEx`. Remove only entries confirmed to belong to this extension; do not delete shared parent keys or unrelated handlers.
+
 ## Testing and diagnostics
 
 The repository includes automated smoke tests and read-only registration diagnostics.
