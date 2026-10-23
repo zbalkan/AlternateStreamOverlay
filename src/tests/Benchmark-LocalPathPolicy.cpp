@@ -30,7 +30,12 @@ int wmain()
             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
             nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (handle == INVALID_HANDLE_VALUE)
+        {
+            for (const auto& created : files)
+                DeleteFileW(created.c_str());
+            RemoveDirectoryW(root.c_str());
             return 2;
+        }
         CloseHandle(handle);
         files.emplace_back(file);
     }
@@ -61,7 +66,7 @@ int wmain()
     };
     std::printf("configuration,files,passes,calls,accepted,p50_us,p95_us,p99_us,max_us\n");
     std::printf("baseline,10000,%d,%zu,%d,%.3f,%.3f,%.3f,%.3f\n",
-        Samples, durations.size(), accepted, percentile(0.50),
+        FileCount, Samples, durations.size(), accepted, percentile(0.50),
         percentile(0.95), percentile(0.99), durations.back());
 
     for (const auto& file : files)
