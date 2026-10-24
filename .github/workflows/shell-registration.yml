@@ -122,10 +122,14 @@ jobs:
               try {
                 foreach ($key in $keys) { $key.SetValue('ThreadingModel', 'Both') }
                 & pwsh -NoProfile -File ./src/tests/Test-ComApartmentActivation.ps1 -ExpectedRegistration Both
-                if ($LASTEXITCODE -ne 0) { throw 'Both activation probe failed' }
+                $bothExitCode = $LASTEXITCODE
                 foreach ($key in $keys) { $key.SetValue('ThreadingModel', 'Apartment') }
                 & pwsh -NoProfile -File ./src/tests/Test-ComApartmentActivation.ps1 -ExpectedRegistration Apartment
-                if ($LASTEXITCODE -ne 0) { throw 'Apartment activation probe failed' }
+                $apartmentExitCode = $LASTEXITCODE
+                Write-Host "Activation probe exit codes: Both=$bothExitCode, Apartment=$apartmentExitCode"
+                if ($bothExitCode -ne 0 -or $apartmentExitCode -ne 0) {
+                  throw "Activation comparison failed: Both=$bothExitCode, Apartment=$apartmentExitCode"
+                }
               }
               finally {
                 foreach ($key in $keys) {
