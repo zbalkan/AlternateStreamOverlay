@@ -20,7 +20,6 @@ private:
     mutable SRWLOCK m_selectionLock = SRWLOCK_INIT;
     std::wstring m_path;
     bool m_enumerationIncomplete = false;
-    bool m_hasUnpreviewableNames = false;
     std::vector<std::wstring> m_streams;
 public:
     CAlternateStreamContext() = default;
@@ -46,8 +45,7 @@ public:
 public:
     // Native
     void SnapshotSelection(std::wstring& path,
-        std::vector<std::wstring>& streams, bool& incomplete,
-        bool& hasUnpreviewableNames) const;
+        std::vector<std::wstring>& streams, bool& incomplete) const;
     // IShellExtInit
     STDMETHODIMP Initialize(LPCITEMIDLIST pidlFolder, IDataObject* pdtobj, HKEY hkeyProgId);
     // IShellPropSheetExt
