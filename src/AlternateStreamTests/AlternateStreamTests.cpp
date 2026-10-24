@@ -283,8 +283,7 @@ namespace
         }
 
         auto* sheet = reinterpret_cast<HWND>(result);
-        auto* current = reinterpret_cast<HWND>(
-            SendMessageW(sheet, PSM_GETCURRENTPAGEHWND, 0, 0));
+        auto* current = PropSheet_GetCurrentPageHwnd(sheet);
         const HWND combo = current == nullptr ? nullptr : GetDlgItem(current, IDC_COMBO1);
         const int count = combo == nullptr ? -1 :
             static_cast<int>(SendMessageW(combo, CB_GETCOUNT, 0, 0));
