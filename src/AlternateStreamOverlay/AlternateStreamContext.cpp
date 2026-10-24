@@ -534,6 +534,11 @@ void SelectTextImpl(DialogState* state, size_t idx, bool asHex, HWND textBox)
     {
         // No completion notification can be delivered without registration.
         SetPreviewText(textBox, state->enumerationIncomplete,
+            state->hasUnpreviewableNames,
+            L"Unable to start alternate stream preview.");
+        return;
+    }
+    SetPreviewText(textBox, state->enumerationIncomplete,
             state->hasUnpreviewableNames, L"Loading alternate stream...");
     bool started = false;
     {
