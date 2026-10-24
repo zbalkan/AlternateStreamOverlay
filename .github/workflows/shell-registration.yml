@@ -121,9 +121,11 @@ jobs:
               }
               try {
                 foreach ($key in $keys) { $key.SetValue('ThreadingModel', 'Both') }
-                & ./src/tests/Test-ComApartmentActivation.ps1 -ExpectedRegistration Both
+                & pwsh -NoProfile -File ./src/tests/Test-ComApartmentActivation.ps1 -ExpectedRegistration Both
+                if ($LASTEXITCODE -ne 0) { throw 'Both activation probe failed' }
                 foreach ($key in $keys) { $key.SetValue('ThreadingModel', 'Apartment') }
-                & ./src/tests/Test-ComApartmentActivation.ps1 -ExpectedRegistration Apartment
+                & pwsh -NoProfile -File ./src/tests/Test-ComApartmentActivation.ps1 -ExpectedRegistration Apartment
+                if ($LASTEXITCODE -ne 0) { throw 'Apartment activation probe failed' }
               }
               finally {
                 foreach ($key in $keys) {
