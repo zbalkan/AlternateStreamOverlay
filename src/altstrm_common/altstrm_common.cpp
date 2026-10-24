@@ -268,35 +268,47 @@ std::wstring FormatPreviewDisplayText(bool incomplete, LPCWSTR message)
 }
 
 std::wstring EscapeStreamDisplay(const std::wstring& name)
+{
+    constexpr wchar_t hex[] = L"0123456789ABCDEF";
+    std::wstring output;
+    for (size_t i = 0; i < name.size(); ++i)
     {
-        constexpr wchar_t hex[] = L"0123456789ABCDEF";
-        std::wstring output;
-        for (wchar_t ch : name)
+        const WCHAR ch = name[i];
+        const unsigned int value = static_cast<unsigned int>(ch);
+        // A well-formed surrogate pair is valid Unicode and is safe to display.
+        if (value >= 0xD800 && value <= 0xDBFF && i + 1 < name.size())
         {
-            const auto value = static_cast<unsigned int>(ch);
-            const bool unsafe = value < 0x20 || (value >= 0x7F && value <= 0x9F) ||
-                value == 0x061C || value == 0x200E || value == 0x200F ||
-                (value >= 0x202A && value <= 0x202E) ||
-                (value >= 0x2066 && value <= 0x2069) ||
-                (value >= 0xD800 && value <= 0xDFFF);
-            if (ch == L'\\')
-            {
-                output += LR"(\\)";
-                continue;
-            }
-            if (!unsafe)
+            const unsigned int next = static_cast<unsigned int>(name[i + 1]);
+            if (next >= 0xDC00 && next <= 0xDFFF)
             {
                 output += ch;
+                output += name[++i];
                 continue;
             }
-            output += L"\\u";
-            output += hex[(value >> 12) & 15];
-            output += hex[(value >> 8) & 15];
-            output += hex[(value >> 4) & 15];
-            output += hex[value & 15];
         }
-        return output;
+        const bool unsafe = value < 0x20 || (value >= 0x7F && value <= 0x9F) ||
+            value == 0x061C || value == 0x200E || value == 0x200F ||
+            (value >= 0x202A && value <= 0x202E) ||
+            (value >= 0x2066 && value <= 0x2069) ||
+            (value >= 0xD800 && value <= 0xDFFF);
+        if (ch == L'\\')
+        {
+            output += LR"(\\)";
+            continue;
+        }
+        if (!unsafe)
+        {
+            output += ch;
+            continue;
+        }
+        output += L"\\u";
+        output += hex[(value >> 12) & 15];
+        output += hex[(value >> 8) & 15];
+        output += hex[(value >> 4) & 15];
+        output += hex[value & 15];
     }
+    return output;
+}
 
 std::wstring FormatStreamInventoryLabel(const std::wstring& name)
 {
