@@ -1,10 +1,11 @@
-#requires -Version 5.1
+#requires -Version 7.4
 <#
 .SYNOPSIS
     Compare registry-driven COM activation from STA and MTA threads.
 .DESCRIPTION
     This probes CoCreateInstance and QueryInterface through the registered
     in-process COM server, not DllGetClassObject. It does not simulate Explorer.
+    Requires PowerShell 7.4+ (.NET) for Marshal.QueryInterface(in Guid).
 #>
 [CmdletBinding()]
 param(
