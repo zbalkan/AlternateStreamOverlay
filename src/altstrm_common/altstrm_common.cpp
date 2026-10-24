@@ -275,14 +275,34 @@ std::wstring EscapeStreamDisplay(const std::wstring& name)
     {
         const auto ch = name[i];
         const auto value = static_cast<unsigned int>(ch);
-        // A well-formed surrogate pair is valid Unicode and is safe to display.
+        // Classify the decoded scalar, not just its surrogate code units.
         if (value >= 0xD800 && value <= 0xDBFF && i + 1 < name.size())
         {
             const auto next = static_cast<unsigned int>(name[i + 1]);
             if (next >= 0xDC00 && next <= 0xDFFF)
             {
-                output += ch;
-                output += name[++i];
+                const auto scalar = 0x10000U +
+                    ((value - 0xD800U) << 10) + (next - 0xDC00U);
+                // Invisible supplementary format controls and variation
+                // selectors must not make distinct names look identical.
+                const bool unsafeScalar =
+                    scalar == 0x110BD || scalar == 0x110CD ||
+                    (scalar >= 0x1BCA0 && scalar <= 0x1BCA3) ||
+                    (scalar >= 0x1D173 && scalar <= 0x1D17A) ||
+                    (scalar >= 0xE0000 && scalar <= 0xE007F) ||
+                    (scalar >= 0xE0100 && scalar <= 0xE01EF);
+                if (unsafeScalar)
+                {
+                    output += L"\\U";
+                    for (int shift = 28; shift >= 0; shift -= 4)
+                        output += hex[(scalar >> shift) & 15];
+                }
+                else
+                {
+                    output += ch;
+                    output += name[i + 1];
+                }
+                ++i;
                 continue;
             }
         }
