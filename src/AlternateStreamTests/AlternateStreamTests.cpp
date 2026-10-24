@@ -561,13 +561,25 @@ namespace AlternateStreamTests
                 FormatStreamInventoryLabel(L":safe:$DATA").c_str());
         }
 
+        TEST_METHOD(ValidSurrogatePairsRemainReadable)
+        {
+            const std::wstring name = L":emoji-\\xD83E\\xDD26:$DATA";
+            Assert::AreEqual(name.c_str(), EscapeStreamDisplay(name).c_str());
+
+            std::wstring orphan = L":";
+            orphan += static_cast<WCHAR>(0xD83E);
+            orphan += L":$DATA";
+            Assert::IsTrue(EscapeStreamDisplay(orphan).find(L"\\\\uD83E") !=
+                std::wstring::npos);
+        }
+
         TEST_METHOD(UnicodeEscapingIsUnambiguous)
         {
             std::wstring name = L":a\\\\b";
             name += static_cast<WCHAR>(0x202E);
             name += L":$DATA";
             const auto label = FormatStreamInventoryLabel(name);
-            Assert::IsTrue(label.find(L"\\\\") != std::wstring::npos);
+            Assert::IsTrue(label.find(LR"(\\\\)") != std::wstring::npos);
             Assert::IsTrue(label.find(L"\\u202E") != std::wstring::npos);
             Assert::IsTrue(label.find(L"Preview unavailable") != std::wstring::npos);
         }
