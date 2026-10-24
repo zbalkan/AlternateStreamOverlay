@@ -298,14 +298,9 @@ void CAlternateStreamContext::SnapshotSelection(
 
 namespace
 {
-// Registered to avoid collisions with other dialog-specific application messages.
-// The message is a notification only; no message parameter owns memory.
-UINT PreviewMessageId()
-{
-    static const UINT id = RegisterWindowMessageW(
-        L"AlternateStreamOverlay.PreviewReady.{9AC93D79-3D54-461E-A4E7-D855D24C24E3}");
-    return id;
-}
+// The completion notification is private to this property-page dialog.
+// Result ownership stays in PreviewGate, never in message parameters.
+constexpr UINT WM_PREVIEW_READY = WM_APP + 1;
 
 struct PreviewResult
 {
@@ -385,9 +380,8 @@ void PostPreviewFailure(PreviewGate& gate, size_t generation)
     gate.pending.reset();
     gate.failedGeneration = generation;
     gate.pendingFailure = true;
-    const UINT messageId = PreviewMessageId();
-    if (messageId == 0 || !PostMessageW(gate.window, messageId,
-                                        static_cast<WPARAM>(generation), 0))
+    if (!PostMessageW(gate.window, WM_PREVIEW_READY,
+                      static_cast<WPARAM>(generation), 0))
         gate.pendingFailure = false;
 }
 
@@ -408,9 +402,7 @@ void PublishPreviewResult(PreviewGate& gate, std::unique_ptr<PreviewResult>& res
 {
     gate.pending.swap(result);
     gate.pendingFailure = false;
-    const auto messageId = PreviewMessageId();
-    if (messageId == 0 ||
-        !PostMessageW(gate.window, messageId,
+    if (!PostMessageW(gate.window, WM_PREVIEW_READY,
                       static_cast<WPARAM>(gate.pending->generation), 0))
         gate.pending.reset();
 }
@@ -530,14 +522,6 @@ void SelectTextImpl(DialogState* state, size_t idx, bool asHex, HWND textBox)
     // Construct before changing the generation: allocation failure must not
     // make an existing worker's previous path appear to be a new selection.
     std::wstring path = state->path + streams[idx];
-    if (PreviewMessageId() == 0)
-    {
-        // No completion notification can be delivered without registration.
-        SetPreviewText(textBox, state->enumerationIncomplete,
-            state->hasUnpreviewableNames,
-            L"Unable to start alternate stream preview.");
-        return;
-    }
     SetPreviewText(textBox, state->enumerationIncomplete,
             state->hasUnpreviewableNames, L"Loading alternate stream...");
     bool started = false;
@@ -741,24 +725,12 @@ void OnPreviewReady(HWND hWnd, WPARAM wParam)
     }
 }
 
-void CloseGateAndDrain(HWND hWnd, DialogState& state)
+void CloseGate(DialogState& state)
 {
-    {
-        ExclusiveSrwLock lock(state.gate->lock);
-        state.gate->alive = false;
-        state.gate->pending.reset();
-        state.gate->pendingFailure = false;
-    }
-
-    // Queued notifications carry no ownership; removing them is optional for
-    // memory safety, but avoids needless messages during dialog destruction.
-    MSG pending = {};
-    const UINT messageId = PreviewMessageId();
-    while (messageId != 0 && PeekMessageW(&pending, hWnd, messageId,
-                                         messageId, PM_REMOVE))
-    {
-        // PM_REMOVE discards each notification; no payload needs cleanup.
-    }
+    ExclusiveSrwLock lock(state.gate->lock);
+    state.gate->alive = false;
+    state.gate->pending.reset();
+    state.gate->pendingFailure = false;
 }
 
 void ReleaseEditFont(HWND hWnd)
@@ -785,7 +757,7 @@ void OnDestroy(HWND hWnd)
         GetWindowLongPtr(hWnd, GWLP_USERDATA)));
     SetWindowLongPtr(hWnd, GWLP_USERDATA, 0);
     if (state != nullptr)
-        CloseGateAndDrain(hWnd, *state);
+        CloseGate(*state);
 
     ReleaseEditFont(hWnd);
 }
@@ -820,8 +792,7 @@ INT_PTR OnCommand(HWND hWnd, WPARAM wParam)
 
 INT_PTR CALLBACK PropPageDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    const UINT previewMessage = PreviewMessageId();
-    if (previewMessage != 0 && uMsg == previewMessage)
+    if (uMsg == WM_PREVIEW_READY)
     {
         OnPreviewReady(hWnd, wParam);
         return TRUE;
