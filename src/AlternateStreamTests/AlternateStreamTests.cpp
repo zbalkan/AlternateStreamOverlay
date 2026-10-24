@@ -551,6 +551,7 @@ namespace AlternateStreamTests
             raw += static_cast<WCHAR>(1);
             raw += L"b:$DATA";
             const auto label = FormatStreamInventoryLabel(raw);
+            Logger::WriteMessage(label.c_str());
             Assert::IsTrue(label.find(L"\\\\u0001") != std::wstring::npos);
             Assert::IsTrue(label.find(L"Preview unavailable") != std::wstring::npos,
                 label.c_str());
@@ -567,6 +568,7 @@ namespace AlternateStreamTests
             name += static_cast<WCHAR>(0x202E);
             name += L":$DATA";
             const auto label = FormatStreamInventoryLabel(name);
+            Logger::WriteMessage(label.c_str());
             Assert::IsTrue(label.find(L"\\\\\\\\") != std::wstring::npos);
             Assert::IsTrue(label.find(L"\\\\u202E") != std::wstring::npos);
             Assert::IsTrue(label.find(L"Preview unavailable") != std::wstring::npos);
