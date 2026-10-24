@@ -8,13 +8,12 @@
 #include "SrwLock.h"
 #include <Windows.h>
 
-/* Responsible for context menu item, and property tab */
+/* Responsible for the Explorer property tab */
 
 class ATL_NO_VTABLE __declspec(uuid("4A26024B-5499-45BE-A23F-4A65E88888D0")) CAlternateStreamContext :
     public CComObjectRootEx<CComMultiThreadModel>,
     public CComCoClass<CAlternateStreamContext, &__uuidof(CAlternateStreamContext)>,
     public IShellExtInit,
-    public IContextMenu,
     public IShellPropSheetExt
 {
 private:
@@ -34,7 +33,6 @@ public:
 
     BEGIN_COM_MAP(CAlternateStreamContext)
         COM_INTERFACE_ENTRY(IShellExtInit)
-        COM_INTERFACE_ENTRY(IContextMenu)
         COM_INTERFACE_ENTRY(IShellPropSheetExt)
     END_COM_MAP()
 
@@ -52,21 +50,6 @@ public:
         bool& hasUnpreviewableNames) const;
     // IShellExtInit
     STDMETHODIMP Initialize(LPCITEMIDLIST pidlFolder, IDataObject* pdtobj, HKEY hkeyProgId);
-    // IContextMenu
-    STDMETHODIMP QueryContextMenu(
-        HMENU hmenu,
-        UINT indexMenu,
-        UINT idCmdFirst,
-        UINT idCmdLast,
-        UINT uFlags);
-    STDMETHODIMP InvokeCommand(
-        CMINVOKECOMMANDINFO* pici);
-    STDMETHODIMP GetCommandString(
-        UINT_PTR idCmd,
-        UINT uType,
-        UINT* pReserved,
-        LPSTR pszName,
-        UINT cchMax);
     // IShellPropSheetExt
     STDMETHODIMP AddPages(
         LPFNSVADDPROPSHEETPAGE pfnAddPage,

@@ -15,7 +15,6 @@ This project is a maintained fork of Lee Benfield's original [AlternateStreamOve
 
 - **Icon overlay:** Identifies files containing alternate data streams in Windows Explorer.
 - **Property page:** Displays alternate data streams associated with a file.
-- **Context-menu integration:** Provides access to the extension through Explorer.
 - **Machine-wide installation:** Requires administrator privileges to register Explorer and COM components.
 - **Native Windows integration:** Uses the documented `GetFileInformationByHandleEx(FileStreamInfo)` API to enumerate streams.
 - **Registration diagnostics:** Includes read-only scripts for inspecting shell handler and overlay registration.
@@ -83,15 +82,15 @@ Build the solution and run:
 
 The main CI workflow builds both supported configurations and runs the ADS smoke tests.
 
-### Shell handler registration
+### Property-sheet handler registration
 
-Inspect effective context-menu and property-sheet registrations:
+Verify that property-sheet handlers are registered and context-menu entries are absent:
 
 ```powershell
 .\src\tests\Test-ShellHandlerRegistration.ps1
 ```
 
-The script checks registrations for files and directories, including the associated COM server path and threading model.
+The script checks property-sheet registrations for files and directories, confirms that the extension's legacy context-menu keys are absent, and validates the associated COM server path and threading model.
 
 ### Explorer overlay registration
 
