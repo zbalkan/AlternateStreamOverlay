@@ -10,7 +10,7 @@ Historical entries from Lee Benfield's original project are preserved verbatim b
 
 ### Added
 
-- Explorer's **Alternate Streams...** command provides access to the Alternate Streams tab in the file's Properties dialog for files that contain named alternate data streams.
+- Explorer's **Alternate Streams** property tab lists named alternate data streams for files and directories.
 - Users can inspect named alternate stream contents as text or hexadecimal previews, with an indication when a preview is truncated.
 - Files with alternate streams can be identified using an Explorer icon overlay, subject to Windows overlay-handler limits.
 - Machine-wide installation and uninstallation through elevated COM registration.
@@ -19,16 +19,16 @@ Historical entries from Lee Benfield's original project are preserved verbatim b
 
 ### Changed
 
-- The Explorer context-menu action now requests the Alternate Streams tab in the file's Properties dialog rather than opening a separate stream-content window; some Explorer versions may fall back to the default Properties tab.
 - The standard unnamed file data stream (`::$DATA`) is no longer shown as an alternate stream in Explorer or command-line results.
 - Stream previews load asynchronously so Explorer remains responsive during slower reads; previews are limited to approximately 64 KiB.
 - Stream listings and previews provide clearer feedback when enumeration is incomplete or a stream cannot be read.
-- Improved text and hexadecimal display, including UTF-8 decoding and escaping potentially confusing characters in command-line output.
+- Improved text and hexadecimal display, including UTF-8 decoding and escaping potentially confusing stream names in Explorer and command-line output.
 - Improved handling of directories, long and Unicode paths, drive-relative paths, and volume roots.
 - Updated the Explorer icon artwork.
 
 ### Removed
 
+- The legacy Explorer context-menu handler and its command; use the **Alternate Streams** property tab instead.
 - Compatibility with operating systems older than Windows 10 and Windows Server 2016.
 - 32-bit (x86) binaries. Only 64-bit Windows builds are provided.
 - Legacy Windows XP-era alternate stream enumeration behavior.
