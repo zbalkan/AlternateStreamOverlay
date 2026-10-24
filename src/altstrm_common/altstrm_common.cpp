@@ -273,12 +273,12 @@ std::wstring EscapeStreamDisplay(const std::wstring& name)
     std::wstring output;
     for (size_t i = 0; i < name.size(); ++i)
     {
-        const WCHAR ch = name[i];
-        const unsigned int value = static_cast<unsigned int>(ch);
+        const auto ch = name[i];
+        const auto value = static_cast<unsigned int>(ch);
         // A well-formed surrogate pair is valid Unicode and is safe to display.
         if (value >= 0xD800 && value <= 0xDBFF && i + 1 < name.size())
         {
-            const unsigned int next = static_cast<unsigned int>(name[i + 1]);
+            const auto next = static_cast<unsigned int>(name[i + 1]);
             if (next >= 0xDC00 && next <= 0xDFFF)
             {
                 output += ch;
