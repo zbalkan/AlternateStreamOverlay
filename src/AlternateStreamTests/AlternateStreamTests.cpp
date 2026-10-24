@@ -563,13 +563,16 @@ namespace AlternateStreamTests
 
         TEST_METHOD(ValidSurrogatePairsRemainReadable)
         {
-            const std::wstring name = L":emoji-\\xD83E\\xDD26:$DATA";
+            std::wstring name = L":emoji-";
+            name += static_cast<WCHAR>(0xD83E);
+            name += static_cast<WCHAR>(0xDD26);
+            name += L":$DATA";
             Assert::AreEqual(name.c_str(), EscapeStreamDisplay(name).c_str());
 
             std::wstring orphan = L":";
             orphan += static_cast<WCHAR>(0xD83E);
             orphan += L":$DATA";
-            Assert::IsTrue(EscapeStreamDisplay(orphan).find(L"\\\\uD83E") !=
+            Assert::IsTrue(EscapeStreamDisplay(orphan).find(L"\\uD83E") !=
                 std::wstring::npos);
         }
 
