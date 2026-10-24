@@ -83,7 +83,6 @@
     </Midl>
     <ClCompile>
       <LanguageStandard>stdcpp14</LanguageStandard>
-      
       <SDLCheck>true</SDLCheck>
       <AdditionalOptions>/utf-8 /guard:cf %(AdditionalOptions)</AdditionalOptions>
       <Optimization>MaxSpeed</Optimization>
