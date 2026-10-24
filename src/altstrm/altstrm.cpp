@@ -68,41 +68,10 @@ namespace
 
     // Escape UTF-16 code units that cannot be represented unambiguously
     // in terminal output. Keep native stream names unchanged for I/O.
-    std::wstring EscapeDisplay(const std::wstring& name)
-    {
-        constexpr wchar_t hex[] = L"0123456789ABCDEF";
-        std::wstring output;
-        for (wchar_t ch : name)
-        {
-            const auto value = static_cast<unsigned int>(ch);
-            const bool unsafe = value < 0x20 || (value >= 0x7F && value <= 0x9F) ||
-                value == 0x061C || value == 0x200E || value == 0x200F ||
-                (value >= 0x202A && value <= 0x202E) ||
-                (value >= 0x2066 && value <= 0x2069) ||
-                (value >= 0xD800 && value <= 0xDFFF);
-            if (ch == L'\\')
-            {
-                output += LR"(\\)";
-                continue;
-            }
-            if (!unsafe)
-            {
-                output += ch;
-                continue;
-            }
-            output += L"\\u";
-            output += hex[(value >> 12) & 15];
-            output += hex[(value >> 8) & 15];
-            output += hex[(value >> 4) & 15];
-            output += hex[value & 15];
-        }
-        return output;
-    }
-
     void PrintUsage(int argc, wchar_t* argv[])
     {
         const std::wstring program = argc > 0 ? argv[0] : L"altstrm";
-        WriteOutput(EscapeDisplay(program) + L" [file path/spec]\r\n");
+        WriteOutput(EscapeStreamDisplay(program) + L" [file path/spec]\r\n");
     }
 
     std::wstring SearchDirectory(const std::wstring& pattern)
@@ -150,7 +119,7 @@ namespace
             const std::wstring reason = enumeration.status == StreamStatus::Truncated
                 ? L"Incomplete stream enumeration"
                 : L"Stream enumeration failed";
-            WriteError(reason + L" for " + EscapeDisplay(fullPath) + L" (Win32 error " +
+            WriteError(reason + L" for " + EscapeStreamDisplay(fullPath) + L" (Win32 error " +
                 std::to_wstring(enumeration.error) + L")\r\n");
             return false;
         }
@@ -161,9 +130,9 @@ namespace
         if (names.empty())
             return true;
 
-        std::wstring result = EscapeDisplay(fullPath) + L"\r\n";
+        std::wstring result = EscapeStreamDisplay(fullPath) + L"\r\n";
         for (const auto& name : names)
-            result += L" " + EscapeDisplay(name) + L"\r\n";
+            result += L" " + EscapeStreamDisplay(name) + L"\r\n";
         return WriteOutput(result);
     }
 
@@ -205,7 +174,7 @@ int Run(int argc, wchar_t* argv[])
     // Exact directory arguments enumerate their own streams, not children.
     const std::wstring pattern(argv[1]);
     const std::wstring directory = SearchDirectory(pattern);
-    if (!WriteOutput(L"Files with alternate streams matching " + EscapeDisplay(pattern) + L"\r\n"))
+    if (!WriteOutput(L"Files with alternate streams matching " + EscapeStreamDisplay(pattern) + L"\r\n"))
         return 1;
 
     AlternateStreamReader reader;
