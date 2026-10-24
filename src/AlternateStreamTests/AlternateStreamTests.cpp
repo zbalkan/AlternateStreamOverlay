@@ -2,6 +2,8 @@
 #include "altstrm_common.h"
 #include "stream_info_detail.h"
 #include "../AlternateStreamOverlay/LocalPathPolicy.h"
+#include "../AlternateStreamOverlay/resource.h"
+#include <Prsht.h>
 #include <algorithm>
 #include <cstddef>
 #include <limits>
@@ -257,6 +259,38 @@ namespace
     {
         return FALSE;
     }
+
+    // Verify the retained property-page inventory without relying on IContextMenu.
+    void AssertPropertyPageStreamCount(IShellPropSheetExt* extension, int expected)
+    {
+        HPROPSHEETPAGE page = nullptr;
+        Assert::AreEqual(static_cast<HRESULT>(S_OK),
+            extension->AddPages(CapturePropertyPage, reinterpret_cast<LPARAM>(&page)));
+        Assert::IsTrue(page != nullptr);
+
+        PROPSHEETHEADERW header = {};
+        header.dwSize = sizeof(header);
+        header.dwFlags = PSH_MODELESS | PSH_NOAPPLYNOW;
+        header.pszCaption = L"Alternate stream test";
+        header.nPages = 1;
+        header.phpage = &page;
+
+        const INT_PTR result = PropertySheetW(&header);
+        if (result == 0 || result == -1)
+        {
+            DestroyPropertySheetPage(page);
+            Assert::Fail(L"Unable to create the test property sheet");
+        }
+
+        const HWND sheet = reinterpret_cast<HWND>(result);
+        const HWND current = reinterpret_cast<HWND>(
+            SendMessageW(sheet, PSM_GETCURRENTPAGEHWND, 0, 0));
+        const HWND combo = current == nullptr ? nullptr : GetDlgItem(current, IDC_COMBO1);
+        const int count = combo == nullptr ? -1 :
+            static_cast<int>(SendMessageW(combo, CB_GETCOUNT, 0, 0));
+        DestroyWindow(sheet);
+        Assert::AreEqual(expected, count);
+    }
 }
 
 namespace AlternateStreamTests
@@ -352,28 +386,22 @@ namespace AlternateStreamTests
                 overlay->IsMemberOf(fixture.path.data(), FILE_ATTRIBUTE_NORMAL));
         }
 
-        TEST_METHOD(GetCommandStringRejectsUnsupportedFlags)
+        TEST_METHOD(ContextHandlerDoesNotExposeContextMenu)
         {
             ScopedModule module(GetOverlayDllPath().c_str());
             auto factory = GetContextClassFactory(module.handle);
             Microsoft::WRL::ComPtr<IContextMenu> menu;
-            Assert::IsTrue(SUCCEEDED(factory->CreateInstance(nullptr,
-                __uuidof(IContextMenu),
-                reinterpret_cast<void**>(menu.GetAddressOf()))));
+            Assert::AreEqual(static_cast<HRESULT>(E_NOINTERFACE),
+                factory->CreateInstance(nullptr, __uuidof(IContextMenu),
+                    reinterpret_cast<void**>(menu.GetAddressOf())));
+            Assert::IsTrue(menu.Get() == nullptr);
 
-            WCHAR buffer[64] = {};
-            auto* bytes = reinterpret_cast<LPSTR>(buffer);
-            Assert::AreEqual(static_cast<HRESULT>(S_OK),
-                menu->GetCommandString(0, GCS_VERBW, nullptr, bytes, 64));
-            Assert::AreEqual(L"alternatestreams", buffer);
-            Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG),
-                menu->GetCommandString(0, GCS_VERBICONW, nullptr, bytes, 64));
-            Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG),
-                menu->GetCommandString(0, GCS_VERBW | 0x40, nullptr, bytes, 64));
-            Assert::AreEqual(static_cast<HRESULT>(S_OK),
-                menu->GetCommandString(0, GCS_VALIDATEW, nullptr, nullptr, 0));
-            Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG),
-                menu->GetCommandString(1, GCS_VALIDATEW, nullptr, nullptr, 0));
+            Microsoft::WRL::ComPtr<IShellExtInit> initializer;
+            Assert::IsTrue(SUCCEEDED(factory->CreateInstance(nullptr,
+                __uuidof(IShellExtInit),
+                reinterpret_cast<void**>(initializer.GetAddressOf()))));
+            Microsoft::WRL::ComPtr<IShellPropSheetExt> propertyPages;
+            Assert::IsTrue(SUCCEEDED(initializer.As(&propertyPages)));
         }
 
         TEST_METHOD(FailedReinitializationDiscardsPreviousSelection)
@@ -386,8 +414,8 @@ namespace AlternateStreamTests
             Assert::IsTrue(SUCCEEDED(factory->CreateInstance(nullptr,
                 __uuidof(IShellExtInit),
                 reinterpret_cast<void**>(initializer.GetAddressOf()))));
-            Microsoft::WRL::ComPtr<IContextMenu> menu;
-            Assert::IsTrue(SUCCEEDED(initializer.As(&menu)));
+            Microsoft::WRL::ComPtr<IShellPropSheetExt> propertyPages;
+            Assert::IsTrue(SUCCEEDED(initializer.As(&propertyPages)));
 
             TemporaryFile fixture;
             CreateStream(std::wstring(fixture.path.data()) + L":lifecycle");
@@ -395,18 +423,13 @@ namespace AlternateStreamTests
             data.Attach(new DropDataObject(fixture.path.data()));
             Assert::AreEqual(static_cast<HRESULT>(S_OK),
                 initializer->Initialize(nullptr, data.Get(), nullptr));
+            AssertPropertyPageStreamCount(propertyPages.Get(), 1);
 
-            CMINVOKECOMMANDINFO command = {};
-            command.cbSize = sizeof(command);
-            command.lpVerb = MAKEINTRESOURCEA(0);
-            // Missing data object must clear the previously initialized selection.
+            // Every failed reinitialization must discard the prior selection.
             Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG),
                 initializer->Initialize(nullptr, nullptr, nullptr));
-            Assert::AreEqual(static_cast<HRESULT>(E_FAIL),
-                menu->InvokeCommand(&command));
+            AssertPropertyPageStreamCount(propertyPages.Get(), 0);
 
-            // A successful GetData call may still supply a malformed medium.
-            // Each malformed reinitialization must discard a valid selection.
             Microsoft::WRL::ComPtr<IDataObject> nullGlobal;
             nullGlobal.Attach(new DropDataObject(fixture.path.data(),
                 DropDataObject::MediumCase::NullGlobal));
@@ -414,8 +437,7 @@ namespace AlternateStreamTests
                 initializer->Initialize(nullptr, data.Get(), nullptr));
             Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG),
                 initializer->Initialize(nullptr, nullGlobal.Get(), nullptr));
-            Assert::AreEqual(static_cast<HRESULT>(E_FAIL),
-                menu->InvokeCommand(&command));
+            AssertPropertyPageStreamCount(propertyPages.Get(), 0);
 
             Microsoft::WRL::ComPtr<IDataObject> wrongMedium;
             wrongMedium.Attach(new DropDataObject(fixture.path.data(),
@@ -424,28 +446,16 @@ namespace AlternateStreamTests
                 initializer->Initialize(nullptr, data.Get(), nullptr));
             Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG),
                 initializer->Initialize(nullptr, wrongMedium.Get(), nullptr));
-            Assert::AreEqual(static_cast<HRESULT>(E_FAIL),
-                menu->InvokeCommand(&command));
+            AssertPropertyPageStreamCount(propertyPages.Get(), 0);
 
-            // Unexpected callback arguments must fail without touching COM state.
-            Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG),
-                menu->InvokeCommand(nullptr));
-
-            // The same COM instance must remain reusable after those failures.
+            // A successful reinitialization must restore the inventory.
             Assert::AreEqual(static_cast<HRESULT>(S_OK),
                 initializer->Initialize(nullptr, data.Get(), nullptr));
+            AssertPropertyPageStreamCount(propertyPages.Get(), 1);
 
-            // The shell property-page callback owns a COM reference until
-            // DestroyPropertySheetPage invokes PSPCB_RELEASE. Cover both the
-            // accepted and rejected page paths without displaying a dialog.
-            Microsoft::WRL::ComPtr<IShellPropSheetExt> propertyPages;
-            Assert::IsTrue(SUCCEEDED(initializer.As(&propertyPages)));
+            // Cover accepted and rejected property-page reference ownership.
             Assert::AreEqual(static_cast<HRESULT>(E_POINTER),
                 propertyPages->AddPages(nullptr, 0));
-
-            // Leave only the test's IShellPropSheetExt reference outstanding,
-            // so an unbalanced page callback cannot be masked by other refs.
-            menu.Reset();
             initializer.Reset();
 
             HPROPSHEETPAGE acceptedPage = nullptr;
@@ -455,13 +465,9 @@ namespace AlternateStreamTests
             Assert::IsTrue(acceptedPage != nullptr);
             Assert::IsTrue(DestroyPropertySheetPage(acceptedPage) != FALSE);
 
-            // Rejection destroys the page inside AddPages and must not
-            // prematurely release the COM object used by this test.
             Assert::AreEqual(static_cast<HRESULT>(E_FAIL),
                 propertyPages->AddPages(RejectPropertyPage, 0));
 
-            // After rejection, the caller's sole reference must still keep
-            // the object alive and allow acquisition of another interface.
             Microsoft::WRL::ComPtr<IShellExtInit> recovered;
             Assert::IsTrue(SUCCEEDED(propertyPages.As(&recovered)));
             Assert::AreEqual(static_cast<HRESULT>(S_OK),
