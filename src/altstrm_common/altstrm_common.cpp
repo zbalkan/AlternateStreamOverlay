@@ -200,12 +200,7 @@ StreamEnumeration AlternateStreamReader::EnumerateStreams(HANDLE file, bool coll
 
         // Inventory is lossless. Path safety belongs to the preview consumer.
         if (collectNames)
-        {
-            if (!defaultStream && !stream_info_detail::IsNamedDataStreamName(
-                record.name, record.nameBytes / sizeof(WCHAR)))
-                ++result.undisplayableNames;
             result.streams.emplace_back(record.name, record.nameBytes / sizeof(WCHAR));
-        }
 
         if (record.nextOffset == 0)
             return result;
@@ -253,8 +248,7 @@ bool AlternateStreamReader::HasAlternateStreams(LPCWSTR filename) const
     return IndicatesAlternateStreams(EnumerateStreams(filename, false));
 }
 
-std::wstring FormatPreviewDisplayText(bool incomplete, bool unsafeNames,
-                                      LPCWSTR message)
+std::wstring FormatPreviewDisplayText(bool incomplete, LPCWSTR message)
 {
     std::wstring display;
     if (incomplete)
@@ -264,12 +258,6 @@ std::wstring FormatPreviewDisplayText(bool incomplete, bool unsafeNames,
             L"Some stream names may be unavailable for preview.\r\n"
             L"Do not interpret this inventory as a clean result.";
     }
-    if (unsafeNames)
-    {
-        if (!display.empty())
-            display += L"\r\n";
-        display += L"Some stream names cannot be previewed safely.";
-    }
     if (message != nullptr && *message != L'\0')
     {
         if (!display.empty())
@@ -277,6 +265,87 @@ std::wstring FormatPreviewDisplayText(bool incomplete, bool unsafeNames,
         display += message;
     }
     return display;
+}
+
+namespace
+{
+bool IsUnsafeSupplementaryScalar(unsigned int scalar)
+{
+    return scalar == 0x110BD || scalar == 0x110CD ||
+        (scalar >= 0x1BCA0 && scalar <= 0x1BCA3) ||
+        (scalar >= 0x1D173 && scalar <= 0x1D17A) ||
+        (scalar >= 0xE0000 && scalar <= 0xE007F) ||
+        (scalar >= 0xE0100 && scalar <= 0xE01EF);
+}
+
+void AppendHexEscape(std::wstring& output, unsigned int value, int shift)
+{
+    constexpr wchar_t hex[] = L"0123456789ABCDEF";
+    output += shift == 12 ? L"\\u" : L"\\U";
+    for (; shift >= 0; shift -= 4)
+        output += hex[(value >> shift) & 15];
+}
+
+bool AppendSurrogatePair(const std::wstring& name, size_t i,
+                         std::wstring& output)
+{
+    const auto high = static_cast<unsigned int>(name[i]);
+    if (high < 0xD800 || high > 0xDBFF || i + 1 >= name.size())
+        return false;
+
+    const auto low = static_cast<unsigned int>(name[i + 1]);
+    if (low < 0xDC00 || low > 0xDFFF)
+        return false;
+
+    const auto scalar = 0x10000U +
+        ((high - 0xD800U) << 10) + (low - 0xDC00U);
+    if (IsUnsafeSupplementaryScalar(scalar))
+        AppendHexEscape(output, scalar, 28);
+    else
+    {
+        output += name[i];
+        output += name[i + 1];
+    }
+    return true;
+}
+} // namespace
+
+std::wstring EscapeStreamDisplay(const std::wstring& name)
+{
+    std::wstring output;
+    size_t i = 0;
+    while (i < name.size())
+    {
+        if (AppendSurrogatePair(name, i, output))
+        {
+            i += 2;
+            continue;
+        }
+
+        const auto ch = name[i];
+        const auto value = static_cast<unsigned int>(ch);
+        const bool unsafe = value < 0x20 || (value >= 0x7F && value <= 0x9F) ||
+            value == 0x061C || value == 0x200E || value == 0x200F ||
+            (value >= 0x202A && value <= 0x202E) ||
+            (value >= 0x2066 && value <= 0x2069) ||
+            (value >= 0xD800 && value <= 0xDFFF);
+        if (ch == L'\\')
+            output += LR"(\\)";
+        else if (unsafe)
+            AppendHexEscape(output, value, 12);
+        else
+            output += ch;
+        ++i;
+    }
+    return output;
+}
+
+std::wstring FormatStreamInventoryLabel(const std::wstring& name)
+{
+    std::wstring label = EscapeStreamDisplay(name);
+    if (!stream_info_detail::IsNamedDataStreamName(name.data(), name.size()))
+        label += L" - Preview unavailable";
+    return label;
 }
 
 std::wstring FormatHexPreview(const BYTE* data, size_t size)

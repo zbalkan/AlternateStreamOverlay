@@ -54,7 +54,6 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
             m_path.clear();
             m_streams.clear();
             m_enumerationIncomplete = false;
-            m_hasUnpreviewableNames = false;
         }
 
         FORMATETC fmt = { CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
@@ -125,18 +124,11 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
 
         AlternateStreamReader reader;
         auto enumeration = reader.EnumerateStreams(filePath.c_str());
-        // Keep failed/truncated enumeration visible as a warning; separately
-        // record native names that are unsafe for Win32 path-based preview.
+        // Preserve all named streams, independently of preview eligibility.
         const bool incomplete = enumeration.status != StreamStatus::Ok;
-        const bool hasUnpreviewableNames = enumeration.undisplayableNames != 0;
         auto& streams = enumeration.streams;
-        streams.erase(std::remove_if(streams.begin(), streams.end(),
-            [](const std::wstring& name)
-            {
-                return name == L"::$DATA" ||
-                    !stream_info_detail::IsNamedDataStreamName(name.data(), name.size());
-            }), streams.end());
-        if (streams.empty() && !enumeration.NeedsNotice())
+        streams.erase(std::remove(streams.begin(), streams.end(), L"::$DATA"), streams.end());
+        if (streams.empty() && !incomplete)
             return E_FAIL;
 
         // Commit selection only after validation; avoid allocations on commit.
@@ -145,7 +137,6 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
             m_path.swap(filePath);
             m_streams.swap(streams);
             m_enumerationIncomplete = incomplete;
-            m_hasUnpreviewableNames = hasUnpreviewableNames;
         }
         return S_OK;
     }
@@ -160,8 +151,7 @@ STDMETHODIMP CAlternateStreamContext::Initialize(LPCITEMIDLIST, IDataObject* pDa
 }
 
 void CAlternateStreamContext::SnapshotSelection(
-    std::wstring& path, std::vector<std::wstring>& streams, bool& incomplete,
-    bool& hasUnpreviewableNames) const
+    std::wstring& path, std::vector<std::wstring>& streams, bool& incomplete) const
 {
     // Copy all fields under the same lock, then publish them to the dialog
     // only after both potentially throwing allocations have completed.
@@ -171,7 +161,6 @@ void CAlternateStreamContext::SnapshotSelection(
     path.swap(pathCopy);
     streams.swap(streamCopy);
     incomplete = m_enumerationIncomplete;
-    hasUnpreviewableNames = m_hasUnpreviewableNames;
 }
 
 namespace
@@ -200,6 +189,7 @@ struct PreviewGate
     size_t generation = 0;
     std::wstring path;
     bool asHex = false;
+    bool previewAllowed = false;
     std::unique_ptr<PreviewResult> pending;
     size_t failedGeneration = 0;
     bool pendingFailure = false;
@@ -212,7 +202,6 @@ struct DialogState
     std::wstring path;
     std::vector<std::wstring> streams;
     bool enumerationIncomplete = false;
-    bool hasUnpreviewableNames = false;
     std::shared_ptr<PreviewGate> gate;
     size_t generation = 0;
 };
@@ -313,6 +302,11 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
                 return;
             }
             generation = request->gate->generation;
+            if (!request->gate->previewAllowed)
+            {
+                request->gate->workerActive = false;
+                return;
+            }
             asHex = request->gate->asHex;
             try
             {
@@ -366,29 +360,23 @@ VOID CALLBACK PreviewWorker(PTP_CALLBACK_INSTANCE instance, PVOID parameter, PTP
     }
 }
 
-void SetPreviewText(HWND textBox, bool incomplete, bool unsafeNames,
-                    LPCWSTR message)
+void SetPreviewText(HWND textBox, bool incomplete, LPCWSTR message)
 {
     if (textBox == nullptr)
         return;
-    if (!incomplete && !unsafeNames)
+    if (!incomplete)
     {
         SetWindowTextW(textBox, message);
         return;
     }
-
     try
     {
-        const std::wstring display =
-            FormatPreviewDisplayText(incomplete, unsafeNames, message);
+        const std::wstring display = FormatPreviewDisplayText(incomplete, message);
         SetWindowTextW(textBox, display.c_str());
     }
     catch (...)
     {
-        // Avoid another allocation when an out-of-memory error caused this.
-        SetWindowTextW(textBox, incomplete
-            ? L"Stream enumeration is incomplete or failed."
-            : L"Some stream names cannot be previewed safely.");
+        SetWindowTextW(textBox, L"Stream enumeration is incomplete or failed.");
     }
 }
 
@@ -396,38 +384,51 @@ void SelectTextImpl(DialogState* state, size_t idx, bool asHex, HWND textBox)
 {
     if (textBox == nullptr || state == nullptr)
         return;
-    const auto& streams = state->streams;
-    if (idx >= streams.size())
-    {
-        ++state->generation;
-        SetPreviewText(textBox, state->enumerationIncomplete,
-            state->hasUnpreviewableNames, L"");
-        return;
-    }
 
-    // Construct before changing the generation: allocation failure must not
-    // make an existing worker's previous path appear to be a new selection.
-    std::wstring path = state->path + streams[idx];
-    if (PreviewMessageId() == 0)
-    {
-        // No completion notification can be delivered without registration.
-        SetPreviewText(textBox, state->enumerationIncomplete,
-            state->hasUnpreviewableNames,
-            L"Unable to start alternate stream preview.");
-        return;
-    }
-    SetPreviewText(textBox, state->enumerationIncomplete,
-            state->hasUnpreviewableNames, L"Loading alternate stream...");
-    bool started = false;
+    const bool inRange = idx < state->streams.size();
+    const auto* name = inRange ? &state->streams[idx] : nullptr;
+    const bool allowed = name != nullptr &&
+        stream_info_detail::IsNamedDataStreamName(name->data(), name->size());
+
+    // Build before changing generations; allocation failures leave the
+    // previous worker state consistent.
+    std::wstring path;
+    if (allowed)
+        path = state->path + *name;
+
     {
         ExclusiveSrwLock lock(state->gate->lock);
         state->gate->path.swap(path);
         ++state->generation;
         state->gate->generation = state->generation;
+        state->gate->previewAllowed = allowed;
         state->gate->asHex = asHex;
+    }
+
+    if (!inRange)
+    {
+        SetPreviewText(textBox, state->enumerationIncomplete, L"");
+        return;
+    }
+    if (!allowed)
+    {
+        SetPreviewText(textBox, state->enumerationIncomplete,
+            L"Preview unavailable for this stream name.");
+        return;
+    }
+    if (PreviewMessageId() == 0)
+    {
+        SetPreviewText(textBox, state->enumerationIncomplete,
+            L"Unable to start alternate stream preview.");
+        return;
+    }
+
+    SetPreviewText(textBox, state->enumerationIncomplete, L"Loading alternate stream...");
+    bool started = false;
+    {
+        ExclusiveSrwLock lock(state->gate->lock);
         if (state->gate->workerActive)
             return;
-
         std::unique_ptr<PreviewRequest> request(new (std::nothrow) PreviewRequest);
         if (request)
         {
@@ -450,10 +451,8 @@ void SelectTextImpl(DialogState* state, size_t idx, bool asHex, HWND textBox)
             }
         }
     }
-    // Never send synchronous window messages while holding the gate lock.
     if (!started)
         SetPreviewText(textBox, state->enumerationIncomplete,
-            state->hasUnpreviewableNames,
             L"Unable to start alternate stream preview.");
 }
 
@@ -469,8 +468,7 @@ void SelectText(DialogState* state, size_t idx, bool asHex, HWND textBox)
         // The scoped SRW guard releases on unwind.
         if (textBox != nullptr)
             SetPreviewText(textBox, state->enumerationIncomplete,
-            state->hasUnpreviewableNames,
-            L"Unable to start alternate stream preview.");
+                L"Unable to start alternate stream preview.");
     }
 }
 
@@ -494,8 +492,7 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
         // Snapshot before publishing dialog state. A failed allocation leaves
         // no half-initialized state attached to the window.
         pthis->SnapshotSelection(state->path, state->streams,
-                                 state->enumerationIncomplete,
-                                 state->hasUnpreviewableNames);
+                                 state->enumerationIncomplete);
         state->gate = std::make_shared<PreviewGate>();
     }
     catch (...)
@@ -514,10 +511,37 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     HWND textBox = GetDlgItem(hWnd, IDC_EDIT1);
 
     const std::vector<std::wstring>& streams = dialogState->streams;
-    for (const auto& stream : streams)
+    bool inventoryDisplayFailed = comboBox == nullptr;
+    if (!inventoryDisplayFailed)
     {
-        SendMessage(comboBox, CB_ADDSTRING, 0,
-                    reinterpret_cast<LPARAM>(stream.c_str()));
+        try
+        {
+            for (const auto& stream : streams)
+            {
+                const std::wstring label = FormatStreamInventoryLabel(stream);
+                if (SendMessage(comboBox, CB_ADDSTRING, 0,
+                        reinterpret_cast<LPARAM>(label.c_str())) < 0)
+                {
+                    inventoryDisplayFailed = true;
+                    break;
+                }
+            }
+        }
+        catch (...)
+        {
+            // Never expose a partial inventory after display allocation fails.
+            inventoryDisplayFailed = true;
+        }
+    }
+    if (inventoryDisplayFailed)
+    {
+        if (comboBox != nullptr)
+        {
+            SendMessage(comboBox, CB_RESETCONTENT, 0, 0);
+            EnableWindow(comboBox, FALSE);
+        }
+        SetWindowTextW(textBox, L"Unable to display complete stream inventory.");
+        return TRUE;
     }
 
     // Each dialog owns its preview font. The COM object may outlive the page
@@ -540,9 +564,9 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
         SendMessage(comboBox, CB_SETCURSEL, 0, 0);
         SelectText(dialogState, 0, false, textBox);
     }
-    else if (dialogState->enumerationIncomplete || dialogState->hasUnpreviewableNames)
+    else if (dialogState->enumerationIncomplete)
         SetPreviewText(textBox, dialogState->enumerationIncomplete,
-            dialogState->hasUnpreviewableNames, L"");
+            L"");
     return TRUE;
 }
 
@@ -615,7 +639,7 @@ void OnPreviewReady(HWND hWnd, WPARAM wParam)
             L"Unable to read alternate stream.";
         SetPreviewText(GetDlgItem(hWnd, IDC_EDIT1),
             state->enumerationIncomplete,
-            state->hasUnpreviewableNames, preview);
+            preview);
     }
 }
 

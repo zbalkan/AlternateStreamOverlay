@@ -33,12 +33,11 @@ struct StreamEnumeration
     StreamStatus status = StreamStatus::Error;
     DWORD error = ERROR_SUCCESS;
     bool hasNamedStreams = false;
-    size_t undisplayableNames = 0;
     std::vector<std::wstring> streams;
 
     bool NeedsNotice() const
     {
-        return status != StreamStatus::Ok || undisplayableNames != 0;
+        return status != StreamStatus::Ok;
     }
 };
 
@@ -66,7 +65,8 @@ std::wstring FormatStreamPreview(const BYTE* data, size_t size,
                                  bool asHex);
 
 // Combine enumeration warnings with the current property-page preview message.
-std::wstring FormatPreviewDisplayText(bool incomplete, bool unsafeNames,
-                                      LPCWSTR message);
+std::wstring FormatPreviewDisplayText(bool incomplete, LPCWSTR message);
+std::wstring EscapeStreamDisplay(const std::wstring& name);
+std::wstring FormatStreamInventoryLabel(const std::wstring& name);
 
 #endif // _ALTSTRM_COMMON_H_
