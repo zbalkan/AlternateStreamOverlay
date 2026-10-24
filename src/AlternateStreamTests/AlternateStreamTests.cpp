@@ -576,6 +576,32 @@ namespace AlternateStreamTests
                 std::wstring::npos);
         }
 
+        TEST_METHOD(SupplementaryFormatCharactersAreEscaped)
+        {
+            // U+E0001 (LANGUAGE TAG) and U+E007F (CANCEL TAG) are invisible.
+            std::wstring name = L":tag-";
+            name += static_cast<WCHAR>(0xDB40);
+            name += static_cast<WCHAR>(0xDC01);
+            name += static_cast<WCHAR>(0xDB40);
+            name += static_cast<WCHAR>(0xDC7F);
+            name += L":$DATA";
+            const auto escaped = EscapeStreamDisplay(name);
+            Assert::IsTrue(escaped.find(L"\\U000E0001") != std::wstring::npos);
+            Assert::IsTrue(escaped.find(L"\\U000E007F") != std::wstring::npos);
+
+            // Supplementary variation selectors are also default-ignorable.
+            std::wstring selector = L":variation-";
+            selector += static_cast<WCHAR>(0xDB40);
+            selector += static_cast<WCHAR>(0xDD00); // U+E0100
+            selector += L":$DATA";
+            Assert::IsTrue(EscapeStreamDisplay(selector).find(L"\\U000E0100") !=
+                std::wstring::npos);
+
+            // Different raw names must not collapse to the same visible label.
+            Assert::AreNotEqual(EscapeStreamDisplay(L":tag-:$DATA").c_str(),
+                EscapeStreamDisplay(name).c_str());
+        }
+
         TEST_METHOD(UnicodeEscapingIsUnambiguous)
         {
             std::wstring name = L":a\\\\b";
