@@ -73,7 +73,7 @@ public static class ComApartmentProbe
                 {
                     result.Interface = interfaceId.ToString("D");
                     result.Query = Format(Marshal.QueryInterface(unknown,
-                        ref interfaceId, out selected));
+                        in interfaceId, out selected));
                 }
             }
             catch (Exception ex) { exception = ex; }
