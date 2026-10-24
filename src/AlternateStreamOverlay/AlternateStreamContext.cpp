@@ -741,24 +741,12 @@ void OnPreviewReady(HWND hWnd, WPARAM wParam)
     }
 }
 
-void CloseGateAndDrain(HWND hWnd, DialogState& state)
+void CloseGate(DialogState& state)
 {
-    {
-        ExclusiveSrwLock lock(state.gate->lock);
-        state.gate->alive = false;
-        state.gate->pending.reset();
-        state.gate->pendingFailure = false;
-    }
-
-    // Queued notifications carry no ownership; removing them is optional for
-    // memory safety, but avoids needless messages during dialog destruction.
-    MSG pending = {};
-    const UINT messageId = PreviewMessageId();
-    while (messageId != 0 && PeekMessageW(&pending, hWnd, messageId,
-                                         messageId, PM_REMOVE))
-    {
-        // PM_REMOVE discards each notification; no payload needs cleanup.
-    }
+    ExclusiveSrwLock lock(state.gate->lock);
+    state.gate->alive = false;
+    state.gate->pending.reset();
+    state.gate->pendingFailure = false;
 }
 
 void ReleaseEditFont(HWND hWnd)
@@ -785,7 +773,7 @@ void OnDestroy(HWND hWnd)
         GetWindowLongPtr(hWnd, GWLP_USERDATA)));
     SetWindowLongPtr(hWnd, GWLP_USERDATA, 0);
     if (state != nullptr)
-        CloseGateAndDrain(hWnd, *state);
+        CloseGate(*state);
 
     ReleaseEditFont(hWnd);
 }
