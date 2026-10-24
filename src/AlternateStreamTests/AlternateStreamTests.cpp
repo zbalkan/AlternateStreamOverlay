@@ -542,7 +542,7 @@ namespace AlternateStreamTests
             Assert::IsTrue(warning.find(L"Stream enumeration is incomplete or failed.") !=
                 std::wstring::npos);
             Assert::IsTrue(warning.find(L"Preview unavailable") != std::wstring::npos);
-            Assert::IsTrue(warning.find(L"\\r\\n\\r\\n") != std::wstring::npos);
+            Assert::IsTrue(warning.find(L"\r\n\r\n") != std::wstring::npos);
         }
 
         TEST_METHOD(EscapedNamesPreserveNativeSelection)
@@ -552,7 +552,8 @@ namespace AlternateStreamTests
             raw += L"b:$DATA";
             const auto label = FormatStreamInventoryLabel(raw);
             Assert::IsTrue(label.find(L"\\\\u0001") != std::wstring::npos);
-            Assert::IsTrue(label.find(L"Preview unavailable") != std::wstring::npos);
+            Assert::IsTrue(label.find(L"Preview unavailable") != std::wstring::npos,
+                label.c_str());
             Assert::IsFalse(stream_info_detail::IsNamedDataStreamName(
                 raw.data(), raw.size()));
             Assert::AreEqual(static_cast<WCHAR>(1), raw[2]);
