@@ -193,8 +193,12 @@ STDMETHODIMP CAlternateStreamContext::QueryContextMenu(
     wchar_t menuText[] = L"&Alternate Streams...";
     wchar_t incompleteText[] = L"&Alternate Streams (incomplete)...";
     wchar_t limitedText[] = L"&Alternate Streams (some unavailable)...";
-    item.dwTypeData = incomplete ? incompleteText :
-        (hasUnpreviewableNames ? limitedText : menuText);
+    if (incomplete)
+        item.dwTypeData = incompleteText;
+    else if (hasUnpreviewableNames)
+        item.dwTypeData = limitedText;
+    else
+        item.dwTypeData = menuText;
     if (!InsertMenuItemW(hmenu, indexMenu, TRUE, &item))
         return HRESULT_FROM_WIN32(GetLastError());
 
