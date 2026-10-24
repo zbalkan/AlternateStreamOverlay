@@ -518,20 +518,13 @@ namespace AlternateStreamTests
             Assert::IsFalse(IndicatesAlternateStreams(result));
         }
 
-        TEST_METHOD(UncertainAndUndisplayableResultsRequireNotice)
+        TEST_METHOD(IncompleteEnumerationRequiresNotice)
         {
             StreamEnumeration result;
             result.status = StreamStatus::Ok;
             Assert::IsFalse(result.NeedsNotice());
-
-            result.undisplayableNames = 1;
-            result.hasNamedStreams = true;
-            Assert::IsTrue(result.NeedsNotice());
-
-            result.undisplayableNames = 0;
             result.status = StreamStatus::Truncated;
             Assert::IsTrue(result.NeedsNotice());
-
             result.status = StreamStatus::Error;
             Assert::IsTrue(result.NeedsNotice());
         }
@@ -540,55 +533,42 @@ namespace AlternateStreamTests
     TEST_CLASS(PreviewNoticeTests)
     {
     public:
-        TEST_METHOD(DistinguishesIncompleteInventoryFromUnsafeNames)
+        TEST_METHOD(IncompleteWarningSurvivesPreviewStatus)
         {
-            const auto clean = FormatPreviewDisplayText(false, false, L"Preview");
-            Assert::AreEqual(L"Preview", clean.c_str());
-
-            const auto unsafe = FormatPreviewDisplayText(false, true, L"Preview");
-            Assert::IsTrue(unsafe.find(L"Some stream names cannot be previewed safely.") !=
+            Assert::AreEqual(L"Preview",
+                FormatPreviewDisplayText(false, L"Preview").c_str());
+            const auto warning = FormatPreviewDisplayText(true,
+                L"Preview unavailable for this stream name.");
+            Assert::IsTrue(warning.find(L"Stream enumeration is incomplete or failed.") !=
                 std::wstring::npos);
-            Assert::IsTrue(unsafe.find(L"Stream enumeration is incomplete or failed.") ==
-                std::wstring::npos);
-            Assert::IsTrue(unsafe.find(L"\r\n\r\nPreview") != std::wstring::npos);
-
-            const auto incomplete = FormatPreviewDisplayText(true, false, L"Preview");
-            Assert::IsTrue(incomplete.find(L"Stream enumeration is incomplete or failed.") !=
-                std::wstring::npos);
-            Assert::IsTrue(incomplete.find(L"Some stream names cannot be previewed safely.") ==
-                std::wstring::npos);
-
-            const auto both = FormatPreviewDisplayText(true, true, L"Preview");
-            Assert::IsTrue(both.find(L"Stream enumeration is incomplete or failed.") !=
-                std::wstring::npos);
-            Assert::IsTrue(both.find(L"Some stream names cannot be previewed safely.") !=
-                std::wstring::npos);
-            Assert::IsTrue(both.find(L"\r\n\r\nPreview") != std::wstring::npos);
+            Assert::IsTrue(warning.find(L"Preview unavailable") != std::wstring::npos);
+            Assert::IsTrue(warning.find(L"\\r\\n\\r\\n") != std::wstring::npos);
         }
 
-        TEST_METHOD(NoticeSurvivesLoadingFailureAndEmptyPreviews)
+        TEST_METHOD(EscapedNamesPreserveNativeSelection)
         {
-            const auto empty = FormatPreviewDisplayText(false, false, L"");
-            Assert::IsTrue(empty.empty());
+            std::wstring raw = L":a";
+            raw += static_cast<WCHAR>(1);
+            raw += L"b:$DATA";
+            const auto label = FormatStreamInventoryLabel(raw);
+            Assert::IsTrue(label.find(L"\\\\u0001") != std::wstring::npos);
+            Assert::IsTrue(label.find(L"Preview unavailable") != std::wstring::npos);
+            Assert::IsFalse(stream_info_detail::IsNamedDataStreamName(
+                raw.data(), raw.size()));
+            Assert::AreEqual(static_cast<WCHAR>(1), raw[2]);
+            Assert::AreEqual(L":safe:$DATA",
+                FormatStreamInventoryLabel(L":safe:$DATA").c_str());
+        }
 
-            const auto warningOnly = FormatPreviewDisplayText(false, true, L"");
-            Assert::AreEqual(L"Some stream names cannot be previewed safely.",
-                warningOnly.c_str());
-
-            const auto loading = FormatPreviewDisplayText(false, true,
-                L"Loading alternate stream...");
-            Assert::IsTrue(loading.find(L"Some stream names cannot be previewed safely.") !=
-                std::wstring::npos);
-            Assert::IsTrue(loading.find(L"Loading alternate stream...") != std::wstring::npos);
-
-            const auto failure = FormatPreviewDisplayText(true, true,
-                L"Unable to read alternate stream.");
-            Assert::IsTrue(failure.find(L"Stream enumeration is incomplete or failed.") !=
-                std::wstring::npos);
-            Assert::IsTrue(failure.find(L"Some stream names cannot be previewed safely.") !=
-                std::wstring::npos);
-            Assert::IsTrue(failure.find(L"Unable to read alternate stream.") !=
-                std::wstring::npos);
+        TEST_METHOD(UnicodeEscapingIsUnambiguous)
+        {
+            std::wstring name = L":a\\\\b";
+            name += static_cast<WCHAR>(0x202E);
+            name += L":$DATA";
+            const auto label = FormatStreamInventoryLabel(name);
+            Assert::IsTrue(label.find(L"\\\\\\\\") != std::wstring::npos);
+            Assert::IsTrue(label.find(L"\\\\u202E") != std::wstring::npos);
+            Assert::IsTrue(label.find(L"Preview unavailable") != std::wstring::npos);
         }
     };
 
