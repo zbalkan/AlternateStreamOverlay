@@ -468,8 +468,7 @@ void SelectText(DialogState* state, size_t idx, bool asHex, HWND textBox)
         // The scoped SRW guard releases on unwind.
         if (textBox != nullptr)
             SetPreviewText(textBox, state->enumerationIncomplete,
-            ,
-            L"Unable to start alternate stream preview.");
+                L"Unable to start alternate stream preview.");
     }
 }
 
@@ -514,9 +513,18 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     const std::vector<std::wstring>& streams = dialogState->streams;
     for (const auto& stream : streams)
     {
-        const std::wstring label = FormatStreamInventoryLabel(stream);
-        SendMessage(comboBox, CB_ADDSTRING, 0,
-                    reinterpret_cast<LPARAM>(label.c_str()));
+        try
+        {
+            const std::wstring label = FormatStreamInventoryLabel(stream);
+            if (SendMessage(comboBox, CB_ADDSTRING, 0,
+                    reinterpret_cast<LPARAM>(label.c_str())) == CB_ERR)
+                return FALSE;
+        }
+        catch (...)
+        {
+            // Do not propagate allocations through the shell's dialog callback.
+            return FALSE;
+        }
     }
 
     // Each dialog owns its preview font. The COM object may outlive the page
