@@ -11,7 +11,7 @@ Releases are created by the [Manual Release](../.github/workflows/release.yml) w
 
 ## Stage a draft
 
-In GitHub Actions, select **Manual Release**, choose `main`, enter the unprefixed version (for example `2.0.0`), and run the workflow.
+In GitHub Actions, select **Manual Release**, choose `main`, and run the workflow. The version is read from `src/version.h`; no version input is required.
 
 The workflow validates the source version, checks GitHub for an existing tag/release, builds x64 Release, verifies the DLL and EXE VERSIONINFO, runs native MSTest and ADS smoke tests, and generates a ZIP and SHA-256 checksum. It then creates a draft release and uploads a copy of the release assets as a workflow artifact.
 
