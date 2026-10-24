@@ -3,7 +3,7 @@
 #include "stream_info_detail.h"
 #include "../AlternateStreamOverlay/LocalPathPolicy.h"
 #include "../AlternateStreamOverlay/resource.h"
-#include <Prsht.h>
+#include <prsht.h>
 #include <algorithm>
 #include <cstddef>
 #include <limits>
@@ -282,8 +282,8 @@ namespace
             Assert::Fail(L"Unable to create the test property sheet");
         }
 
-        const HWND sheet = reinterpret_cast<HWND>(result);
-        const HWND current = reinterpret_cast<HWND>(
+        auto* sheet = reinterpret_cast<HWND>(result);
+        auto* current = reinterpret_cast<HWND>(
             SendMessageW(sheet, PSM_GETCURRENTPAGEHWND, 0, 0));
         const HWND combo = current == nullptr ? nullptr : GetDlgItem(current, IDC_COMBO1);
         const int count = combo == nullptr ? -1 :
