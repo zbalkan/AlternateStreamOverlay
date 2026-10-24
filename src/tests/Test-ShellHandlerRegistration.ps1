@@ -1,11 +1,11 @@
 #requires -Version 5.1
 <#
 .SYNOPSIS
-    Checks AlternateStreamOverlay context-menu and property-sheet registrations.
+    Verifies property-sheet registrations and absence of context-menu handlers.
 .DESCRIPTION
     Inspects effective HKCR shell handler registrations and the associated COM
     server without changing registry state. This does not establish whether
-    Explorer has loaded or activated the handlers.
+    Explorer has loaded or activated the property-sheet handler.
 #>
 [CmdletBinding()]
 param([switch] $FailOnIssues)
@@ -43,7 +43,10 @@ try {
                 Kind = $check.Kind
                 RegistryKey = "HKCR\$($check.Key)"
                 CLSID = $registeredClsid
-                Status = if (-not $exists) { 'Missing' }
+                Status = if ($check.Kind -eq 'Context menu') {
+                             if ($exists) { 'Unexpected registration' } else { 'Absent' }
+                         }
+                         elseif (-not $exists) { 'Missing' }
                          elseif ($registeredClsid -ieq $expectedClsid) { 'OK' }
                          else { 'Unexpected CLSID' }
             }
@@ -82,15 +85,18 @@ try {
         Status = $serverStatus
     } | Format-List | Out-Host
 
-    $failures = @($results | Where-Object Status -ne 'OK')
+    $failures = @($results | Where-Object {
+        ($_.Kind -eq 'Context menu' -and $_.Status -ne 'Absent') -or
+        ($_.Kind -eq 'Property sheet' -and $_.Status -ne 'OK')
+    })
     if ($failures.Count -gt 0 -or $serverStatus -ne 'OK') {
         $message = "Shell handler registration has $($failures.Count) handler issue(s); COM server status: $serverStatus."
         if ($FailOnIssues) { throw $message }
         Write-Warning $message
     }
     else {
-        Write-Host 'All expected shell handler registrations are present.'
+        Write-Host 'Property-sheet registrations are present; context-menu entries are absent.'
     }
-    Write-Host 'Note: this checks effective registration, not Explorer activation or menu visibility.'
+    Write-Host 'Note: this checks effective registration, not Explorer property-page activation.'
 }
 finally { $root.Dispose() }
