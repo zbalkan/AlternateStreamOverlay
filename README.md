@@ -1,125 +1,110 @@
 # AlternateStreamOverlay
 
+A Windows Explorer extension for **finding and inspecting NTFS alternate data streams (ADS)**.
+
 [![CI & Static Analysis](https://github.com/zbalkan/AlternateStreamOverlay/actions/workflows/ci.yml/badge.svg)](https://github.com/zbalkan/AlternateStreamOverlay/actions/workflows/ci.yml)
-[![DevSkim](https://github.com/zbalkan/AlternateStreamOverlay/actions/workflows/devskim.yml/badge.svg)](https://github.com/zbalkan/AlternateStreamOverlay/actions/workflows/devskim.yml)
-[![Quality gate status](https://sonarcloud.io/api/project_badges/measure?project=zbalkan_AlternateStreamOverlay&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=zbalkan_AlternateStreamOverlay)
-[![Security issues](https://sonarcloud.io/api/project_badges/measure?project=zbalkan_AlternateStreamOverlay&metric=software_quality_security_issues)](https://sonarcloud.io/summary/new_code?id=zbalkan_AlternateStreamOverlay)
 
-A Windows Explorer shell extension that makes **NTFS alternate data streams (ADS)** easier to discover and inspect.
+## What does it do?
 
-AlternateStreamOverlay integrates with Windows Explorer to identify files containing alternate data streams and expose their contents through a property page.
+A file on NTFS can contain additional named data streams beyond its normal contents. Those streams are generally not visible in the usual Explorer file listing. AlternateStreamOverlay helps you discover them without opening a separate forensic tool.
 
-This project is a maintained fork of Lee Benfield's original [AlternateStreamOverlay](https://www.benf.org/other/alternatestreamoverlay/index.html).
+- **Explorer icon overlay:** Marks files that have named alternate streams, when Explorer has an available overlay slot.
+- **Alternate Streams property tab:** Lists the named streams of a selected file or directory. Select one to view a bounded text or hexadecimal preview.
+- **Command-line listing:** Includes `altstrm.exe` for listing streams from a terminal.
 
-## Features
-
-- **Icon overlay:** Identifies files containing alternate data streams in Windows Explorer.
-- **Property page:** Displays alternate data streams associated with a file.
-- **Machine-wide installation:** Requires administrator privileges to register Explorer and COM components.
-- **Native Windows integration:** Uses the documented `GetFileInformationByHandleEx(FileStreamInfo)` API to enumerate streams.
-- **Registration diagnostics:** Includes read-only scripts for inspecting shell handler and overlay registration.
+The tool is **read-only**: it does not create, edit, or delete alternate streams. Displaying a stream does not imply that the stream is malicious; ADS are also used legitimately by Windows and applications.
 
 ## Requirements
 
-| Component | Requirement |
-| --- | --- |
-| Operating system | Windows 10 or Windows 11 (tested), Windows Server 2019, 2022, 2025 (untested) |
-| Build tools | Visual Studio with MSVC and Windows SDK |
-| Build configurations | `Debug\|x64`, `Release\|x64` |
-| File system | NTFS for alternate data stream functionality |
+- Windows 10 or 11, **64-bit**.
+- A filesystem supporting named streams (normally NTFS).
+- Administrator privileges to register or unregister the Explorer extension.
 
-## Building
+Windows Server 2019/2022/2025 have not been validated. Explorer integration and icon-overlay visibility can vary by system.
 
-Open `src/AlternateStreamOverlay.sln` in Visual Studio, or build from a Developer PowerShell session with MSBuild.
+## Install
 
-From the repository root:
+1. Get the Windows x64 release ZIP from [Releases](https://github.com/zbalkan/AlternateStreamOverlay/releases), when a release is available. Extract it into a **permanent local folder** such as `C:\Program Files\AlternateStreamOverlay`; do not register the DLL from a temporary folder or directly inside a ZIP.
+2. Open an **elevated 64-bit PowerShell or Command Prompt**.
+3. Register the extracted DLL with its full path:
 
-```powershell
-msbuild .\src\AlternateStreamOverlay.sln /t:Rebuild /m /p:Configuration=Release /p:Platform=x64 /p:RegisterOutput=false
-```
+   ```powershell
+   regsvr32.exe "C:\Program Files\AlternateStreamOverlay\AlternateStreamOverlay.dll"
+   ```
 
-For a Debug build, replace `Release` with `Debug`.
+Registration installs the property-sheet handler and icon-overlay handler for all users. No per-user installation mode is supported. Restart Explorer or sign out and back in if the integration does not appear immediately.
 
-The build produces the shell extension DLL and supporting utilities. The `RegisterOutput=false` property prevents automatic COM registration during compilation.
+If no published release is available, the application can be [built from source](docs/DEVELOPMENT.md).
 
-Both supported configurations are built by GitHub Actions.
+## Use in Explorer
 
-## Installation
+1. Select an NTFS file or directory and open **Properties** (right-click → Properties, or `Alt+Enter`).
+2. Open the **Alternate Streams** tab if one is offered.
+3. Choose a named stream from the list. Its contents can be viewed as text or hex using **Show as hex**.
 
-The extension supports **machine-wide installation only**, requiring an elevated terminal.
+The normal unnamed `::$DATA` stream is excluded because it is the file's primary data, not an alternate stream. Previews are limited to approximately 64 KiB; larger streams are not fully displayed. If a native stream name cannot be opened safely through a Windows path, the tab still lists it but reports that its preview is unavailable.
 
-```powershell
-regsvr32.exe .\src\AlternateStreamOverlay\x64\Release\AlternateStreamOverlay.dll
-```
+The overlay is a visual hint, not a complete inventory: Windows limits the number of shell icon overlay handlers Explorer can use, and other installed software competes for those positions. Use the tab or CLI to inspect a particular file even if no icon overlay appears.
 
-This registers the COM classes and Explorer overlay for all users. Per-user registration (including `/n /i:user`) is not supported.
+## Use from the command line
 
-## Uninstallation
-
-Run from an **elevated** terminal:
+The release archive also contains `altstrm.exe`. Run it with a file, directory, or wildcard pattern:
 
 ```powershell
-regsvr32.exe /u .\src\AlternateStreamOverlay\x64\Release\AlternateStreamOverlay.dll
+.\altstrm.exe "C:\path\to\file.txt"
+.\altstrm.exe "C:\path\to\folder"
+.\altstrm.exe "C:\path\to\folder\*"
 ```
 
-Unregister the extension before deleting its DLL. The examples assume a Release build and commands executed from the repository root.
+The CLI lists named streams; it does not print their contents. Unicode paths are supported, and redirected output is encoded as UTF-8. Quotes matter when paths contain spaces.
 
-**Upgrading from earlier machine-wide builds:** Before replacing an older installed DLL, unregister that version using elevated `regsvr32.exe /u` **with the path to the older DLL**, then register the new DLL. Earlier repository builds registered a type library (`{C0034A83-7FA3-43A7-82DD-3ADF66F0086C}`), two custom COM interfaces (`{CFC72A5F-E58B-43BD-8968-BA89AFB2240D}` and `{96296677-6A18-4F22-AC2E-84A650C4081D}`), and an AppID (`{869100FF-B8AB-406F-A8E2-C8B561E7CC81}`). Current builds no longer manage those registrations, so an in-place replacement without prior unregistration may leave obsolete entries. If the old DLL is unavailable, inspect the underlying machine-wide and per-user `Software\Classes\TypeLib`, `Interface`, and `AppID` registry entries before considering manual cleanup; `HKCR` is a merged view. Back up relevant keys and remove only entries positively identified as belonging to this extension, never shared parent keys. The exact registrations present in each historical release have not been independently verified.
+## Uninstall
 
-**Migration from earlier per-user installations:** Machine-wide unregistration does not remove legacy HKCU registration entries. Before treating an upgrade or uninstall as complete, inspect `HKCU\Software\Classes\CLSID\{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}` (overlay COM class), `HKCU\Software\Classes\CLSID\{4A26024B-5499-45BE-A23F-4A65E88888D0}` (context COM class), and `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\AlternateStreamOverlayIcon` (overlay identifier) for each account that previously installed the extension. The legacy per-user installer also wrote shell-handler entries under `HKCU\Software\Classes\*\ShellEx` and `HKCU\Software\Classes\Directory\ShellEx`. Remove only entries confirmed to belong to this extension; do not delete shared parent keys or unrelated handlers.
-
-## Testing and diagnostics
-
-The repository includes automated smoke tests and read-only registration diagnostics.
-
-### Alternate data stream smoke tests
-
-Build the solution and run:
+Open an elevated terminal and unregister **the DLL from its installed location**:
 
 ```powershell
-.\src\tests\Smoke-AlternateStreams.ps1 -ExePath .\src\x64\Release\altstrm.exe
+regsvr32.exe /u "C:\Program Files\AlternateStreamOverlay\AlternateStreamOverlay.dll"
 ```
 
-The main CI workflow builds both supported configurations and runs the ADS smoke tests.
+Restart Explorer or sign out and back in if necessary, then remove the installation folder. **Unregister before deleting the DLL.** Uninstallation removes shell integration; it does not modify or erase alternate data streams on your files.
 
-### Property-sheet handler registration
+When upgrading, unregister the old installed DLL before registering a new one. Older releases and per-user installations may require additional cleanup; see the [migration guide](docs/MIGRATION.md). Do not manually delete registry entries without verifying ownership.
 
-Verify that property-sheet handlers are registered and context-menu entries are absent:
+## How does this differ from the original?
 
-```powershell
-.\src\tests\Test-ShellHandlerRegistration.ps1
-```
+This is a maintained fork of [Lee Benfield's AlternateStreamOverlay](https://www.benf.org/other/alternatestreamoverlay/index.html), not a new unrelated product.
 
-The script checks property-sheet registrations for files and directories, confirms that the extension's legacy context-menu keys are absent, and validates the associated COM server path and threading model.
+| Area | Original project | This maintained fork |
+| --- | --- | --- |
+| Explorer integration | Alternate stream discovery and shell integration | Icon overlay and **Properties → Alternate Streams** tab |
+| Stream inspection | Original Windows shell-extension behavior | Bounded text and hex preview, including feedback for unreadable streams |
+| Enumeration | Older Windows compatibility and historical stream-enumeration paths | Native Windows 10+ stream enumeration with additional malformed-data validation |
+| Architecture | Historical 32-bit and 64-bit support | 64-bit only, Windows 10/11 target |
+| Additional tooling | Original shell-extension functionality | Unicode-aware `altstrm.exe`, regression tests and registration diagnostics |
 
-### Explorer overlay registration
+**Important change:** The fork deliberately **removes the Explorer context-menu command**. Open the file or directory's Properties dialog to inspect its streams instead.
 
-Inspect overlay registrations (the extension installs machine-wide):
+The [changelog](CHANGELOG.md) contains the detailed development history and preserves the original project's historical notes.
 
-```powershell
-.\src\tests\Get-OverlayRegistration.ps1
-```
+## Troubleshooting
 
-The script reports registered overlay identifiers and their effective COM server paths, warning when the extension's overlay registration is missing or its COM server cannot be found.
+**The Alternate Streams tab is missing.** Confirm that you registered the x64 DLL with administrator privileges, that you opened Properties for a local supported file or directory, and that the extension is still installed at its registered path. The extension may decline paths that are remote, offline or redirected.
 
-Both diagnostic scripts are read-only. They run in warning-only mode by default unless strict validation options such as `-FailOnIssues` or `-RequireRegistration` are supplied.
+**The icon overlay is missing.** Windows has limited overlay-handler capacity; another application's overlay may take precedence. Missing overlays do not necessarily mean registration failed or that a file has no alternate streams.
 
-The separate `shell-registration.yml` workflow validates registration on an isolated Windows runner and unregisters the extension during cleanup.
+**A preview says it is unavailable.** Some enumerated names are not suitable for path-based preview, and other streams may be inaccessible. The extension does not attempt to bypass those restrictions.
 
-## Releases
+**Upgrading an old installation fails.** Unregister the old DLL from its original location and consult the [migration guide](docs/MIGRATION.md).
 
-Official Windows x64 release builds are staged through the manually triggered GitHub Actions workflow. See [the release procedure](docs/RELEASING.md) for version checks, release artifact verification, and publication requirements.
+## Documentation
 
-## Known limitations
-
-**Explorer overlay limits:** Windows Explorer supports only a limited number of shell icon overlay handlers. Other installed applications compete for these slots, so a correctly registered overlay is not guaranteed to appear.
-
-**Registration versus activation:** Successful registration diagnostics confirm registry configuration, not that Explorer has loaded the extension or displayed its UI. Actual integration must be verified in Explorer.
-
-**Platform coverage:** Windows Server versions are currently untested. Only x64 Debug and Release builds are supported.
+- [Development, builds, tests and architecture](docs/DEVELOPMENT.md)
+- [Upgrading older installations and registry diagnostics](docs/MIGRATION.md)
+- [Release procedure](docs/RELEASING.md)
+- [Changelog](CHANGELOG.md)
 
 ## Credits
 
-Originally developed by [Lee Benfield](https://www.benf.org/other/alternatestreamoverlay/index.html). Original attribution and historical source comments are preserved.
+Originally developed by [Lee Benfield](https://www.benf.org/other/alternatestreamoverlay/index.html). Historical attribution is preserved.
 
-[fingerprint](https://icons8.com/icon/oNI1jC8ljJ7X/fingerprint) icon by [Icons8](https://icons8.com)
+Fingerprint icon by [Icons8](https://icons8.com/icon/oNI1jC8ljJ7X/fingerprint).
