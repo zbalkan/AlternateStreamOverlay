@@ -532,6 +532,61 @@ namespace AlternateStreamTests
         }
     };
 
+    TEST_CLASS(PreviewNoticeTests)
+    {
+    public:
+        TEST_METHOD(DistinguishesIncompleteInventoryFromUnsafeNames)
+        {
+            const auto clean = FormatPreviewDisplayText(false, false, L"Preview");
+            Assert::AreEqual(L"Preview", clean.c_str());
+
+            const auto unsafe = FormatPreviewDisplayText(false, true, L"Preview");
+            Assert::IsTrue(unsafe.find(L"Some stream names cannot be previewed safely.") !=
+                std::wstring::npos);
+            Assert::IsTrue(unsafe.find(L"Stream enumeration is incomplete or failed.") ==
+                std::wstring::npos);
+            Assert::IsTrue(unsafe.find(L"\r\n\r\nPreview") != std::wstring::npos);
+
+            const auto incomplete = FormatPreviewDisplayText(true, false, L"Preview");
+            Assert::IsTrue(incomplete.find(L"Stream enumeration is incomplete or failed.") !=
+                std::wstring::npos);
+            Assert::IsTrue(incomplete.find(L"Some stream names cannot be previewed safely.") ==
+                std::wstring::npos);
+
+            const auto both = FormatPreviewDisplayText(true, true, L"Preview");
+            Assert::IsTrue(both.find(L"Stream enumeration is incomplete or failed.") !=
+                std::wstring::npos);
+            Assert::IsTrue(both.find(L"Some stream names cannot be previewed safely.") !=
+                std::wstring::npos);
+            Assert::IsTrue(both.find(L"\r\n\r\nPreview") != std::wstring::npos);
+        }
+
+        TEST_METHOD(NoticeSurvivesLoadingFailureAndEmptyPreviews)
+        {
+            const auto empty = FormatPreviewDisplayText(false, false, L"");
+            Assert::IsTrue(empty.empty());
+
+            const auto warningOnly = FormatPreviewDisplayText(false, true, L"");
+            Assert::AreEqual(L"Some stream names cannot be previewed safely.",
+                warningOnly.c_str());
+
+            const auto loading = FormatPreviewDisplayText(false, true,
+                L"Loading alternate stream...");
+            Assert::IsTrue(loading.find(L"Some stream names cannot be previewed safely.") !=
+                std::wstring::npos);
+            Assert::IsTrue(loading.find(L"Loading alternate stream...") != std::wstring::npos);
+
+            const auto failure = FormatPreviewDisplayText(true, true,
+                L"Unable to read alternate stream.");
+            Assert::IsTrue(failure.find(L"Stream enumeration is incomplete or failed.") !=
+                std::wstring::npos);
+            Assert::IsTrue(failure.find(L"Some stream names cannot be previewed safely.") !=
+                std::wstring::npos);
+            Assert::IsTrue(failure.find(L"Unable to read alternate stream.") !=
+                std::wstring::npos);
+        }
+    };
+
     TEST_CLASS(ExplorerPathPolicyTests)
     {
     public:

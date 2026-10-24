@@ -65,4 +65,8 @@ std::wstring FormatHexPreview(const BYTE* data, size_t size);
 std::wstring FormatStreamPreview(const BYTE* data, size_t size,
                                  bool asHex);
 
+// Combine enumeration warnings with the current property-page preview message.
+std::wstring FormatPreviewDisplayText(bool incomplete, bool unsafeNames,
+                                      LPCWSTR message);
+
 #endif // _ALTSTRM_COMMON_H_
