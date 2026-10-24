@@ -200,12 +200,7 @@ StreamEnumeration AlternateStreamReader::EnumerateStreams(HANDLE file, bool coll
 
         // Inventory is lossless. Path safety belongs to the preview consumer.
         if (collectNames)
-        {
-            if (!defaultStream && !stream_info_detail::IsNamedDataStreamName(
-                record.name, record.nameBytes / sizeof(WCHAR)))
-                ++result.undisplayableNames;
             result.streams.emplace_back(record.name, record.nameBytes / sizeof(WCHAR));
-        }
 
         if (record.nextOffset == 0)
             return result;
@@ -253,8 +248,7 @@ bool AlternateStreamReader::HasAlternateStreams(LPCWSTR filename) const
     return IndicatesAlternateStreams(EnumerateStreams(filename, false));
 }
 
-std::wstring FormatPreviewDisplayText(bool incomplete, bool unsafeNames,
-                                      LPCWSTR message)
+std::wstring FormatPreviewDisplayText(bool incomplete, LPCWSTR message)
 {
     std::wstring display;
     if (incomplete)
@@ -264,12 +258,6 @@ std::wstring FormatPreviewDisplayText(bool incomplete, bool unsafeNames,
             L"Some stream names may be unavailable for preview.\r\n"
             L"Do not interpret this inventory as a clean result.";
     }
-    if (unsafeNames)
-    {
-        if (!display.empty())
-            display += L"\r\n";
-        display += L"Some stream names cannot be previewed safely.";
-    }
     if (message != nullptr && *message != L'\0')
     {
         if (!display.empty())
@@ -277,6 +265,45 @@ std::wstring FormatPreviewDisplayText(bool incomplete, bool unsafeNames,
         display += message;
     }
     return display;
+}
+
+std::wstring EscapeStreamDisplay(const std::wstring& name)
+    {
+        constexpr wchar_t hex[] = L"0123456789ABCDEF";
+        std::wstring output;
+        for (wchar_t ch : name)
+        {
+            const auto value = static_cast<unsigned int>(ch);
+            const bool unsafe = value < 0x20 || (value >= 0x7F && value <= 0x9F) ||
+                value == 0x061C || value == 0x200E || value == 0x200F ||
+                (value >= 0x202A && value <= 0x202E) ||
+                (value >= 0x2066 && value <= 0x2069) ||
+                (value >= 0xD800 && value <= 0xDFFF);
+            if (ch == L'\\')
+            {
+                output += LR"(\\)";
+                continue;
+            }
+            if (!unsafe)
+            {
+                output += ch;
+                continue;
+            }
+            output += L"\\u";
+            output += hex[(value >> 12) & 15];
+            output += hex[(value >> 8) & 15];
+            output += hex[(value >> 4) & 15];
+            output += hex[value & 15];
+        }
+        return output;
+    }
+
+std::wstring FormatStreamInventoryLabel(const std::wstring& name)
+{
+    std::wstring label = EscapeStreamDisplay(name);
+    if (!stream_info_detail::IsNamedDataStreamName(name.data(), name.size()))
+        label += L" - Preview unavailable";
+    return label;
 }
 
 std::wstring FormatHexPreview(const BYTE* data, size_t size)
