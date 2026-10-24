@@ -11,6 +11,26 @@
 
 namespace
 {
+    // FindFirstFileW handles require FindClose, including during exceptions.
+    class FindHandle
+    {
+    public:
+        explicit FindHandle(HANDLE handle) noexcept : handle_(handle) {}
+        ~FindHandle()
+        {
+            if (handle_ != INVALID_HANDLE_VALUE && handle_ != nullptr)
+                FindClose(handle_);
+        }
+
+        FindHandle(const FindHandle&) = delete;
+        FindHandle& operator=(const FindHandle&) = delete;
+
+        HANDLE get() const noexcept { return handle_; }
+
+    private:
+        HANDLE handle_;
+    };
+
     // Write UTF-16 directly to a console; redirected output uses UTF-8.
     // Caller escapes unsafe code units before formatting untrusted paths.
     bool WriteOutput(const std::wstring& text, DWORD standardHandle = STD_OUTPUT_HANDLE)
@@ -190,9 +210,8 @@ int Run(int argc, wchar_t* argv[])
         return 1;
     }
 
-    const bool success = ReportMatches(reader, search, findData, directory);
-    FindClose(search);
-    return success ? 0 : 1;
+    const FindHandle searchGuard(search);
+    return ReportMatches(reader, searchGuard.get(), findData, directory) ? 0 : 1;
 }
 
 
