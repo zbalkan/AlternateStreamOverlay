@@ -561,6 +561,34 @@ namespace AlternateStreamTests
                 FormatStreamInventoryLabel(L":safe:$DATA").c_str());
         }
 
+        TEST_METHOD(CommonInvisibleStreamCharactersAreEscaped)
+        {
+            struct Case { wchar_t character; const wchar_t* escaped; };
+            const Case cases[] = {
+                { 0x00AD, L"\\u00AD" },
+                { 0x200B, L"\\u200B" },
+                { 0x200C, L"\\u200C" },
+                { 0x200D, L"\\u200D" },
+                { 0x2028, L"\\u2028" },
+                { 0x2029, L"\\u2029" },
+                { 0x2060, L"\\u2060" },
+                { 0x2064, L"\\u2064" },
+                { 0xFEFF, L"\\uFEFF" }
+            };
+            for (const auto& test : cases)
+            {
+                std::wstring name = L":re";
+                name += test.character;
+                name += L"port:$DATA";
+                const auto display = EscapeStreamDisplay(name);
+                Assert::IsTrue(display.find(test.escaped) != std::wstring::npos);
+                Assert::AreNotEqual(EscapeStreamDisplay(L":report:$DATA").c_str(),
+                    display.c_str());
+                Assert::IsTrue(FormatStreamInventoryLabel(name).find(test.escaped) !=
+                    std::wstring::npos);
+            }
+        }
+
         TEST_METHOD(ValidSurrogatePairsRemainReadable)
         {
             std::wstring name = L":emoji-";
