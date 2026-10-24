@@ -511,20 +511,37 @@ BOOL OnInitDialog(HWND hWnd, LPARAM lParam)
     HWND textBox = GetDlgItem(hWnd, IDC_EDIT1);
 
     const std::vector<std::wstring>& streams = dialogState->streams;
-    for (const auto& stream : streams)
+    bool inventoryDisplayFailed = comboBox == nullptr;
+    if (!inventoryDisplayFailed)
     {
         try
         {
-            const std::wstring label = FormatStreamInventoryLabel(stream);
-            if (SendMessage(comboBox, CB_ADDSTRING, 0,
-                    reinterpret_cast<LPARAM>(label.c_str())) == CB_ERR)
-                return FALSE;
+            for (const auto& stream : streams)
+            {
+                const std::wstring label = FormatStreamInventoryLabel(stream);
+                if (SendMessage(comboBox, CB_ADDSTRING, 0,
+                        reinterpret_cast<LPARAM>(label.c_str())) < 0)
+                {
+                    inventoryDisplayFailed = true;
+                    break;
+                }
+            }
         }
         catch (...)
         {
-            // Do not propagate allocations through the shell's dialog callback.
-            return FALSE;
+            // Never expose a partial inventory after display allocation fails.
+            inventoryDisplayFailed = true;
         }
+    }
+    if (inventoryDisplayFailed)
+    {
+        if (comboBox != nullptr)
+        {
+            SendMessage(comboBox, CB_RESETCONTENT, 0, 0);
+            EnableWindow(comboBox, FALSE);
+        }
+        SetWindowTextW(textBox, L"Unable to display complete stream inventory.");
+        return TRUE;
     }
 
     // Each dialog owns its preview font. The COM object may outlive the page
