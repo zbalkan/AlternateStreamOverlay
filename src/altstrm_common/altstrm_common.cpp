@@ -286,7 +286,7 @@ void AppendHexEscape(std::wstring& output, unsigned int value, int shift)
         output += hex[(value >> shift) & 15];
 }
 
-bool AppendSurrogatePair(const std::wstring& name, size_t& i,
+bool AppendSurrogatePair(const std::wstring& name, size_t i,
                          std::wstring& output)
 {
     const auto high = static_cast<unsigned int>(name[i]);
@@ -306,7 +306,6 @@ bool AppendSurrogatePair(const std::wstring& name, size_t& i,
         output += name[i];
         output += name[i + 1];
     }
-    ++i;
     return true;
 }
 } // namespace
@@ -314,10 +313,14 @@ bool AppendSurrogatePair(const std::wstring& name, size_t& i,
 std::wstring EscapeStreamDisplay(const std::wstring& name)
 {
     std::wstring output;
-    for (size_t i = 0; i < name.size(); ++i)
+    size_t i = 0;
+    while (i < name.size())
     {
         if (AppendSurrogatePair(name, i, output))
+        {
+            i += 2;
             continue;
+        }
 
         const auto ch = name[i];
         const auto value = static_cast<unsigned int>(ch);
@@ -332,6 +335,7 @@ std::wstring EscapeStreamDisplay(const std::wstring& name)
             AppendHexEscape(output, value, 12);
         else
             output += ch;
+        ++i;
     }
     return output;
 }
