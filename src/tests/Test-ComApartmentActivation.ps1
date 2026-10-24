@@ -140,8 +140,9 @@ $results | Format-Table ClassName, Model, Initialize, Apartment, Activation, Que
 $results | ConvertTo-Json -Depth 4 | Write-Output
 
 $success = '0x00000000'
+$alreadyInitialized = '0x00000001'
 $failures = @($results | Where-Object {
-    $_.Error -or $_.Initialize -ne $success -or
+    $_.Error -or $_.Initialize -notin @($success, $alreadyInitialized) -or
     ($_.Model -eq 'STA' -and ($_.Activation -ne $success -or $_.Query -ne $success))
 })
 if ($failures.Count -gt 0) {
