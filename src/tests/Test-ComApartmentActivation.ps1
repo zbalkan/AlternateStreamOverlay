@@ -118,7 +118,7 @@ try {
         try {
             $model = [string]$key.GetValue('ThreadingModel', '')
             if ($model -ine $ExpectedRegistration) {
-                throw "$clsid: expected $ExpectedRegistration, got $model"
+                throw ${clsid}: expected $ExpectedRegistration, got $model"
             }
         }
         finally { $key.Dispose() }

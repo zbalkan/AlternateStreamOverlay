@@ -69,7 +69,7 @@ try {
     }
     $serverStatus = if ([string]::IsNullOrWhiteSpace($server)) { 'Missing COM server' }
                     elseif (-not (Test-Path -LiteralPath $expandedServer -PathType Leaf)) { 'Server file missing' }
-                    elseif ($threading -ine 'Both') { 'Unexpected threading model' }
+                    elseif ($threading -ine 'Apartment') { 'Unexpected threading model' }
                     else { 'OK' }
 
     $results | Format-Table Kind, RegistryKey, CLSID, Status -AutoSize | Out-Host
@@ -82,8 +82,25 @@ try {
         Status = $serverStatus
     } | Format-List | Out-Host
 
+    $overlayClsid = '{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}'
+    $overlayKey = $root.OpenSubKey("CLSID\$overlayClsid\InprocServer32")
+    $overlayThreading = $null
+    $overlayServer = $null
+    if ($null -ne $overlayKey) {
+        try {
+            $overlayThreading = [string]$overlayKey.GetValue('ThreadingModel', '')
+            $overlayServer = [string]$overlayKey.GetValue('', '')
+        }
+        finally { $overlayKey.Dispose() }
+    }
+    $overlayStatus = if ([string]::IsNullOrWhiteSpace($overlayServer)) { 'Missing COM server' }
+                     elseif (-not (Test-Path -LiteralPath ([Environment]::ExpandEnvironmentVariables($overlayServer)) -PathType Leaf)) { 'Server file missing' }
+                     elseif ($overlayThreading -ine 'Apartment') { 'Unexpected threading model' }
+                     else { 'OK' }
+    Write-Host "Overlay COM threading model: $overlayThreading ($overlayStatus)"
+
     $failures = @($results | Where-Object Status -ne 'OK')
-    if ($failures.Count -gt 0 -or $serverStatus -ne 'OK') {
+    if ($failures.Count -gt 0 -or $serverStatus -ne 'OK' -or $overlayStatus -ne 'OK') {
         $message = "Shell handler registration has $($failures.Count) handler issue(s); COM server status: $serverStatus."
         if ($FailOnIssues) { throw $message }
         Write-Warning $message

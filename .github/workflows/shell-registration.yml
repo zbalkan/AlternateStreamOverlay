@@ -102,6 +102,38 @@ jobs:
             $registered = $true
             & ./src/tests/Test-ShellHandlerRegistration.ps1 -FailOnIssues
             & ./src/tests/Get-OverlayRegistration.ps1 -RequireRegistration
+            # Compare exactly the same DLL under the previous Both model and
+            # the proposed Apartment model. Restore the registration even if
+            # a probe fails; the outer finally unregisters the DLL.
+            $hive = [Microsoft.Win32.RegistryKey]::OpenBaseKey(
+              [Microsoft.Win32.RegistryHive]::LocalMachine,
+              [Microsoft.Win32.RegistryView]::Registry64)
+            $clsids = @(
+              '{4A26024B-5499-45BE-A23F-4A65E88888D0}',
+              '{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}'
+            )
+            try {
+              $keys = @()
+              foreach ($clsid in $clsids) {
+                $key = $hive.OpenSubKey("SOFTWARE\Classes\CLSID\$clsid\InprocServer32", $true)
+                if ($null -eq $key) { throw "Missing writable registration for $clsid" }
+                $keys += $key
+              }
+              try {
+                foreach ($key in $keys) { $key.SetValue('ThreadingModel', 'Both') }
+                & ./src/tests/Test-ComApartmentActivation.ps1 -ExpectedRegistration Both
+                foreach ($key in $keys) { $key.SetValue('ThreadingModel', 'Apartment') }
+                & ./src/tests/Test-ComApartmentActivation.ps1 -ExpectedRegistration Apartment
+              }
+              finally {
+                foreach ($key in $keys) {
+                  try { $key.SetValue('ThreadingModel', 'Apartment') }
+                  finally { $key.Dispose() }
+                }
+              }
+            }
+            finally { $hive.Dispose() }
+
           }
           finally {
             if ($registered) {
