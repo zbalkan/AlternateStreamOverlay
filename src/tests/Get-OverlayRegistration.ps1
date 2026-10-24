@@ -94,4 +94,36 @@ else {
 if ($RequireRegistration -and ($mine.Count -eq 0 -or @($mine | Where-Object { [string]::IsNullOrWhiteSpace($_.InprocServer32) -or -not (Test-Path -LiteralPath ([Environment]::ExpandEnvironmentVariables($_.InprocServer32)) -PathType Leaf) }).Count -gt 0)) {
     throw 'AlternateStreamOverlay icon overlay registration is absent or has an invalid COM server.'
 }
+if ($RequireRegistration) {
+    # This shell extension is activated by Explorer using its CLSID.
+    # Fresh installations must not publish unused ATL-generated ProgIDs.
+    $legacyProgIds = @(
+        'AlternateStreamOverlay.AlternateStrea.1',
+        'AlternateStreamOverlay.AlternateStreamO'
+    )
+    $classes = [Microsoft.Win32.RegistryKey]::OpenBaseKey(
+        [Microsoft.Win32.RegistryHive]::ClassesRoot, $view)
+    try {
+        foreach ($progId in $legacyProgIds) {
+            $key = $classes.OpenSubKey($progId)
+            if ($null -ne $key) {
+                $key.Dispose()
+                throw "Unused overlay ProgID was registered: $progId"
+            }
+        }
+        $clsidKey = $classes.OpenSubKey("CLSID\$expectedClsid")
+        if ($null -eq $clsidKey) { throw "Missing overlay CLSID: $expectedClsid" }
+        try {
+            foreach ($name in @('ProgID', 'VersionIndependentProgID')) {
+                $key = $clsidKey.OpenSubKey($name)
+                if ($null -ne $key) {
+                    $key.Dispose()
+                    throw "Unused CLSID\$expectedClsid\$name was registered"
+                }
+            }
+        }
+        finally { $clsidKey.Dispose() }
+    }
+    finally { $classes.Dispose() }
+}
 Write-Host 'Note: registration counts are not Explorer slot assignments. Loaded overlays depend on Explorer and other installed handlers.'
