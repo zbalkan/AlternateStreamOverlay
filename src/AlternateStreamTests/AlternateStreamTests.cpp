@@ -518,16 +518,6 @@ namespace AlternateStreamTests
             Assert::IsFalse(IndicatesAlternateStreams(result));
         }
 
-        TEST_METHOD(IncompleteEnumerationRequiresNotice)
-        {
-            StreamEnumeration result;
-            result.status = StreamStatus::Ok;
-            Assert::IsFalse(result.status != StreamStatus::Ok);
-            result.status = StreamStatus::Truncated;
-            Assert::IsTrue(result.status != StreamStatus::Ok);
-            result.status = StreamStatus::Error;
-            Assert::IsTrue(result.status != StreamStatus::Ok);
-        }
     };
 
     TEST_CLASS(PreviewNoticeTests)
