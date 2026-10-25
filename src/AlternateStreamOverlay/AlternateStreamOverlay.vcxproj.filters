@@ -81,10 +81,7 @@
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
-    <Image Include="ADS.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="MOTW.ico">
+    <Image Include="ASO.ico">
       <Filter>Resource Files</Filter>
     </Image>
   </ItemGroup>
