@@ -47,8 +47,6 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="AlternateStreamContext.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -83,7 +81,5 @@
     <Image Include="ASO.ico">
       <Filter>Resource Files</Filter>
     </Image>
-  </ItemGroup>
-  <ItemGroup>
   </ItemGroup>
 </Project>

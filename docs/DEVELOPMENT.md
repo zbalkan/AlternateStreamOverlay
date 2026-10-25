@@ -58,6 +58,16 @@ The main GitHub workflow builds Debug and Release x64, runs native tests and smo
 - Balance COM references, `STGMEDIUM` ownership, thread-pool work and module lifetime.
 - Preserve registration/unregistration behavior; do not delete unrelated registry entries.
 
+## Accepted preview architecture
+
+The asynchronous preview implementation is the accepted design. The following proposed simplifications **will not be implemented**:
+
+- Replace the registered preview-completion window message and its registration-failure checks with a different notification mechanism.
+- Simplify the allocation-free error-reporting path used when preview work fails.
+- Remove or collapse the worker loop that coalesces superseded selection requests.
+
+These mechanisms protect Explorer responsiveness and preview lifetime/selection behavior. They are not outstanding cleanup tasks. Revisit the design only for a separately demonstrated correctness or security defect.
+
 ## Registration testing
 
 Use a disposable Windows 10 version 2004+ x64 or Windows 11 x64 test machine or snapshot for shell integration testing. Register the DLL from an elevated console as described in the [user README](../README.md), test Explorer Properties for files and directories, then unregister before deleting the DLL. Native tests do **not** prove Explorer has loaded or activated the extension.

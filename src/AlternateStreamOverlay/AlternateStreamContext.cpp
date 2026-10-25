@@ -1,12 +1,10 @@
 #include "stdafx.h"
 #include "AlternateStreamContext.h"
 #include <algorithm>
-#include <strsafe.h>
 #include <vector>
 #include <string>
 #include <memory>
 #include <new>
-#include <exception>
 #include "altstrm_common.h"
 #include "SrwLock.h"
 #include "stream_info_detail.h"

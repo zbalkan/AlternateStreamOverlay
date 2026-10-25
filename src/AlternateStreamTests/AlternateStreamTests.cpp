@@ -517,7 +517,6 @@ namespace AlternateStreamTests
             result.hasNamedStreams = true;
             Assert::IsFalse(IndicatesAlternateStreams(result));
         }
-
     };
 
     TEST_CLASS(PreviewNoticeTests)
