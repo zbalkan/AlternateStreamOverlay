@@ -249,6 +249,24 @@ namespace
         return GetClassFactory(moduleHandle, clsid);
     }
 
+    Microsoft::WRL::ComPtr<IClassFactory> GetMotwClassFactory(HMODULE moduleHandle)
+    {
+        const CLSID clsid = { 0x0D5A924E, 0x7498, 0x4AAF,
+            { 0x8D, 0x27, 0x36, 0xD6, 0x8A, 0x65, 0x3F, 0x5D } };
+        return GetClassFactory(moduleHandle, clsid);
+    }
+
+    void WriteTestStream(const std::wstring& path, const char* bytes, DWORD size)
+    {
+        HandleW stream(CreateFileW(path.c_str(), GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr));
+        Assert::IsTrue(stream.get() != INVALID_HANDLE_VALUE);
+        DWORD written = 0;
+        Assert::IsTrue(WriteFile(stream.get(), bytes, size, &written, nullptr) != FALSE);
+        Assert::AreEqual(size, written);
+    }
+
     BOOL CALLBACK CapturePropertyPage(HPROPSHEETPAGE page, LPARAM context)
     {
         *reinterpret_cast<HPROPSHEETPAGE*>(context) = page;
@@ -383,6 +401,78 @@ namespace AlternateStreamTests
                 (std::wstring(fixture.path.data()) + L":overlay-test").c_str()) != FALSE);
             Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
                 overlay->IsMemberOf(fixture.path.data(), FILE_ATTRIBUTE_NORMAL));
+        }
+
+        TEST_METHOD(DualOverlaysAreMutuallyExclusive)
+        {
+            ScopedModule module(GetOverlayDllPath().c_str());
+            auto genericFactory = GetOverlayClassFactory(module.handle);
+            auto motwFactory = GetMotwClassFactory(module.handle);
+            Microsoft::WRL::ComPtr<IShellIconOverlayIdentifier> generic;
+            Microsoft::WRL::ComPtr<IShellIconOverlayIdentifier> motw;
+            Assert::IsTrue(SUCCEEDED(genericFactory->CreateInstance(nullptr,
+                __uuidof(IShellIconOverlayIdentifier),
+                reinterpret_cast<void**>(generic.GetAddressOf()))));
+            Assert::IsTrue(SUCCEEDED(motwFactory->CreateInstance(nullptr,
+                __uuidof(IShellIconOverlayIdentifier),
+                reinterpret_cast<void**>(motw.GetAddressOf()))));
+
+            TemporaryFile fixture;
+            const auto file = fixture.path.data();
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                generic->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                motw->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
+
+            const std::wstring genericPath = std::wstring(file) + L":other";
+            const std::wstring motwPath = std::wstring(file) + L":Zone.Identifier";
+            CreateStream(genericPath);
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                generic->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                motw->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
+
+            CreateStream(motwPath);
+            // A stream name alone does not establish recognized MOTW.
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                generic->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                motw->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
+
+            constexpr char validZone[] = "[ZoneTransfer]\\r\\nZoneId=3\\r\\n";
+            WriteTestStream(motwPath, validZone, sizeof(validZone) - 1);
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                generic->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                motw->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
+
+            constexpr char invalidZone[] = "[ZoneTransfer]\\r\\nZoneId=abc\\r\\n";
+            WriteTestStream(motwPath, invalidZone, sizeof(invalidZone) - 1);
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                generic->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                motw->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
+        }
+
+        TEST_METHOD(MotwOverlayHasSeparateIconIdentity)
+        {
+            ScopedModule module(GetOverlayDllPath().c_str());
+            auto factory = GetMotwClassFactory(module.handle);
+            Microsoft::WRL::ComPtr<IShellIconOverlayIdentifier> motw;
+            Assert::IsTrue(SUCCEEDED(factory->CreateInstance(nullptr,
+                __uuidof(IShellIconOverlayIdentifier),
+                reinterpret_cast<void**>(motw.GetAddressOf()))));
+            int priority = -1;
+            Assert::AreEqual(static_cast<HRESULT>(S_OK), motw->GetPriority(&priority));
+            Assert::AreEqual(5, priority);
+            std::vector<WCHAR> iconPath(32768);
+            int index = -1;
+            DWORD flags = 0;
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                motw->GetOverlayInfo(iconPath.data(), static_cast<int>(iconPath.size()),
+                    &index, &flags));
+            Assert::AreEqual(1, index);
+            Assert::AreEqual(static_cast<DWORD>(ISIOI_ICONFILE | ISIOI_ICONINDEX), flags);
         }
 
         TEST_METHOD(ContextHandlerDoesNotExposeContextMenu)
