@@ -141,7 +141,7 @@ jobs:
           $tag = "v$env:RELEASE_VERSION"
           $notesPath = 'dist\release-notes.txt'
           try {
-            & .\src\tests\New-ReleaseNotes.ps1 -Version $env:RELEASE_VERSION -OutputPath $notesPath
+            & .\.github\scripts\New-ReleaseNotes.ps1 -Version $env:RELEASE_VERSION -OutputPath $notesPath
           }
           catch {
             Write-Warning "Changelog notes generation failed; using editable draft notes: $_"
