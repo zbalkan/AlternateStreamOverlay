@@ -439,14 +439,14 @@ namespace AlternateStreamTests
             Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
                 motw->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
 
-            constexpr char validZone[] = "[ZoneTransfer]\\r\\nZoneId=3\\r\\n";
+            constexpr char validZone[] = "[ZoneTransfer]\r\nZoneId=3\r\n";
             WriteTestStream(motwPath, validZone, sizeof(validZone) - 1);
             Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
                 generic->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
             Assert::AreEqual(static_cast<HRESULT>(S_OK),
                 motw->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
 
-            constexpr char invalidZone[] = "[ZoneTransfer]\\r\\nZoneId=abc\\r\\n";
+            constexpr char invalidZone[] = "[ZoneTransfer]\r\nZoneId=abc\r\n";
             WriteTestStream(motwPath, invalidZone, sizeof(invalidZone) - 1);
             Assert::AreEqual(static_cast<HRESULT>(S_OK),
                 generic->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
