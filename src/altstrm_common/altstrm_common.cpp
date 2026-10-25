@@ -328,10 +328,14 @@ namespace
             nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr));
         if (stream.get() == INVALID_HANDLE_VALUE)
             return false;
-        std::array<BYTE, 4097> buffer = {};
+        // Read one byte beyond the accepted 4 KiB maximum. The single
+        // ReadFile call cannot overrun this fixed-size destination.
+        std::array<BYTE, 4097> metadata = {};
         DWORD read = 0;
-        return ReadFile(stream.get(), buffer.data(), static_cast<DWORD>(buffer.size()),
-            &read, nullptr) && IsValidZoneTransfer(buffer.data(), read);
+        if (!ReadFile(stream.get(), metadata.data(),
+                      static_cast<DWORD>(metadata.size()), &read, nullptr))
+            return false;
+        return read <= metadata.size() && IsValidZoneTransfer(metadata.data(), read);
     }
 }
 
