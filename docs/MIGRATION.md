@@ -1,5 +1,7 @@
 # Upgrading and legacy registration cleanup
 
+Current builds require an x64 installation of Windows 10 version 2004 (build 19041) or later, or Windows 11 x64. They cannot load into a 32-bit Explorer process and no ARM64 build is supplied.
+
 For normal installation and uninstallation of the current build, use the [user README](../README.md). This page addresses migrations from older installations of the original project or previous fork revisions.
 
 ## Recommended upgrade
