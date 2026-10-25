@@ -86,8 +86,6 @@ namespace
         return WriteOutput(text, STD_ERROR_HANDLE);
     }
 
-    // Escape UTF-16 code units that cannot be represented unambiguously
-    // in terminal output. Keep native stream names unchanged for I/O.
     void PrintUsage(int argc, wchar_t* argv[])
     {
         const std::wstring program = argc > 0 ? argv[0] : L"altstrm";
