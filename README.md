@@ -8,7 +8,7 @@ A Windows Explorer extension for **finding and inspecting NTFS alternate data st
 
 A file on NTFS can contain additional named data streams beyond its normal contents. Those streams are generally not visible in the usual Explorer file listing. AlternateStreamOverlay helps you discover them without opening a separate forensic tool.
 
-- **Explorer icon overlay:** Marks files that have named alternate streams, when Explorer has an available overlay slot.
+- **Explorer icon overlays:** A layered badge identifies named alternate data streams without recognized Mark of the Web (MOTW); a download-arrow badge identifies recognized `Zone.Identifier` zone metadata. Explorer may suppress either overlay when slots are exhausted.
 - **Alternate Streams property tab:** Lists the named streams of a selected file or directory. Select one to view a bounded text or hexadecimal preview.
 - **Command-line listing:** Includes `altstrm.exe` for listing streams from a terminal.
 
@@ -32,7 +32,7 @@ Windows 10 32-bit editions are unsupported (Windows 11 itself is 64-bit only). W
    regsvr32.exe "C:\Program Files\AlternateStreamOverlay\AlternateStreamOverlay.dll"
    ```
 
-Registration installs the property-sheet handler and icon-overlay handler for all users. No per-user installation mode is supported. Restart Explorer or sign out and back in if the integration does not appear immediately.
+Registration installs the property-sheet handler and two icon-overlay handlers for all users. No per-user installation mode is supported. Restart Explorer or sign out and back in if the integration does not appear immediately.
 
 If no published release is available, the application can be [built from source](docs/DEVELOPMENT.md).
 
@@ -44,7 +44,7 @@ If no published release is available, the application can be [built from source]
 
 The normal unnamed `::$DATA` stream is excluded because it is the file's primary data, not an alternate stream. Previews are limited to approximately 64 KiB; larger streams are not fully displayed. If a native stream name cannot be opened safely through a Windows path, the tab still lists it but reports that its preview is unavailable.
 
-The overlay is a visual hint, not a complete inventory: Windows limits the number of shell icon overlay handlers Explorer can use, and other installed software competes for those positions. Use the tab or CLI to inspect a particular file even if no icon overlay appears.
+The overlays are visual hints, not a complete inventory: Windows limits the number of shell icon overlay handlers Explorer can use, and other installed software competes for those positions. Use the tab or CLI to inspect a particular file even if no icon overlay appears.
 
 ## Use from the command line
 
