@@ -34,7 +34,6 @@ struct StreamEnumeration
     DWORD error = ERROR_SUCCESS;
     bool hasNamedStreams = false;
     std::vector<std::wstring> streams;
-
 };
 
 // Interpret bounded native enumeration without requiring filesystem fixtures.
