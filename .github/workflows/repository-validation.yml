@@ -31,8 +31,9 @@ jobs:
       - name: Check YAML syntax
         shell: bash
         run: |
-          python3 -m pip install --user --only-binary=:all: 'PyYAML==6.0.2'
-          python3 - <<'PY'
+          python3 -m venv "$RUNNER_TEMP/aso-validation-venv"
+          "$RUNNER_TEMP/aso-validation-venv/bin/python" -m pip install --only-binary=:all: 'PyYAML==6.0.2'
+          "$RUNNER_TEMP/aso-validation-venv/bin/python" - <<'PY'
           from pathlib import Path
           import yaml
           for path in sorted(Path('.github').rglob('*.yml')) + sorted(Path('.github').rglob('*.yaml')):
