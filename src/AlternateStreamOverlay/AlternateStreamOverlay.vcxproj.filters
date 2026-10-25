@@ -45,6 +45,9 @@
     <None Include="AlternateStreamOverlayIcon.rgs">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include="AlternateStreamOverlayMotw.rgs">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AlternateStreamContext.h">
@@ -78,7 +81,10 @@
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
-    <Image Include="ASO.ico">
+    <Image Include="ADS.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="MOTW.ico">
       <Filter>Resource Files</Filter>
     </Image>
   </ItemGroup>
