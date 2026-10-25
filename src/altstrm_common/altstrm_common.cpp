@@ -328,7 +328,8 @@ std::wstring EscapeStreamDisplay(const std::wstring& name)
             value == 0x00AD || value == 0x061C ||
             (value >= 0x200B && value <= 0x200F) ||
             (value >= 0x2028 && value <= 0x202E) ||
-            (value >= 0x2060 && value <= 0x2069) || value == 0xFEFF ||
+            (value >= 0x2060 && value <= 0x2069) ||
+            (value >= 0xFE00 && value <= 0xFE0F) || value == 0xFEFF ||
             (value >= 0xD800 && value <= 0xDFFF);
         if (ch == L'\\')
             output += LR"(\\)";
