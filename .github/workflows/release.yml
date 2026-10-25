@@ -2,11 +2,6 @@ name: Manual Release
 
 on:
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Release version (MAJOR.MINOR.PATCH, without v)'
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -17,7 +12,7 @@ concurrency:
 
 jobs:
   release:
-    name: Build and stage v${{ inputs.version }}
+    name: Build and stage release candidate
     if: github.ref == 'refs/heads/main'
     runs-on: windows-2025
     permissions:
@@ -31,12 +26,8 @@ jobs:
       - name: Validate release version and tag
         shell: pwsh
         env:
-          RELEASE_VERSION: ${{ inputs.version }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          if ($env:RELEASE_VERSION -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
-            throw 'Version must be MAJOR.MINOR.PATCH with no leading v or leading zeroes.'
-          }
           $header = Get-Content -LiteralPath 'src/version.h' -Raw
           $parts = foreach ($name in 'MAJOR', 'MINOR', 'PATCH', 'BUILD') {
             $match = [regex]::Match($header, ('(?m)^\s*#define\s+ASO_VERSION_{0}\s+(\d+)\s*$' -f $name))
@@ -45,10 +36,8 @@ jobs:
           }
           if ($parts[3] -ne 0) { throw 'ASO_VERSION_BUILD must be zero for a release.' }
           $sourceVersion = $parts[0..2] -join '.'
-          if ($sourceVersion -ne $env:RELEASE_VERSION) {
-            throw "Requested $env:RELEASE_VERSION but version.h specifies $sourceVersion."
-          }
-          $tag = "v$env:RELEASE_VERSION"
+          $tag = "v$sourceVersion"
+          "RELEASE_VERSION=$sourceVersion" >> $env:GITHUB_ENV
           $headers = @{
             Authorization = "Bearer $env:GH_TOKEN"
             Accept = 'application/vnd.github+json'
@@ -82,8 +71,6 @@ jobs:
 
       - name: Verify built VERSIONINFO
         shell: pwsh
-        env:
-          RELEASE_VERSION: ${{ inputs.version }}
         run: |
           $expected = "$env:RELEASE_VERSION.0"
           $binaries = @{
@@ -123,8 +110,6 @@ jobs:
 
       - name: Package binaries and checksums
         shell: pwsh
-        env:
-          RELEASE_VERSION: ${{ inputs.version }}
         run: |
           $ErrorActionPreference = 'Stop'
           $folder = "dist\AlternateStreamOverlay-v$env:RELEASE_VERSION-win-x64"
@@ -142,7 +127,7 @@ jobs:
       - name: Upload release candidate artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: release-v${{ inputs.version }}-win-x64
+          name: release-candidate-win-x64
           path: |
             dist/*.zip
             dist/*.sha256
@@ -152,7 +137,6 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_VERSION: ${{ inputs.version }}
         run: |
           $tag = "v$env:RELEASE_VERSION"
           $notesPath = 'dist\release-notes.txt'
