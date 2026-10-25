@@ -129,9 +129,9 @@ IDR_MARKOFTHEWEBOVERLAYICON REGISTRY                "AlternateStreamOverlayMotw.
 
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
-// Temporary art mapping: replace both paths with user-provided designs before release.
-IDI_ICON1               ICON                    "ASO.ico"
-IDI_MOTW_ICON           ICON                    "ASO.ico"
+// Replace the artwork in ADS.ico and MOTW.ico without changing resource IDs.
+IDI_ICON1               ICON                    "ads.ico"
+IDI_MOTW_ICON           ICON                    "motw.ico"
 #endif    // English (U.K.) resources
 /////////////////////////////////////////////////////////////////////////////
 
