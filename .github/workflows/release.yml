@@ -36,7 +36,8 @@ jobs:
           }
           if ($parts[3] -ne 0) { throw 'ASO_VERSION_BUILD must be zero for a release.' }
           $sourceVersion = $parts[0..2] -join '.'
-          if ($sourceVersion -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)
+          $tag = "v$sourceVersion"
+          "RELEASE_VERSION=$sourceVersion" >> $env:GITHUB_ENV
           $headers = @{
             Authorization = "Bearer $env:GH_TOKEN"
             Accept = 'application/vnd.github+json'
