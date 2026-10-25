@@ -15,7 +15,7 @@ The Visual Studio solution (`src/AlternateStreamOverlay.sln`) contains four x64 
 
 The Explorer DLL uses ATL for COM, Win32 SRW locks and purpose-built RAII wrappers for native resources. There is no WIL dependency. Preserve the lifetime requirements of asynchronous preview callbacks and DLL pinning when modifying the worker.
 
-Only Windows 10/11 x64 builds are supported. The solution targets the MSVC toolset specified in the project files and the Windows SDK. See the CI workflow for the currently exercised Visual Studio environment.
+The supported target is Windows 10 version 2004 (build 19041) or later on x64, and Windows 11 on x64. Windows 10 had both 32-bit and 64-bit editions, but this project supports only x64; Windows 11 itself is 64-bit only. ARM64 builds are not provided. Windows 10 version 2004 is a compatibility floor, not an assertion that it remains supported by Microsoft. The solution targets the MSVC toolset specified in the project files and the Windows SDK. See the CI workflow for the currently exercised Visual Studio environment.
 
 ## Build
 
@@ -60,8 +60,12 @@ The main GitHub workflow builds Debug and Release x64, runs native tests and smo
 
 ## Registration testing
 
-Use a disposable Windows x64 test machine or snapshot for shell integration testing. Register the DLL from an elevated console as described in the [user README](../README.md), test Explorer Properties for files and directories, then unregister before deleting the DLL. Native tests do **not** prove Explorer has loaded or activated the extension.
+Use a disposable Windows 10 version 2004+ x64 or Windows 11 x64 test machine or snapshot for shell integration testing. Register the DLL from an elevated console as described in the [user README](../README.md), test Explorer Properties for files and directories, then unregister before deleting the DLL. Native tests do **not** prove Explorer has loaded or activated the extension.
 
 ## Release engineering
 
 Follow [RELEASING.md](RELEASING.md). Releases are staged as drafts and require manual inspection of version metadata, hashes, archive contents and Explorer behavior before publication.
+
+## Historical references
+
+The original shell-extension project cited [FlexHex's alternate-stream article](https://web.archive.org/web/20230201200305/http://www.flexhex.com/docs/articles/alternate-streams.phtml) and [The Complete Idiot's Guide to Writing Shell Extensions](https://web.archive.org/web/20231221020619/https://www.codeproject.com/Articles/441/The-Complete-Idiot-s-Guide-to-Writing-Shell-Extens). These are historical references, not the authority for the current Windows 10/11 implementation.

@@ -85,6 +85,5 @@
     </Image>
   </ItemGroup>
   <ItemGroup>
-    <Text Include="ReadMe.txt" />
   </ItemGroup>
 </Project>

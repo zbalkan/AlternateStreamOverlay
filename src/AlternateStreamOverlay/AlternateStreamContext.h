@@ -2,7 +2,6 @@
 #include "resource.h"       // main symbols
 
 #include <shlobj.h>
-#include <comdef.h>
 #include <vector>
 #include <string>
 #include "SrwLock.h"

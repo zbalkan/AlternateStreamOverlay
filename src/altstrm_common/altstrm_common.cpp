@@ -7,15 +7,8 @@
  * Originally based on the excellent article
  * http://www.flexhex.com/docs/articles/alternate-streams.phtml
  *
- * Updated to use functions now natively avaiable in vs2008.
- *
- * Helper utilities to extract a vector of (or test for presence of)
- * alternate streams.
- *
- * I could check if the FS is NTFS, but that'd require caching to not be awful,
- * so I'd need to figure out removable drive notifications.... Manyana!
- *
- *
+ * Historical source attribution retained. Current implementation uses
+ * GetFileInformationByHandleEx(FileStreamInfo) with bounded enumeration.
  */
 
 #include <algorithm>

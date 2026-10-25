@@ -16,11 +16,11 @@ The tool is **read-only**: it does not create, edit, or delete alternate streams
 
 ## Requirements
 
-- Windows 10 or 11, **64-bit**.
+- **Windows 10 version 2004 (build 19041) or later, x64**, or **Windows 11, x64**. This project does not provide 32-bit (x86) or ARM64 binaries.
 - A filesystem supporting named streams (normally NTFS).
 - Administrator privileges to register or unregister the Explorer extension.
 
-Windows Server 2019/2022/2025 have not been validated. Explorer integration and icon-overlay visibility can vary by system.
+Windows 10 32-bit editions are unsupported (Windows 11 itself is 64-bit only). Windows 10 version 2004 is the minimum intended compatibility baseline, not a claim of current Microsoft security support. Windows Server 2019/2022/2025 have not been validated. Explorer integration and icon-overlay visibility can vary by system.
 
 ## Install
 
@@ -78,8 +78,8 @@ This is a maintained fork of [Lee Benfield's AlternateStreamOverlay](https://www
 | --- | --- | --- |
 | Explorer integration | Alternate stream discovery and shell integration | Icon overlay and **Properties → Alternate Streams** tab |
 | Stream inspection | Original Windows shell-extension behavior | Bounded text and hex preview, including feedback for unreadable streams |
-| Enumeration | Older Windows compatibility and historical stream-enumeration paths | Native Windows 10+ stream enumeration with additional malformed-data validation |
-| Architecture | Historical 32-bit and 64-bit support | 64-bit only, Windows 10/11 target |
+| Enumeration | Older Windows compatibility and historical stream-enumeration paths | Native Windows 10 version 2004+ stream enumeration with additional malformed-data validation |
+| Architecture | Historical 32-bit and 64-bit support | x64 only, Windows 10 version 2004+ and Windows 11 |
 | Additional tooling | Original shell-extension functionality | Unicode-aware `altstrm.exe`, regression tests and registration diagnostics |
 
 **Important change:** The fork deliberately **removes the Explorer context-menu command**. Open the file or directory's Properties dialog to inspect its streams instead.

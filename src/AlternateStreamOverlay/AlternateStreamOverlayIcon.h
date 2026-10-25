@@ -2,7 +2,6 @@
 #include "resource.h"       // main symbols
 
 #include <shlobj.h>
-#include <comdef.h>
 
 /* Like the name implies, responsible for overlaying icon ... */
 

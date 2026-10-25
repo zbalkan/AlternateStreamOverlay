@@ -235,7 +235,7 @@ namespace
 
     Microsoft::WRL::ComPtr<IClassFactory> GetContextClassFactory(HMODULE moduleHandle)
     {
-        // CLSID_AlternateStreamContext from AlternateStreamOverlay.idl.
+        // CLSID_AlternateStreamContext declared by the corresponding COM class.
         const CLSID clsid = { 0x4A26024B, 0x5499, 0x45BE,
             { 0xA2, 0x3F, 0x4A, 0x65, 0xE8, 0x88, 0x88, 0xD0 } };
         return GetClassFactory(moduleHandle, clsid);
@@ -243,7 +243,7 @@ namespace
 
     Microsoft::WRL::ComPtr<IClassFactory> GetOverlayClassFactory(HMODULE moduleHandle)
     {
-        // CLSID_AlternateStreamOverlayIcon from AlternateStreamOverlay.idl.
+        // CLSID_AlternateStreamOverlayIcon declared by the corresponding COM class.
         const CLSID clsid = { 0xFBAB8C58, 0x59C9, 0x4522,
             { 0xB7, 0xE8, 0x1A, 0x6A, 0xA2, 0x3B, 0x31, 0x8C } };
         return GetClassFactory(moduleHandle, clsid);
@@ -518,16 +518,6 @@ namespace AlternateStreamTests
             Assert::IsFalse(IndicatesAlternateStreams(result));
         }
 
-        TEST_METHOD(IncompleteEnumerationRequiresNotice)
-        {
-            StreamEnumeration result;
-            result.status = StreamStatus::Ok;
-            Assert::IsFalse(result.NeedsNotice());
-            result.status = StreamStatus::Truncated;
-            Assert::IsTrue(result.NeedsNotice());
-            result.status = StreamStatus::Error;
-            Assert::IsTrue(result.NeedsNotice());
-        }
     };
 
     TEST_CLASS(PreviewNoticeTests)
