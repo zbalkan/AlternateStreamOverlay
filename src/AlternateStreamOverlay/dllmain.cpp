@@ -1,7 +1,6 @@
 // dllmain.cpp : Implementation of DllMain.
 
 #include "stdafx.h"
-#include "resource.h"
 #include "dllmain.h"
 
 CAlternateStreamOverlayModule _AtlModule;
