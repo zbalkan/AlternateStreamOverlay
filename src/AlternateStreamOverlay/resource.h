@@ -2,7 +2,6 @@
 // Microsoft Visual C++ generated include file.
 // Used by AlternateStreamOverlay.rc
 //
-#define IDS_PROJNAME                    100
 #define IDR_ALTERNATESTREAMOVERLAYICON  102
 #define IDR_ALTERNATESTREAMCONTEXT      103
 #define IDD_PROPPAGE_MEDIUM             106
