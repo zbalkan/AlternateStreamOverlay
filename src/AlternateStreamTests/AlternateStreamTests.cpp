@@ -573,6 +573,8 @@ namespace AlternateStreamTests
                 { 0x2029, L"\\u2029" },
                 { 0x2060, L"\\u2060" },
                 { 0x2064, L"\\u2064" },
+                { 0xFE00, L"\\uFE00" },
+                { 0xFE0F, L"\\uFE0F" },
                 { 0xFEFF, L"\\uFEFF" }
             };
             for (const auto& test : cases)
