@@ -154,7 +154,6 @@
     <Image Include="ASO.ico" />
   </ItemGroup>
   <ItemGroup>
-    <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\altstrm_common\altstrm_common.vcxproj">
