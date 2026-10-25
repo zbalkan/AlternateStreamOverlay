@@ -254,19 +254,19 @@ namespace
         while (pos < length)
         {
             const size_t start = pos;
-            while (pos < length && bytes[pos] != '\\n' && bytes[pos] != '\\r')
+            while (pos < length && bytes[pos] != '\n' && bytes[pos] != '\r')
             {
                 if (bytes[pos] == 0 || bytes[pos] > 0x7F)
                     return false;
                 ++pos;
             }
             std::string line(reinterpret_cast<const char*>(bytes + start), pos - start);
-            while (pos < length && (bytes[pos] == '\\r' || bytes[pos] == '\\n'))
+            while (pos < length && (bytes[pos] == '\r' || bytes[pos] == '\n'))
                 ++pos;
-            const auto first = line.find_first_not_of(" \\t");
+            const auto first = line.find_first_not_of(" \t");
             if (first == std::string::npos)
                 continue;
-            const auto last = line.find_last_not_of(" \\t");
+            const auto last = line.find_last_not_of(" \t");
             line = line.substr(first, last - first + 1);
             std::transform(line.begin(), line.end(), line.begin(),
                 [](char ch) { return ch >= 'A' && ch <= 'Z' ? char(ch - 'A' + 'a') : ch; });
@@ -279,9 +279,9 @@ namespace
                 continue;
             const auto equal = line.find('=');
             if (equal == std::string::npos ||
-                line.substr(6, equal - 6).find_first_not_of(" \\t") != std::string::npos)
+                line.substr(6, equal - 6).find_first_not_of(" \t") != std::string::npos)
                 continue;
-            const auto value = line.find_first_not_of(" \\t", equal + 1);
+            const auto value = line.find_first_not_of(" \t", equal + 1);
             if (value != std::string::npos && value + 1 == line.size() &&
                 line[value] >= '0' && line[value] <= '4')
                 return true;
@@ -309,7 +309,7 @@ namespace
 
 OverlayKind ClassifyFileOverlay(LPCWSTR filename)
 {
-    if (filename == nullptr || *filename == L'\\0')
+    if (filename == nullptr || *filename == L'\0')
         return OverlayKind::None;
 
     const AlternateStreamReader reader;
