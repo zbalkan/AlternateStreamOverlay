@@ -48,6 +48,16 @@ The registration diagnostics are read-only unless explicitly documented otherwis
 
 The main GitHub workflow builds Debug and Release x64, runs native tests and smoke tests, and performs static analysis. Shell registration has a dedicated workflow. Some workflow triggers skip documentation-only changes; manual workflow dispatch remains available where configured.
 
+## Continuous integration
+
+**Repository Validation** runs on every pull request targeting `main` and every push to `main`, including Markdown-only changes. It checks Markdown tabs and final-newline formatting (MD010 and MD047), YAML parsing, GitHub Actions syntax, PowerShell parsing and isolated release-note generation; it never publishes a release.
+
+**CI & Static Analysis** and **DevSkim** omit documentation-only, validation-workflow-only and release-helper-only changes. Shell Registration Diagnostics runs for changes under `src/AlternateStreamOverlay/**`, `src/altstrm_common/**`, any `src/tests/*.ps1` script, `src/AlternateStreamOverlay.sln`, or `.github/workflows/shell-registration.yml`. Changes to those components can run more than one relevant workflow. The manual Release workflow is never triggered by repository changes.
+
+On pull requests, newer commits cancel superseded validation, native CI, DevSkim and shell-registration runs. Runs on `main` and manually requested release staging are not cancelled by this policy.
+
+These path filters are not a replacement for branch protection: make **Repository Validation** the consistently required status check; consider conditional native jobs rather than path-filtered workflows if you also require every native check on every pull request.
+
 ## Key safety invariants
 
 - Keep raw enumerated stream names separate from escaped display labels.

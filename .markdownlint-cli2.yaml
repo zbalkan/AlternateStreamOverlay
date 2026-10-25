@@ -1,0 +1,8 @@
+config:
+  default: false
+  MD010: true
+  MD047: true
+globs:
+  - "**/*.md"
+ignores:
+  - "node_modules/**"
