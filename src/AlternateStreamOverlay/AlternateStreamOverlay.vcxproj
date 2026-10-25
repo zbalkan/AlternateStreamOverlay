@@ -152,8 +152,7 @@
     <ResourceCompile Include="AlternateStreamOverlay.rc" />
   </ItemGroup>
   <ItemGroup>
-    <Image Include="ADS.ico" />
-    <Image Include="MOTW.ico" />
+    <Image Include="ASO.ico" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\altstrm_common\altstrm_common.vcxproj">
