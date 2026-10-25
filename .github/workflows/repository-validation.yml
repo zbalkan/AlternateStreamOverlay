@@ -25,12 +25,13 @@ jobs:
       - name: Check Markdown
         shell: bash
         run: |
-          npx --yes markdownlint-cli2@0.18.1 "**/*.md" "#node_modules"
+          npm install --ignore-scripts --no-save --package-lock=false --no-audit --no-fund markdownlint-cli2@0.18.1
+          ./node_modules/.bin/markdownlint-cli2 "**/*.md" "#node_modules"
 
       - name: Check YAML syntax
         shell: bash
         run: |
-          python3 -m pip install --user 'PyYAML==6.0.2'
+          python3 -m pip install --user --only-binary=:all: 'PyYAML==6.0.2'
           python3 - <<'PY'
           from pathlib import Path
           import yaml
