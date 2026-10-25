@@ -35,10 +35,6 @@ struct StreamEnumeration
     bool hasNamedStreams = false;
     std::vector<std::wstring> streams;
 
-    bool NeedsNotice() const
-    {
-        return status != StreamStatus::Ok;
-    }
 };
 
 // Interpret bounded native enumeration without requiring filesystem fixtures.
