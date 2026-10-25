@@ -243,47 +243,75 @@ bool AlternateStreamReader::HasAlternateStreams(LPCWSTR filename) const
 
 namespace
 {
+    // Every read is guarded by pos < length. Reject control/binary content
+    // rather than interpreting it as a ZoneTransfer directive.
+    bool ReadAsciiLine(const BYTE* bytes, size_t length, size_t& pos,
+                       std::string& line)
+    {
+        const size_t start = pos;
+        while (pos < length && bytes[pos] != '\n' && bytes[pos] != '\r')
+        {
+            const BYTE value = bytes[pos];
+            if (value == 0 || value > 0x7F)
+                return false;
+            ++pos;
+        }
+        line.assign(reinterpret_cast<const char*>(bytes + start), pos - start);
+        while (pos < length && (bytes[pos] == '\r' || bytes[pos] == '\n'))
+            ++pos;
+        return true;
+    }
+
+    void NormalizeZoneLine(std::string& line)
+    {
+        const auto first = line.find_first_not_of(" \t");
+        if (first == std::string::npos)
+        {
+            line.clear();
+            return;
+        }
+        const auto last = line.find_last_not_of(" \t");
+        line = line.substr(first, last - first + 1);
+        std::transform(line.begin(), line.end(), line.begin(),
+            [](char ch) { return ch >= 'A' && ch <= 'Z' ? char(ch - 'A' + 'a') : ch; });
+    }
+
+    bool IsZoneIdLine(const std::string& line)
+    {
+        if (line.compare(0, 6, "zoneid") != 0)
+            return false;
+        const auto equal = line.find('=');
+        if (equal == std::string::npos ||
+            line.substr(6, equal - 6).find_first_not_of(" \t") != std::string::npos)
+            return false;
+        const auto value = line.find_first_not_of(" \t", equal + 1);
+        return value != std::string::npos && value + 1 == line.size() &&
+            line[value] >= '0' && line[value] <= '4';
+    }
+
     bool IsValidZoneTransfer(const BYTE* bytes, size_t length)
     {
-        // MOTW is a small text metadata stream. Reject binary/truncated data.
+        // A 4097-byte read rejects an oversized metadata stream.
         if (bytes == nullptr || length == 0 || length > 4096)
             return false;
+
         size_t pos = length >= 3 && bytes[0] == 0xEF &&
             bytes[1] == 0xBB && bytes[2] == 0xBF ? 3 : 0;
         bool inZoneTransfer = false;
         while (pos < length)
         {
-            const size_t start = pos;
-            while (pos < length && bytes[pos] != '\n' && bytes[pos] != '\r')
-            {
-                if (bytes[pos] == 0 || bytes[pos] > 0x7F)
-                    return false;
-                ++pos;
-            }
-            std::string line(reinterpret_cast<const char*>(bytes + start), pos - start);
-            while (pos < length && (bytes[pos] == '\r' || bytes[pos] == '\n'))
-                ++pos;
-            const auto first = line.find_first_not_of(" \t");
-            if (first == std::string::npos)
+            std::string line;
+            if (!ReadAsciiLine(bytes, length, pos, line))
+                return false;
+            NormalizeZoneLine(line);
+            if (line.empty())
                 continue;
-            const auto last = line.find_last_not_of(" \t");
-            line = line.substr(first, last - first + 1);
-            std::transform(line.begin(), line.end(), line.begin(),
-                [](char ch) { return ch >= 'A' && ch <= 'Z' ? char(ch - 'A' + 'a') : ch; });
             if (line[0] == '[')
             {
                 inZoneTransfer = line == "[zonetransfer]";
                 continue;
             }
-            if (!inZoneTransfer || line.compare(0, 6, "zoneid") != 0)
-                continue;
-            const auto equal = line.find('=');
-            if (equal == std::string::npos ||
-                line.substr(6, equal - 6).find_first_not_of(" \t") != std::string::npos)
-                continue;
-            const auto value = line.find_first_not_of(" \t", equal + 1);
-            if (value != std::string::npos && value + 1 == line.size() &&
-                line[value] >= '0' && line[value] <= '4')
+            if (inZoneTransfer && IsZoneIdLine(line))
                 return true;
         }
         return false;
