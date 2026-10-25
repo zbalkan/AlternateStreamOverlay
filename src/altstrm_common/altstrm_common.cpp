@@ -16,6 +16,7 @@
 #include <climits>
 #include <cstddef>
 #include <cwchar>
+#include <string>
 #include <vector>
 
 namespace
@@ -238,6 +239,95 @@ bool IndicatesAlternateStreams(const StreamEnumeration& result)
 bool AlternateStreamReader::HasAlternateStreams(LPCWSTR filename) const
 {
     return IndicatesAlternateStreams(EnumerateStreams(filename, false));
+}
+
+namespace
+{
+    bool IsValidZoneTransfer(const BYTE* bytes, size_t length)
+    {
+        // MOTW is a small text metadata stream. Reject binary/truncated data.
+        if (bytes == nullptr || length == 0 || length > 4096)
+            return false;
+        size_t pos = length >= 3 && bytes[0] == 0xEF &&
+            bytes[1] == 0xBB && bytes[2] == 0xBF ? 3 : 0;
+        bool inZoneTransfer = false;
+        while (pos < length)
+        {
+            const size_t start = pos;
+            while (pos < length && bytes[pos] != '\\n' && bytes[pos] != '\\r')
+            {
+                if (bytes[pos] == 0 || bytes[pos] > 0x7F)
+                    return false;
+                ++pos;
+            }
+            std::string line(reinterpret_cast<const char*>(bytes + start), pos - start);
+            while (pos < length && (bytes[pos] == '\\r' || bytes[pos] == '\\n'))
+                ++pos;
+            const auto first = line.find_first_not_of(" \\t");
+            if (first == std::string::npos)
+                continue;
+            const auto last = line.find_last_not_of(" \\t");
+            line = line.substr(first, last - first + 1);
+            std::transform(line.begin(), line.end(), line.begin(),
+                [](char ch) { return ch >= 'A' && ch <= 'Z' ? char(ch - 'A' + 'a') : ch; });
+            if (line[0] == '[')
+            {
+                inZoneTransfer = line == "[zonetransfer]";
+                continue;
+            }
+            if (!inZoneTransfer || line.compare(0, 6, "zoneid") != 0)
+                continue;
+            const auto equal = line.find('=');
+            if (equal == std::string::npos ||
+                line.substr(6, equal - 6).find_first_not_of(" \\t") != std::string::npos)
+                continue;
+            const auto value = line.find_first_not_of(" \\t", equal + 1);
+            if (value != std::string::npos && value + 1 == line.size() &&
+                line[value] >= '0' && line[value] <= '4')
+                return true;
+        }
+        return false;
+    }
+
+    bool HasValidMarkOfTheWeb(LPCWSTR filename, const std::wstring& streamName)
+    {
+        // The name was obtained from FileStreamInfo; its suffix is checked
+        // before use. Read no more than 4097 bytes and reject oversized data.
+        std::wstring streamPath(filename);
+        streamPath += streamName;
+        HandleW stream(CreateFileW(streamPath.c_str(), GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr));
+        if (stream.get() == INVALID_HANDLE_VALUE)
+            return false;
+        std::array<BYTE, 4097> buffer = {};
+        DWORD read = 0;
+        return ReadFile(stream.get(), buffer.data(), static_cast<DWORD>(buffer.size()),
+            &read, nullptr) && IsValidZoneTransfer(buffer.data(), read);
+    }
+}
+
+OverlayKind ClassifyFileOverlay(LPCWSTR filename)
+{
+    if (filename == nullptr || *filename == L'\\0')
+        return OverlayKind::None;
+
+    const AlternateStreamReader reader;
+    const StreamEnumeration result = reader.EnumerateStreams(filename);
+    if (!IndicatesAlternateStreams(result))
+        return OverlayKind::None;
+    if (result.status != StreamStatus::Ok)
+        return OverlayKind::AlternateStreams;
+
+    for (const auto& name : result.streams)
+    {
+        constexpr WCHAR ZoneName[] = L":Zone.Identifier:$DATA";
+        if (name.size() == (sizeof(ZoneName) / sizeof(WCHAR)) - 1 &&
+            _wcsicmp(name.c_str(), ZoneName) == 0 &&
+            HasValidMarkOfTheWeb(filename, name))
+            return OverlayKind::MarkOfTheWeb;
+    }
+    return OverlayKind::AlternateStreams;
 }
 
 std::wstring FormatPreviewDisplayText(bool incomplete, LPCWSTR message)
