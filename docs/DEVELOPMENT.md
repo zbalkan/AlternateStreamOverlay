@@ -60,7 +60,13 @@ The main GitHub workflow builds Debug and Release x64, runs native tests and smo
 
 ## Accepted preview architecture
 
-The existing asynchronous preview implementation, including its registered window message, allocation-free failure reporting and worker coalescing loop, is an intentional design decision. The previously discussed G1/P1–P3 simplifications **will not be implemented**. Revisit this architecture only to address a separately demonstrated correctness or security defect, not as an outstanding cleanup task.
+The asynchronous preview implementation is the accepted design. The following proposed simplifications **will not be implemented**:
+
+- Replace the registered preview-completion window message and its registration-failure checks with a different notification mechanism.
+- Simplify the allocation-free error-reporting path used when preview work fails.
+- Remove or collapse the worker loop that coalesces superseded selection requests.
+
+These mechanisms protect Explorer responsiveness and preview lifetime/selection behavior. They are not outstanding cleanup tasks. Revisit the design only for a separately demonstrated correctness or security defect.
 
 ## Registration testing
 
