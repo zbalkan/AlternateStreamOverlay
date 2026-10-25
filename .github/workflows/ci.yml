@@ -6,15 +6,25 @@ on:
     paths-ignore:
       - '**/*.md'
       - 'docs/**'
+      - '.github/scripts/**'
+      - '.markdownlint-cli2.yaml'
+      - '.github/workflows/repository-validation.yml'
   pull_request:
     branches: [main]
     paths-ignore:
       - '**/*.md'
       - 'docs/**'
+      - '.github/scripts/**'
+      - '.markdownlint-cli2.yaml'
+      - '.github/workflows/repository-validation.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
