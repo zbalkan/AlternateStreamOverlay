@@ -35,6 +35,15 @@ The extension DLL is built under `src/AlternateStreamOverlay/x64/<Configuration>
 
 Run the native test project with Visual Studio Test Explorer. The tests exercise stream enumeration, malformed metadata, Unicode names, preview formatting, overlay behavior and COM interface contracts. Tests that create named streams require a filesystem supporting alternate data streams.
 
+From a Visual Studio Developer PowerShell prompt at the repository root, native tests can also be run with `vstest.console.exe` after building Release x64:
+
+```powershell
+$env:ASO_OVERLAY_DLL = (Resolve-Path '.\src\AlternateStreamOverlay\x64\Release\AlternateStreamOverlay.dll').Path
+vstest.console.exe .\src\x64\Release\AlternateStreamTests.dll /Platform:x64
+```
+
+If `vstest.console.exe` is not on `PATH`, use the executable from the Visual Studio installation. Adjust the paths for a Debug build.
+
 Run the CLI smoke test against a built executable:
 
 ```powershell
