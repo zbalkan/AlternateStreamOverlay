@@ -3,6 +3,9 @@
 A Windows Explorer extension for **finding and inspecting NTFS alternate data streams (ADS)**.
 
 [![CI & Static Analysis](https://github.com/zbalkan/AlternateStreamOverlay/actions/workflows/ci.yml/badge.svg)](https://github.com/zbalkan/AlternateStreamOverlay/actions/workflows/ci.yml)
+[![DevSkim](https://github.com/zbalkan/AlternateStreamOverlay/actions/workflows/devskim.yml/badge.svg)](https://github.com/zbalkan/AlternateStreamOverlay/actions/workflows/devskim.yml)
+[![Quality gate status](https://sonarcloud.io/api/project_badges/measure?project=zbalkan_AlternateStreamOverlay&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=zbalkan_AlternateStreamOverlay)
+[![Security issues](https://sonarcloud.io/api/project_badges/measure?project=zbalkan_AlternateStreamOverlay&metric=software_quality_security_issues)](https://sonarcloud.io/summary/new_code?id=zbalkan_AlternateStreamOverlay)
 
 ## What does it do?
 
