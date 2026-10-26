@@ -120,6 +120,7 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_UK
 
 IDR_ALTERNATESTREAMOVERLAYICON REGISTRY                "AlternateStreamOverlayIcon.rgs"
 IDR_ALTERNATESTREAMCONTEXT REGISTRY                "AlternateStreamContext.rgs"
+IDR_MARKOFTHEWEBOVERLAYICON REGISTRY                "AlternateStreamOverlayMotw.rgs"
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -128,7 +129,9 @@ IDR_ALTERNATESTREAMCONTEXT REGISTRY                "AlternateStreamContext.rgs"
 
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
-IDI_ICON1               ICON                    "ASO.ico"
+// Replace the artwork in ADS.ico and MOTW.ico without changing resource IDs.
+IDI_ICON1               ICON                    "ads.ico"
+IDI_MOTW_ICON           ICON                    "motw.ico"
 #endif    // English (U.K.) resources
 /////////////////////////////////////////////////////////////////////////////
 

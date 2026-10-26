@@ -1,0 +1,36 @@
+HKCR
+{
+    NoRemove CLSID
+    {
+        ForceRemove {0D5A924E-7498-4AAF-8D27-36D68A653F5D} = s 'MarkOfTheWebOverlayIcon Class'
+        {
+            InprocServer32 = s '%MODULE%'
+            {
+                val ThreadingModel = s 'Both'
+            }
+        }
+    }
+}
+
+HKLM
+{
+    NoRemove SOFTWARE
+    {
+        NoRemove Microsoft
+        {
+            NoRemove Windows
+            {
+                NoRemove CurrentVersion
+                {
+                    NoRemove Explorer
+                    {
+                        NoRemove ShellIconOverlayIdentifiers
+                        {
+                            ForceRemove AlternateStreamOverlayMOTW = s '{0D5A924E-7498-4AAF-8D27-36D68A653F5D}'
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -36,3 +36,25 @@ public:
 };
 
 OBJECT_ENTRY_AUTO(__uuidof(CAlternateStreamOverlayIcon), CAlternateStreamOverlayIcon)
+
+class ATL_NO_VTABLE __declspec(uuid("0D5A924E-7498-4AAF-8D27-36D68A653F5D")) CMarkOfTheWebOverlayIcon :
+    public CComObjectRootEx<CComMultiThreadModel>,
+    public CComCoClass<CMarkOfTheWebOverlayIcon, &__uuidof(CMarkOfTheWebOverlayIcon)>,
+    public IShellIconOverlayIdentifier
+{
+public:
+    DECLARE_REGISTRY_RESOURCEID(IDR_MARKOFTHEWEBOVERLAYICON)
+    DECLARE_NOT_AGGREGATABLE(CMarkOfTheWebOverlayIcon)
+
+    BEGIN_COM_MAP(CMarkOfTheWebOverlayIcon)
+        COM_INTERFACE_ENTRY(IShellIconOverlayIdentifier)
+    END_COM_MAP()
+
+    DECLARE_PROTECT_FINAL_CONSTRUCT()
+
+    STDMETHOD(IsMemberOf)(LPCWSTR pwszPath, DWORD dwAttrib);
+    STDMETHOD(GetOverlayInfo)(LPWSTR pwszIconFile, int cchMax, int* pIndex, DWORD* pdwFlags);
+    STDMETHOD(GetPriority)(int* pIPriority);
+};
+
+OBJECT_ENTRY_AUTO(__uuidof(CMarkOfTheWebOverlayIcon), CMarkOfTheWebOverlayIcon)

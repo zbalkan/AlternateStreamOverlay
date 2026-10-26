@@ -8,7 +8,7 @@ The Visual Studio solution (`src/AlternateStreamOverlay.sln`) contains four x64 
 
 | Project | Purpose |
 | --- | --- |
-| `AlternateStreamOverlay` | In-process Explorer COM DLL: property-sheet extension and icon-overlay handler |
+| `AlternateStreamOverlay` | In-process Explorer COM DLL: property-sheet extension and separate generic ADS/MOTW icon-overlay handlers |
 | `altstrm_common` | Shared native stream enumeration, validation and preview formatting |
 | `altstrm` | Command-line stream inventory tool |
 | `AlternateStreamTests` | Native C++ MSTest regression suite |

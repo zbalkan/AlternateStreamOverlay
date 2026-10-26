@@ -11,8 +11,10 @@
 param([switch] $RequireRegistration)
 
 $overlayPath = 'Software\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers'
-$expectedClsid = '{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}'
-$expectedName = 'AlternateStreamOverlayIcon'
+$expectedOverlays = [ordered]@{
+    AlternateStreamOverlayIcon = '{FBAB8C58-59C9-4522-B7E8-1A6AA23B318C}'
+    AlternateStreamOverlayMOTW = '{0D5A924E-7498-4AAF-8D27-36D68A653F5D}'
+}
 $view = [Microsoft.Win32.RegistryView]::Registry64
 
 function Get-OverlayRegistrations {
@@ -35,7 +37,7 @@ function Get-OverlayRegistrations {
                         Scope = $Scope
                         Name = $name
                         CLSID = $clsid
-                        IsAlternateStreamOverlay = ($clsid -ieq $expectedClsid)
+                        IsAlternateStreamOverlay = ($expectedOverlays.Contains($name) -and $clsid -ieq $expectedOverlays[$name])
                     }
                 }
                 finally { $sub.Dispose() }
@@ -78,21 +80,30 @@ finally { $classes.Dispose() }
 $entries | Format-Table Scope, Name, CLSID, InprocServer32 -AutoSize | Out-Host
 Write-Host "Overlay registrations: $($entries.Count)"
 $mine = @($entries | Where-Object IsAlternateStreamOverlay)
-if ($mine.Count -eq 0) {
-    Write-Warning "No '$expectedName' overlay CLSID registration found in HKLM/HKCU."
-}
-else {
-    foreach ($entry in $mine) {
-        if ([string]::IsNullOrWhiteSpace($entry.InprocServer32)) {
-            Write-Warning "$($entry.Scope)\$($entry.Name): CLSID has no effective InprocServer32 entry."
-        }
-        elseif (-not (Test-Path -LiteralPath ([Environment]::ExpandEnvironmentVariables($entry.InprocServer32)))) {
-            Write-Warning "$($entry.Scope)\$($entry.Name): COM server path does not exist: $($entry.InprocServer32)"
+$missing = @(
+    foreach ($name in $expectedOverlays.Keys) {
+        if (-not @($mine | Where-Object { $_.Scope -eq 'HKLM' -and $_.Name -eq $name }).Count) {
+            $name
         }
     }
+)
+foreach ($name in $missing) {
+    Write-Warning "Required overlay registration missing: $name"
 }
-if ($RequireRegistration -and ($mine.Count -eq 0 -or @($mine | Where-Object { [string]::IsNullOrWhiteSpace($_.InprocServer32) -or -not (Test-Path -LiteralPath ([Environment]::ExpandEnvironmentVariables($_.InprocServer32)) -PathType Leaf) }).Count -gt 0)) {
-    throw 'AlternateStreamOverlay icon overlay registration is absent or has an invalid COM server.'
+foreach ($entry in $mine) {
+    if ([string]::IsNullOrWhiteSpace($entry.InprocServer32)) {
+        Write-Warning "$($entry.Scope)\$($entry.Name): CLSID has no effective InprocServer32 entry."
+    }
+    elseif (-not (Test-Path -LiteralPath ([Environment]::ExpandEnvironmentVariables($entry.InprocServer32)) -PathType Leaf)) {
+        Write-Warning "$($entry.Scope)\$($entry.Name): COM server path does not exist: $($entry.InprocServer32)"
+    }
+}
+if ($RequireRegistration -and ($missing.Count -gt 0 -or
+    @($mine | Where-Object {
+        [string]::IsNullOrWhiteSpace($_.InprocServer32) -or
+        -not (Test-Path -LiteralPath ([Environment]::ExpandEnvironmentVariables($_.InprocServer32)) -PathType Leaf)
+    }).Count -gt 0)) {
+    throw 'ADS and MOTW overlay registrations must both have a valid COM server.'
 }
 if ($RequireRegistration) {
     # This shell extension is activated by Explorer using its CLSID.
@@ -111,18 +122,20 @@ if ($RequireRegistration) {
                 throw "Unused overlay ProgID was registered: $progId"
             }
         }
-        $clsidKey = $classes.OpenSubKey("CLSID\$expectedClsid")
-        if ($null -eq $clsidKey) { throw "Missing overlay CLSID: $expectedClsid" }
-        try {
-            foreach ($name in @('ProgID', 'VersionIndependentProgID')) {
-                $key = $clsidKey.OpenSubKey($name)
-                if ($null -ne $key) {
-                    $key.Dispose()
-                    throw "Unused CLSID\$expectedClsid\$name was registered"
+        foreach ($expectedClsid in $expectedOverlays.Values) {
+            $clsidKey = $classes.OpenSubKey("CLSID\$expectedClsid")
+            if ($null -eq $clsidKey) { throw "Missing overlay CLSID: $expectedClsid" }
+            try {
+                foreach ($name in @('ProgID', 'VersionIndependentProgID')) {
+                    $key = $clsidKey.OpenSubKey($name)
+                    if ($null -ne $key) {
+                        $key.Dispose()
+                        throw "Unused CLSID\$expectedClsid\$name was registered"
+                    }
                 }
             }
+            finally { $clsidKey.Dispose() }
         }
-        finally { $clsidKey.Dispose() }
     }
     finally { $classes.Dispose() }
 }

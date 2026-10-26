@@ -12,7 +12,7 @@ Historical entries from Lee Benfield's original project are preserved verbatim b
 
 - Explorer's **Alternate Streams** property tab lists named alternate data streams for files and directories.
 - Users can inspect named alternate stream contents as text or hexadecimal previews, with an indication when a preview is truncated.
-- Files with alternate streams can be identified using an Explorer icon overlay, subject to Windows overlay-handler limits.
+- Two distinct Explorer overlays: a layered symbol for generic alternate streams and a download symbol for recognized Mark of the Web (`Zone.Identifier`) metadata, subject to Windows overlay-handler limits.
 - Machine-wide installation and uninstallation through elevated COM registration.
 - Command-line listing with Unicode file and stream names, including UTF-8 output when redirected.
 - Diagnostics for shell integration and registrations.

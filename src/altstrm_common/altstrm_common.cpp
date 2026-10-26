@@ -16,6 +16,7 @@
 #include <climits>
 #include <cstddef>
 #include <cwchar>
+#include <string>
 #include <vector>
 
 namespace
@@ -238,6 +239,131 @@ bool IndicatesAlternateStreams(const StreamEnumeration& result)
 bool AlternateStreamReader::HasAlternateStreams(LPCWSTR filename) const
 {
     return IndicatesAlternateStreams(EnumerateStreams(filename, false));
+}
+
+namespace
+{
+    // Every read is guarded by pos < length. Reject control/binary content
+    // rather than interpreting it as a ZoneTransfer directive.
+    bool ReadAsciiLine(const BYTE* bytes, size_t length, size_t& pos,
+                       std::string& line)
+    {
+        const size_t start = pos;
+        while (pos < length && bytes[pos] != '\n' && bytes[pos] != '\r')
+        {
+            const BYTE value = bytes[pos];
+            if (value > 0x7F || (value < 0x20 && value != '\t') || value == 0x7F)
+                return false;
+            ++pos;
+        }
+        line.assign(reinterpret_cast<const char*>(bytes + start), pos - start);
+        while (pos < length && (bytes[pos] == '\r' || bytes[pos] == '\n'))
+            ++pos;
+        return true;
+    }
+
+    void NormalizeZoneLine(std::string& line)
+    {
+        const auto first = line.find_first_not_of(" \t");
+        if (first == std::string::npos)
+        {
+            line.clear();
+            return;
+        }
+        const auto last = line.find_last_not_of(" \t");
+        line = line.substr(first, last - first + 1);
+        std::transform(line.begin(), line.end(), line.begin(),
+            [](char ch) { return ch >= 'A' && ch <= 'Z' ? char(ch - 'A' + 'a') : ch; });
+    }
+
+    bool IsZoneIdLine(const std::string& line)
+    {
+        if (line.compare(0, 6, "zoneid") != 0)
+            return false;
+        const auto equal = line.find('=');
+        if (equal == std::string::npos ||
+            line.substr(6, equal - 6).find_first_not_of(" \t") != std::string::npos)
+            return false;
+        const auto value = line.find_first_not_of(" \t", equal + 1);
+        return value != std::string::npos && value + 1 == line.size() &&
+            line[value] >= '0' && line[value] <= '4';
+    }
+
+    bool IsValidZoneTransfer(const BYTE* bytes, size_t length)
+    {
+        // A 4097-byte read rejects an oversized metadata stream.
+        if (bytes == nullptr || length == 0 || length > 4096)
+            return false;
+
+        size_t pos = length >= 3 && bytes[0] == 0xEF &&
+            bytes[1] == 0xBB && bytes[2] == 0xBF ? 3 : 0;
+        bool inZoneTransfer = false;
+        bool foundZoneId = false;
+        while (pos < length)
+        {
+            std::string line;
+            if (!ReadAsciiLine(bytes, length, pos, line))
+                return false;
+            NormalizeZoneLine(line);
+            if (line.empty())
+                continue;
+            if (line[0] == '[')
+            {
+                inZoneTransfer = line == "[zonetransfer]";
+                continue;
+            }
+            if (inZoneTransfer && IsZoneIdLine(line))
+                foundZoneId = true;
+        }
+        return foundZoneId;
+    }
+
+    bool HasValidMarkOfTheWeb(LPCWSTR filename, const std::wstring& streamName)
+    {
+        // The name was obtained from FileStreamInfo; its suffix is checked
+        // before use. Read no more than 4097 bytes and reject oversized data.
+        std::wstring streamPath(filename);
+        streamPath += streamName;
+        HandleW stream(CreateFileW(streamPath.c_str(), GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr));
+        if (stream.get() == INVALID_HANDLE_VALUE)
+            return false;
+        // Read one byte beyond the accepted 4 KiB maximum. The single
+        // ReadFile call cannot overrun this fixed-size destination.
+        std::array<BYTE, 4097> metadata = {};
+        DWORD read = 0;
+        // The destination is a 4097-byte array; the supplied size is its
+        // exact capacity, and IsValidZoneTransfer rejects lengths above 4096.
+        // Flawfinder: ignore
+        if (!ReadFile(stream.get(), metadata.data(),
+                      static_cast<DWORD>(metadata.size()), &read, nullptr))
+            return false;
+        return read <= metadata.size() && IsValidZoneTransfer(metadata.data(), read);
+    }
+}
+
+OverlayKind ClassifyFileOverlay(LPCWSTR filename)
+{
+    if (filename == nullptr || *filename == L'\0')
+        return OverlayKind::None;
+
+    const AlternateStreamReader reader;
+    const StreamEnumeration result = reader.EnumerateStreams(filename);
+    if (!IndicatesAlternateStreams(result))
+        return OverlayKind::None;
+    if (result.status != StreamStatus::Ok)
+        return OverlayKind::AlternateStreams;
+
+    for (const auto& name : result.streams)
+    {
+        constexpr WCHAR ZoneName[] = L":Zone.Identifier:$DATA";
+        if (name.size() == (sizeof(ZoneName) / sizeof(WCHAR)) - 1 &&
+            _wcsicmp(name.c_str(), ZoneName) == 0 &&
+            HasValidMarkOfTheWeb(filename, name))
+            return OverlayKind::MarkOfTheWeb;
+    }
+    return OverlayKind::AlternateStreams;
 }
 
 std::wstring FormatPreviewDisplayText(bool incomplete, LPCWSTR message)

@@ -39,6 +39,13 @@ struct StreamEnumeration
 // Interpret bounded native enumeration without requiring filesystem fixtures.
 bool IndicatesAlternateStreams(const StreamEnumeration& result);
 
+// Classification used by mutually exclusive Explorer icon overlays.
+enum class OverlayKind { None, AlternateStreams, MarkOfTheWeb };
+
+// A Zone.Identifier stream alone does not establish valid MOTW metadata.
+// Classification examines bounded stream content and never reads arbitrary ADS.
+OverlayKind ClassifyFileOverlay(LPCWSTR filename);
+
 // Enumerate alternate streams using the documented Windows 10+ API.
 class AlternateStreamReader
 {

@@ -3,68 +3,94 @@
 #include "altstrm_common.h"
 #include "LocalPathPolicy.h"
 
-// Does this overlay apply?
-STDMETHODIMP CAlternateStreamOverlayIcon::IsMemberOf(LPCWSTR pwszPath, DWORD dwAttrib)
+namespace
 {
-    try
+    bool CanCheckOverlay(LPCWSTR path, DWORD attributes)
     {
-        if (pwszPath == nullptr || *pwszPath == L'\0')
-            return S_FALSE;
-
-        // Explorer calls this for every displayed item. Do not open files that
-        // are offline or may be recalled from remote/cloud storage.
+        if (path == nullptr || *path == L'\0')
+            return false;
         constexpr DWORD recallAttributes =
             FILE_ATTRIBUTE_OFFLINE |
             FILE_ATTRIBUTE_RECALL_ON_OPEN |
             FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS;
-        if ((dwAttrib & recallAttributes) != 0)
-            return S_FALSE;
-
-        // Avoid synchronous SMB/UNC I/O on Explorer's overlay callback path.
-        if (!CanEnumerateExplorerPath(pwszPath))
-            return S_FALSE;
-
-        const AlternateStreamReader reader;
-        return reader.HasAlternateStreams(pwszPath) ? S_OK : S_FALSE;
+        return (attributes & recallAttributes) == 0 &&
+            CanEnumerateExplorerPath(path);
     }
-    catch (...)
+
+    HRESULT ReadOverlayIconInfo(LPWSTR iconFile, int maxCharacters,
+                                int* iconIndex, DWORD* flags, int index)
     {
-        // Overlay detection must not propagate C++ exceptions into Explorer.
-        return S_FALSE;
+        if (iconFile == nullptr || iconIndex == nullptr || flags == nullptr)
+            return E_POINTER;
+        if (maxCharacters <= 0)
+            return E_INVALIDARG;
+        iconFile[0] = L'\0';
+        *iconIndex = 0;
+        *flags = 0;
+        const DWORD written = GetModuleFileNameW(
+            _AtlBaseModule.GetModuleInstance(), iconFile,
+            static_cast<DWORD>(maxCharacters));
+        if (written == 0)
+            return HRESULT_FROM_WIN32(GetLastError());
+        if (written >= static_cast<DWORD>(maxCharacters))
+        {
+            iconFile[0] = L'\0';
+            return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
+        }
+        *iconIndex = index;
+        *flags = ISIOI_ICONFILE | ISIOI_ICONINDEX;
+        return S_OK;
+    }
+
+    HRESULT CheckOverlayMembership(LPCWSTR path, DWORD attributes, OverlayKind kind)
+    {
+        try
+        {
+            if (!CanCheckOverlay(path, attributes))
+                return S_FALSE;
+            return ClassifyFileOverlay(path) == kind ? S_OK : S_FALSE;
+        }
+        catch (...)
+        {
+            return S_FALSE;
+        }
     }
 }
 
-STDMETHODIMP CAlternateStreamOverlayIcon::GetOverlayInfo(LPWSTR pwszIconFile, int cchMax, int* pIndex, DWORD* pdwFlags)
+STDMETHODIMP CAlternateStreamOverlayIcon::IsMemberOf(LPCWSTR path, DWORD attributes)
 {
-    if (pwszIconFile == nullptr || pIndex == nullptr || pdwFlags == nullptr)
+    return CheckOverlayMembership(path, attributes, OverlayKind::AlternateStreams);
+}
+
+STDMETHODIMP CMarkOfTheWebOverlayIcon::IsMemberOf(LPCWSTR path, DWORD attributes)
+{
+    return CheckOverlayMembership(path, attributes, OverlayKind::MarkOfTheWeb);
+}
+
+STDMETHODIMP CAlternateStreamOverlayIcon::GetOverlayInfo(LPWSTR file, int maxCharacters,
+                                                         int* index, DWORD* flags)
+{
+    return ReadOverlayIconInfo(file, maxCharacters, index, flags, 0);
+}
+
+STDMETHODIMP CMarkOfTheWebOverlayIcon::GetOverlayInfo(LPWSTR file, int maxCharacters,
+                                                       int* index, DWORD* flags)
+{
+    return ReadOverlayIconInfo(file, maxCharacters, index, flags, 1);
+}
+
+STDMETHODIMP CAlternateStreamOverlayIcon::GetPriority(int* priority)
+{
+    if (priority == nullptr)
         return E_POINTER;
-    if (cchMax <= 0)
-        return E_INVALIDARG;
-
-    // Explorer needs the full DLL path. Never advertise a truncated icon path.
-    pwszIconFile[0] = L'\0';
-    *pIndex = 0;
-    *pdwFlags = 0;
-
-    const DWORD written = GetModuleFileNameW(
-        _AtlBaseModule.GetModuleInstance(), pwszIconFile, static_cast<DWORD>(cchMax));
-    if (written == 0)
-        return HRESULT_FROM_WIN32(GetLastError());
-    if (written >= static_cast<DWORD>(cchMax))
-    {
-        pwszIconFile[0] = L'\0';
-        return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
-    }
-
-    *pdwFlags = ISIOI_ICONFILE | ISIOI_ICONINDEX;
+    *priority = 10;
     return S_OK;
 }
 
-STDMETHODIMP CAlternateStreamOverlayIcon::GetPriority(int* pIPriority)
+STDMETHODIMP CMarkOfTheWebOverlayIcon::GetPriority(int* priority)
 {
-    if (pIPriority == nullptr)
+    if (priority == nullptr)
         return E_POINTER;
-
-    *pIPriority = 10;
+    *priority = 5;
     return S_OK;
 }
