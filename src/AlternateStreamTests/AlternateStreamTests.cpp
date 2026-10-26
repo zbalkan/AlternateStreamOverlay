@@ -446,8 +446,27 @@ namespace AlternateStreamTests
             Assert::AreEqual(static_cast<HRESULT>(S_OK),
                 motw->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
 
+            // Remove the unrelated stream: malformed Zone.Identifier alone
+            // must still select the generic ADS overlay.
+            Assert::IsTrue(DeleteFileW(genericPath.c_str()) != FALSE);
+
             constexpr char invalidZone[] = "[ZoneTransfer]\r\nZoneId=abc\r\n";
             WriteTestStream(motwPath, invalidZone, sizeof(invalidZone) - 1);
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                generic->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                motw->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
+
+            // Valid prefix must not mask corrupt metadata at the end.
+            constexpr char trailingNul[] = "[ZoneTransfer]\r\nZoneId=3\r\nBad\0Data";
+            WriteTestStream(motwPath, trailingNul, sizeof(trailingNul) - 1);
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                generic->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                motw->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
+
+            constexpr char trailingControl[] = "[ZoneTransfer]\r\nZoneId=3\r\nBad\x01Data";
+            WriteTestStream(motwPath, trailingControl, sizeof(trailingControl) - 1);
             Assert::AreEqual(static_cast<HRESULT>(S_OK),
                 generic->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
             Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
