@@ -23,7 +23,7 @@ For normal installation and uninstallation of the current build, use the [user R
 
 ## Why older installations need care
 
-Current builds use machine-wide registration and expose a property-sheet handler and an icon-overlay handler. The former context-menu integration has been removed.
+Current builds use machine-wide registration and expose a property-sheet handler and two icon-overlay handlers: one for generic alternate data streams and one for recognized Mark of the Web metadata. The former context-menu integration has been removed.
 
 Some earlier fork builds registered a type library (`{C0034A83-7FA3-43A7-82DD-3ADF66F0086C}`), custom interfaces (`{CFC72A5F-E58B-43BD-8968-BA89AFB2240D}` and `{96296677-6A18-4F22-AC2E-84A650C4081D}`), and an AppID (`{869100FF-B8AB-406F-A8E2-C8B561E7CC81}`). Current builds no longer manage those historical registrations; simply overwriting the old DLL may leave obsolete entries. Exact registrations depend on the version originally installed.
 
