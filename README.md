@@ -8,7 +8,7 @@ A Windows Explorer extension for **finding and inspecting NTFS alternate data st
 
 A file on NTFS can contain additional named data streams beyond its normal contents. Those streams are generally not visible in the usual Explorer file listing. AlternateStreamOverlay helps you discover them without opening a separate forensic tool.
 
-- **Explorer icon overlays:** A layered badge identifies named alternate data streams without recognized Mark of the Web (MOTW); a download-arrow badge identifies recognized `Zone.Identifier` zone metadata. Explorer may suppress either overlay when slots are exhausted.
+- **Explorer icon overlays:** Two separate handlers distinguish generic named alternate data streams from recognized Mark of the Web (MOTW) `Zone.Identifier` metadata. Both currently use copies of the original artwork; the planned layered and download-arrow designs will replace these placeholders before the 2.0.0 release. Explorer may suppress either overlay when slots are exhausted.
 - **Alternate Streams property tab:** Lists the named streams of a selected file or directory. Select one to view a bounded text or hexadecimal preview.
 - **Command-line listing:** Includes `altstrm.exe` for listing streams from a terminal.
 
