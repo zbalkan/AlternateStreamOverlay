@@ -499,6 +499,20 @@ namespace AlternateStreamTests
             Assert::AreEqual(static_cast<HRESULT>(S_OK),
                 motw->IsMemberOf(fixture.path.data(), FILE_ATTRIBUTE_NORMAL));
 
+            // Observed browser download: a single terminal NUL after HostUrl.
+            constexpr char terminatedZone[] =
+                "[ZoneTransfer]\r\nZoneId=3\r\nHostUrl=https://icons8.com/";
+            WriteTestStream(streamPath, terminatedZone, sizeof(terminatedZone));
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                motw->IsMemberOf(fixture.path.data(), FILE_ATTRIBUTE_NORMAL));
+
+            // An embedded NUL must not be accepted.
+            constexpr char embeddedNul[] =
+                "[ZoneTransfer]\r\nZoneId=3\r\nHost\0Url=https://example.org/";
+            WriteTestStream(streamPath, embeddedNul, sizeof(embeddedNul) - 1);
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                motw->IsMemberOf(fixture.path.data(), FILE_ATTRIBUTE_NORMAL));
+
             // Invalid UTF-8 after ZoneId remains corrupt metadata.
             constexpr char badUtf8[] =
                 "[ZoneTransfer]\r\nZoneId=3\r\nHostUrl=https://example.org/\xFF\r\n";
