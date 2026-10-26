@@ -353,7 +353,7 @@ namespace
         if (!ReadFile(stream.get(), metadata.data(),
                       static_cast<DWORD>(metadata.size()), &read, nullptr))
             return false;
-        return read <= metadata.size() && IsValidZoneTransfer(metadata.data(), read);
+        return IsValidZoneTransfer(metadata.data(), read);
     }
 }
 
@@ -540,6 +540,10 @@ std::wstring FormatStreamPreview(const BYTE* data, size_t size,
 {
     if (asHex)
         return FormatHexPreview(data, size);
+    // Producers such as browsers may terminate Zone.Identifier with one NUL.
+    // Hide that terminator in text; hex mode still shows every byte.
+    if (data != nullptr && size != 0 && data[size - 1] == 0)
+        --size;
     if (data == nullptr || size == 0 || size > static_cast<size_t>(INT_MAX))
         return {};
 

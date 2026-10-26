@@ -62,7 +62,8 @@ private:
 std::wstring FormatHexPreview(const BYTE* data, size_t size);
 
 // The checkbox selects the display format. In text mode, malformed UTF-8
-// is replaced rather than silently rendering a hex dump.
+// is replaced rather than silently rendering a hex dump, and a single
+// terminal NUL byte is omitted; other NULs are shown as U+FFFD.
 std::wstring FormatStreamPreview(const BYTE* data, size_t size,
                                  bool asHex);
 

@@ -2,13 +2,13 @@
 
 All notable changes to AlternateStreamOverlay are documented in this file.
 
-Future releases follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html). No 2.0.0 release has been published yet. Changes planned for the next release remain under **Unreleased** until the release is prepared.
+Future releases follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Changes planned for the next release remain under **Unreleased** until the release is prepared.
 
 Historical entries from Lee Benfield's original project are preserved verbatim below.
 
-## Unreleased
+## [Unreleased]
 
-## 2.0 - 2026-10-26
+## [2.0.0] - 2026-10-26
 
 ### Added
 
@@ -63,4 +63,5 @@ Minor rev - 1.0.0.5 - Was missing a file close. (thanks Peter Allgaier)
 
 Minor rev - 1.0.0.6 - Re-added XP functionality - I'd switched to using a documented function, but that's only available in Vista+! n.b. now dynamically chooses to use 'official' or undocumented function, as the official one is threadsafe, so I don't have to perform external locking.(thanks Peter Allgaier - again!)
 
-[Unreleased]: https://github.com/zbalkan/AlternateStreamOverlay/compare/4d909b61d0d39dbea147a32762aac2c60f30492b...HEAD
+[Unreleased]: https://github.com/zbalkan/AlternateStreamOverlay/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/zbalkan/AlternateStreamOverlay/compare/4d909b61d0d39dbea147a32762aac2c60f30492b...v2.0.0
