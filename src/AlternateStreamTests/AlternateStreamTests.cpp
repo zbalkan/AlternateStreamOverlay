@@ -267,6 +267,18 @@ namespace
         Assert::AreEqual(size, written);
     }
 
+    Microsoft::WRL::ComPtr<IShellIconOverlayIdentifier> CreateOverlay(
+        HMODULE module, bool markOfTheWeb)
+    {
+        auto factory = markOfTheWeb ?
+            GetMotwClassFactory(module) : GetOverlayClassFactory(module);
+        Microsoft::WRL::ComPtr<IShellIconOverlayIdentifier> overlay;
+        Assert::IsTrue(SUCCEEDED(factory->CreateInstance(nullptr,
+            __uuidof(IShellIconOverlayIdentifier),
+            reinterpret_cast<void**>(overlay.GetAddressOf()))));
+        return overlay;
+    }
+
     BOOL CALLBACK CapturePropertyPage(HPROPSHEETPAGE page, LPARAM context)
     {
         *reinterpret_cast<HPROPSHEETPAGE*>(context) = page;
@@ -406,16 +418,8 @@ namespace AlternateStreamTests
         TEST_METHOD(DualOverlaysAreMutuallyExclusive)
         {
             ScopedModule module(GetOverlayDllPath().c_str());
-            auto genericFactory = GetOverlayClassFactory(module.handle);
-            auto motwFactory = GetMotwClassFactory(module.handle);
-            Microsoft::WRL::ComPtr<IShellIconOverlayIdentifier> generic;
-            Microsoft::WRL::ComPtr<IShellIconOverlayIdentifier> motw;
-            Assert::IsTrue(SUCCEEDED(genericFactory->CreateInstance(nullptr,
-                __uuidof(IShellIconOverlayIdentifier),
-                reinterpret_cast<void**>(generic.GetAddressOf()))));
-            Assert::IsTrue(SUCCEEDED(motwFactory->CreateInstance(nullptr,
-                __uuidof(IShellIconOverlayIdentifier),
-                reinterpret_cast<void**>(motw.GetAddressOf()))));
+            auto generic = CreateOverlay(module.handle, false);
+            auto motw = CreateOverlay(module.handle, true);
 
             TemporaryFile fixture;
             const auto file = fixture.path.data();
@@ -476,16 +480,8 @@ namespace AlternateStreamTests
         TEST_METHOD(MotwOverlayRecognizesUtf8HostUrl)
         {
             ScopedModule module(GetOverlayDllPath().c_str());
-            auto genericFactory = GetOverlayClassFactory(module.handle);
-            auto motwFactory = GetMotwClassFactory(module.handle);
-            Microsoft::WRL::ComPtr<IShellIconOverlayIdentifier> generic;
-            Microsoft::WRL::ComPtr<IShellIconOverlayIdentifier> motw;
-            Assert::IsTrue(SUCCEEDED(genericFactory->CreateInstance(nullptr,
-                __uuidof(IShellIconOverlayIdentifier),
-                reinterpret_cast<void**>(generic.GetAddressOf()))));
-            Assert::IsTrue(SUCCEEDED(motwFactory->CreateInstance(nullptr,
-                __uuidof(IShellIconOverlayIdentifier),
-                reinterpret_cast<void**>(motw.GetAddressOf()))));
+            auto generic = CreateOverlay(module.handle, false);
+            auto motw = CreateOverlay(module.handle, true);
 
             TemporaryFile fixture;
             const std::wstring streamPath =
