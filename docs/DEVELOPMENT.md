@@ -19,13 +19,15 @@ The supported target is Windows 10 version 2004 (build 19041) or later on x64, a
 
 ## Build
 
-From a Visual Studio Developer PowerShell prompt at the repository root:
+Open `src/AlternateStreamOverlay.sln` in Visual Studio, select **Release | x64**, and choose **Build → Build Solution**. Use **Debug | x64** for a debug build.
+
+Alternatively, from a Visual Studio Developer PowerShell prompt at the repository root:
 
 ```powershell
-msbuild .\src\AlternateStreamOverlay.sln /t:Rebuild /m /p:Configuration=Release /p:Platform=x64 /p:RegisterOutput=false
+msbuild .\src\AlternateStreamOverlay.sln /t:Rebuild /m /p:Configuration=Release /p:Platform=x64
 ```
 
-Use `Configuration=Debug` to build the Debug configuration. `RegisterOutput=false` prevents the build from automatically registering the COM DLL.
+The project disables automatic COM registration (`RegisterOutput=false`) in both Debug and Release configurations. Building the solution does not register the Explorer shell extension; registration must be performed explicitly.
 
 The extension DLL is built under `src/AlternateStreamOverlay/x64/<Configuration>/`. The CLI executable is built under `src/x64/<Configuration>/`.
 
