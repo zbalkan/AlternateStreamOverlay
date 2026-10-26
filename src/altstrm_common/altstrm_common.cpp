@@ -252,7 +252,7 @@ namespace
         while (pos < length && bytes[pos] != '\n' && bytes[pos] != '\r')
         {
             const BYTE value = bytes[pos];
-            if (value == 0 || value > 0x7F)
+            if (value > 0x7F || (value < 0x20 && value != '\t') || value == 0x7F)
                 return false;
             ++pos;
         }
@@ -298,6 +298,7 @@ namespace
         size_t pos = length >= 3 && bytes[0] == 0xEF &&
             bytes[1] == 0xBB && bytes[2] == 0xBF ? 3 : 0;
         bool inZoneTransfer = false;
+        bool foundZoneId = false;
         while (pos < length)
         {
             std::string line;
@@ -312,9 +313,9 @@ namespace
                 continue;
             }
             if (inZoneTransfer && IsZoneIdLine(line))
-                return true;
+                foundZoneId = true;
         }
-        return false;
+        return foundZoneId;
     }
 
     bool HasValidMarkOfTheWeb(LPCWSTR filename, const std::wstring& streamName)
