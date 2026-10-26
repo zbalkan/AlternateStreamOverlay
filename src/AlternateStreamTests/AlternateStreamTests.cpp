@@ -465,7 +465,7 @@ namespace AlternateStreamTests
             Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
                 motw->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
 
-            constexpr char trailingControl[] = "[ZoneTransfer]\r\nZoneId=3\r\nBad\x01Data";
+            constexpr char trailingControl[] = "[ZoneTransfer]\r\nZoneId=3\r\nBad\x01""Data";
             WriteTestStream(motwPath, trailingControl, sizeof(trailingControl) - 1);
             Assert::AreEqual(static_cast<HRESULT>(S_OK),
                 generic->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
