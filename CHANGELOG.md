@@ -6,7 +6,9 @@ Future releases follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 Historical entries from Lee Benfield's original project are preserved verbatim below.
 
-## [Unreleased]
+## Unreleased
+
+## 2.0 - 2026-10-26
 
 ### Added
 
@@ -29,7 +31,7 @@ Historical entries from Lee Benfield's original project are preserved verbatim b
 ### Removed
 
 - The legacy Explorer context-menu handler and its command; use the **Alternate Streams** property tab instead.
-- Compatibility with Windows versions older than Windows 10 version 2004 (build 19041).
+- Compatibility with Windows versions older than Windows 10 version 2004 (build 19041) if they are not 64-bit.
 - 32-bit (x86) binaries. Only 64-bit Windows builds are provided.
 - Legacy Windows XP-era alternate stream enumeration behavior.
 
