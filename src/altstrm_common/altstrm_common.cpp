@@ -536,15 +536,17 @@ std::wstring FormatHexPreview(const BYTE* data, size_t size)
 }
 
 std::wstring FormatStreamPreview(const BYTE* data, size_t size,
-                                 bool asHex)
+                                 bool asHex, bool truncated)
 {
     if (asHex)
         return FormatHexPreview(data, size);
-    // Producers such as browsers may terminate Zone.Identifier with one NUL.
-    // Hide that terminator in text; hex mode still shows every byte.
-    if (data != nullptr && size != 0 && data[size - 1] == 0)
-        --size;
     if (data == nullptr || size == 0 || size > static_cast<size_t>(INT_MAX))
+        return {};
+    // Strip a single terminator only when the full stream was read.
+    // A truncated preview can end at an arbitrary NUL data byte.
+    if (!truncated && data[size - 1] == 0)
+        --size;
+    if (size == 0)
         return {};
 
     const auto bytes = reinterpret_cast<const char*>(data);
