@@ -267,6 +267,18 @@ namespace
         Assert::AreEqual(size, written);
     }
 
+    Microsoft::WRL::ComPtr<IShellIconOverlayIdentifier> CreateOverlay(
+        HMODULE moduleHandle, bool markOfTheWeb)
+    {
+        auto factory = markOfTheWeb ?
+            GetMotwClassFactory(moduleHandle) : GetOverlayClassFactory(moduleHandle);
+        Microsoft::WRL::ComPtr<IShellIconOverlayIdentifier> overlay;
+        Assert::IsTrue(SUCCEEDED(factory->CreateInstance(nullptr,
+            __uuidof(IShellIconOverlayIdentifier),
+            reinterpret_cast<void**>(overlay.GetAddressOf()))));
+        return overlay;
+    }
+
     BOOL CALLBACK CapturePropertyPage(HPROPSHEETPAGE page, LPARAM context)
     {
         *reinterpret_cast<HPROPSHEETPAGE*>(context) = page;
@@ -406,16 +418,8 @@ namespace AlternateStreamTests
         TEST_METHOD(DualOverlaysAreMutuallyExclusive)
         {
             ScopedModule module(GetOverlayDllPath().c_str());
-            auto genericFactory = GetOverlayClassFactory(module.handle);
-            auto motwFactory = GetMotwClassFactory(module.handle);
-            Microsoft::WRL::ComPtr<IShellIconOverlayIdentifier> generic;
-            Microsoft::WRL::ComPtr<IShellIconOverlayIdentifier> motw;
-            Assert::IsTrue(SUCCEEDED(genericFactory->CreateInstance(nullptr,
-                __uuidof(IShellIconOverlayIdentifier),
-                reinterpret_cast<void**>(generic.GetAddressOf()))));
-            Assert::IsTrue(SUCCEEDED(motwFactory->CreateInstance(nullptr,
-                __uuidof(IShellIconOverlayIdentifier),
-                reinterpret_cast<void**>(motw.GetAddressOf()))));
+            auto generic = CreateOverlay(module.handle, false);
+            auto motw = CreateOverlay(module.handle, true);
 
             TemporaryFile fixture;
             const auto file = fixture.path.data();
@@ -471,6 +475,48 @@ namespace AlternateStreamTests
                 generic->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
             Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
                 motw->IsMemberOf(file, FILE_ATTRIBUTE_NORMAL));
+        }
+
+        TEST_METHOD(MotwOverlayRecognizesUtf8HostUrl)
+        {
+            ScopedModule module(GetOverlayDllPath().c_str());
+            auto generic = CreateOverlay(module.handle, false);
+            auto motw = CreateOverlay(module.handle, true);
+
+            TemporaryFile fixture;
+            const std::wstring streamPath =
+                std::wstring(fixture.path.data()) + L":Zone.Identifier";
+            // A UTF-8 non-ASCII URL value must not invalidate a valid ZoneId.
+            constexpr char utf8Zone[] =
+                "[ZoneTransfer]\r\nZoneId=3\r\nHostUrl=https://example.org/caf\xC3\xA9\r\n";
+            WriteTestStream(streamPath, utf8Zone, sizeof(utf8Zone) - 1);
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                generic->IsMemberOf(fixture.path.data(), FILE_ATTRIBUTE_NORMAL));
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                motw->IsMemberOf(fixture.path.data(), FILE_ATTRIBUTE_NORMAL));
+
+            // Observed browser download: a single terminal NUL after HostUrl.
+            constexpr char terminatedZone[] =
+                "[ZoneTransfer]\r\nZoneId=3\r\nHostUrl=https://icons8.com/";
+            WriteTestStream(streamPath, terminatedZone, sizeof(terminatedZone));
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                motw->IsMemberOf(fixture.path.data(), FILE_ATTRIBUTE_NORMAL));
+
+            // An embedded NUL must not be accepted.
+            constexpr char embeddedNul[] =
+                "[ZoneTransfer]\r\nZoneId=3\r\nHost\0Url=https://example.org/";
+            WriteTestStream(streamPath, embeddedNul, sizeof(embeddedNul) - 1);
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                motw->IsMemberOf(fixture.path.data(), FILE_ATTRIBUTE_NORMAL));
+
+            // Invalid UTF-8 after ZoneId remains corrupt metadata.
+            constexpr char badUtf8[] =
+                "[ZoneTransfer]\r\nZoneId=3\r\nHostUrl=https://example.org/\xFF\r\n";
+            WriteTestStream(streamPath, badUtf8, sizeof(badUtf8) - 1);
+            Assert::AreEqual(static_cast<HRESULT>(S_OK),
+                generic->IsMemberOf(fixture.path.data(), FILE_ATTRIBUTE_NORMAL));
+            Assert::AreEqual(static_cast<HRESULT>(S_FALSE),
+                motw->IsMemberOf(fixture.path.data(), FILE_ATTRIBUTE_NORMAL));
         }
 
         TEST_METHOD(MotwOverlayHasSeparateIconIdentity)

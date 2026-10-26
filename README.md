@@ -107,4 +107,5 @@ The [changelog](CHANGELOG.md) contains the detailed development history and pres
 
 Originally developed by [Lee Benfield](https://www.benf.org/other/alternatestreamoverlay/index.html). Historical attribution is preserved.
 
-Fingerprint icon by [Icons8](https://icons8.com/icon/oNI1jC8ljJ7X/fingerprint).
+Bursts icon by [Icons8](https://icons8.com/icon/D1cA1IguM2hW/bursts).
+Download icon by [Icons8](https://icons8.com/icon/VGQlJM067vkN/download).

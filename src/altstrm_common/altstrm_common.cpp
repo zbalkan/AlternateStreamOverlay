@@ -243,16 +243,16 @@ bool AlternateStreamReader::HasAlternateStreams(LPCWSTR filename) const
 
 namespace
 {
-    // Every read is guarded by pos < length. Reject control/binary content
-    // rather than interpreting it as a ZoneTransfer directive.
-    bool ReadAsciiLine(const BYTE* bytes, size_t length, size_t& pos,
+    // UTF-8 may appear in HostUrl/ReferrerUrl values; section and key syntax
+    // remain ASCII. Validate UTF-8 for the complete stream before splitting.
+    bool ReadUtf8Line(const BYTE* bytes, size_t length, size_t& pos,
                        std::string& line)
     {
         const size_t start = pos;
         while (pos < length && bytes[pos] != '\n' && bytes[pos] != '\r')
         {
             const BYTE value = bytes[pos];
-            if (value > 0x7F || (value < 0x20 && value != '\t') || value == 0x7F)
+            if ((value < 0x20 && value != '\t') || value == 0x7F)
                 return false;
             ++pos;
         }
@@ -295,6 +295,20 @@ namespace
         if (bytes == nullptr || length == 0 || length > 4096)
             return false;
 
+        // A valid UTF-8 HostUrl is not binary data; reject malformed encodings
+        // across the entire bounded buffer, including after a valid ZoneId.
+        if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+            reinterpret_cast<const char*>(bytes), static_cast<int>(length),
+            nullptr, 0) == 0)
+            return false;
+
+        // Some producers terminate Zone.Identifier with one NUL byte.
+        // Accept only a terminal NUL; embedded NULs remain invalid.
+        if (bytes[length - 1] == 0)
+            --length;
+        if (length == 0)
+            return false;
+
         size_t pos = length >= 3 && bytes[0] == 0xEF &&
             bytes[1] == 0xBB && bytes[2] == 0xBF ? 3 : 0;
         bool inZoneTransfer = false;
@@ -302,7 +316,7 @@ namespace
         while (pos < length)
         {
             std::string line;
-            if (!ReadAsciiLine(bytes, length, pos, line))
+            if (!ReadUtf8Line(bytes, length, pos, line))
                 return false;
             NormalizeZoneLine(line);
             if (line.empty())
