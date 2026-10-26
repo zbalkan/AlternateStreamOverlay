@@ -8,7 +8,7 @@ A Windows Explorer extension for **finding and inspecting NTFS alternate data st
 
 A file on NTFS can contain additional named data streams beyond its normal contents. Those streams are generally not visible in the usual Explorer file listing. AlternateStreamOverlay helps you discover them without opening a separate forensic tool.
 
-- **Explorer icon overlays:** Two separate handlers distinguish generic named alternate data streams from recognized Mark of the Web (MOTW) `Zone.Identifier` metadata. Both currently use copies of the original artwork; the planned layered and download-arrow designs will replace these placeholders before the 2.0.0 release. Explorer may suppress either overlay when slots are exhausted.
+- **Explorer icon overlays:** Two separate handlers distinguish generic named alternate data streams from recognized Mark of the Web (MOTW) `Zone.Identifier` metadata. Each handler has a separate bundled icon resource. Explorer may suppress either overlay when slots are exhausted.
 - **Alternate Streams property tab:** Lists the named streams of a selected file or directory. Select one to view a bounded text or hexadecimal preview.
 - **Command-line listing:** Includes `altstrm.exe` for listing streams from a terminal.
 
@@ -43,6 +43,8 @@ If no published release is available, the application can be [built from source]
 3. Choose a named stream from the list. Its contents can be viewed as text or hex using **Show as hex**.
 
 The normal unnamed `::$DATA` stream is excluded because it is the file's primary data, not an alternate stream. Previews are limited to approximately 64 KiB; larger streams are not fully displayed. If a native stream name cannot be opened safely through a Windows path, the tab still lists it but reports that its preview is unavailable.
+
+The MOTW overlay requires recognizable `Zone.Identifier` metadata with a valid zone identifier; a stream with that name alone is not sufficient. Other streams, including `SmartScreen`, do not imply MOTW without valid `Zone.Identifier` metadata.
 
 The overlays are visual hints, not a complete inventory: Windows limits the number of shell icon overlay handlers Explorer can use, and other installed software competes for those positions. Use the tab or CLI to inspect a particular file even if no icon overlay appears.
 
