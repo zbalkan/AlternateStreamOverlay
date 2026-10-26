@@ -1063,6 +1063,20 @@ namespace AlternateStreamTests
             Assert::IsTrue(FormatStreamPreview(onlyNul, sizeof(onlyNul), false).empty());
         }
 
+        TEST_METHOD(TruncatedTextPreviewPreservesTerminalNul)
+        {
+            const BYTE bytes[] = { 'A', 0 };
+            const auto text = FormatStreamPreview(bytes, sizeof(bytes), false, true);
+            Assert::AreEqual(static_cast<size_t>(2), text.size());
+            Assert::AreEqual(L'A', text[0]);
+            Assert::AreEqual(L'\uFFFD', text[1]);
+
+            const auto complete = FormatStreamPreview(bytes, sizeof(bytes), false, false);
+            Assert::AreEqual(L"A", complete.c_str());
+            const auto hex = FormatStreamPreview(bytes, sizeof(bytes), true, true);
+            Assert::IsTrue(hex.find(L"41 00 ") != std::wstring::npos);
+        }
+
         TEST_METHOD(IncompleteUtf8TailUsesReplacementCharacter)
         {
             const BYTE input[] = { 'A', 0xC0, 0xAF, 'B', 0xE2, 0x82 };
