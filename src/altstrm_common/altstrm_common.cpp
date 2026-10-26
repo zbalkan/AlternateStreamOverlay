@@ -346,14 +346,14 @@ namespace
         // Read one byte beyond the accepted 4 KiB maximum. The single
         // ReadFile call cannot overrun this fixed-size destination.
         std::array<BYTE, 4097> metadata = {};
-        DWORD read = 0;
+        DWORD bytesRead = 0;
         // The destination is a 4097-byte array; the supplied size is its
         // exact capacity, and IsValidZoneTransfer rejects lengths above 4096.
         // Flawfinder: ignore
         if (!ReadFile(stream.get(), metadata.data(),
-                      static_cast<DWORD>(metadata.size()), &read, nullptr))
+                      static_cast<DWORD>(metadata.size()), &bytesRead, nullptr))
             return false;
-        return IsValidZoneTransfer(metadata.data(), read);
+        return IsValidZoneTransfer(metadata.data(), bytesRead);
     }
 }
 
