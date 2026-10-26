@@ -1042,6 +1042,41 @@ namespace AlternateStreamTests
             Assert::AreEqual(L'B', text.back());
         }
 
+        TEST_METHOD(TextPreviewOmitsSingleTerminalNul)
+        {
+            // A Zone.Identifier written with a C-string terminator.
+            constexpr char zone[] = "[ZoneTransfer]\r\nZoneId=3\r\n";
+            const auto bytes = reinterpret_cast<const BYTE*>(zone);
+            Assert::AreEqual(L"[ZoneTransfer]\r\nZoneId=3\r\n",
+                FormatStreamPreview(bytes, sizeof(zone), false).c_str());
+
+            // Hex mode still shows the terminator.
+            const auto hex = FormatStreamPreview(bytes, sizeof(zone), true);
+            Assert::IsTrue(hex.find(L"0D 0A 00 ") != std::wstring::npos);
+
+            // Only one terminator is hidden; a second NUL stays visible.
+            const BYTE doubled[] = { 'A', 0, 0 };
+            Assert::AreEqual(L"A\uFFFD",
+                FormatStreamPreview(doubled, sizeof(doubled), false).c_str());
+
+            const BYTE onlyNul[] = { 0 };
+            Assert::IsTrue(FormatStreamPreview(onlyNul, sizeof(onlyNul), false).empty());
+        }
+
+        TEST_METHOD(TruncatedTextPreviewPreservesTerminalNul)
+        {
+            const BYTE bytes[] = { 'A', 0 };
+            const auto text = FormatStreamPreview(bytes, sizeof(bytes), false, true);
+            Assert::AreEqual(static_cast<size_t>(2), text.size());
+            Assert::AreEqual(L'A', text[0]);
+            Assert::AreEqual(L'\uFFFD', text[1]);
+
+            const auto complete = FormatStreamPreview(bytes, sizeof(bytes), false, false);
+            Assert::AreEqual(L"A", complete.c_str());
+            const auto hex = FormatStreamPreview(bytes, sizeof(bytes), true, true);
+            Assert::IsTrue(hex.find(L"41 00 ") != std::wstring::npos);
+        }
+
         TEST_METHOD(IncompleteUtf8TailUsesReplacementCharacter)
         {
             const BYTE input[] = { 'A', 0xC0, 0xAF, 'B', 0xE2, 0x82 };

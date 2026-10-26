@@ -51,7 +51,11 @@ If no published release is available, the application can be [built from source]
 
 The normal unnamed `::$DATA` stream is excluded because it is the file's primary data, not an alternate stream. Previews are limited to approximately 64 KiB; larger streams are not fully displayed. If a native stream name cannot be opened safely through a Windows path, the tab still lists it but reports that its preview is unavailable.
 
-The MOTW overlay requires `Zone.Identifier` metadata with a `[ZoneTransfer]` section containing a `ZoneId` value from 0 to 4; a stream with that name alone is not sufficient. Other streams, including `SmartScreen`, do not imply MOTW without valid `Zone.Identifier` metadata.
+The MOTW overlay requires UTF-8 `Zone.Identifier` metadata with a `[ZoneTransfer]` section containing a `ZoneId` value from 0 to 4; a stream with that name alone is not sufficient. Metadata in another encoding, such as UTF-16, is treated as a generic alternate stream. Other streams, including `SmartScreen`, do not imply MOTW without valid `Zone.Identifier` metadata.
+
+When stream enumeration completes and valid MOTW metadata is recognized, the MOTW overlay takes precedence: the generic overlay is not shown, even if the file has other named streams. Use the tab or CLI to see every stream on a downloaded file.
+
+To validate MOTW metadata, the overlay reads up to 4 KiB plus one probe byte of `Zone.Identifier` while Explorer displays the folder. On volumes where NTFS last-access updates are enabled, that read, like opening a preview, can update the file's last-access time.
 
 The overlays are visual hints, not a complete inventory: Windows limits the number of shell icon overlay handlers Explorer can use, and other installed software competes for those positions. Use the tab or CLI to inspect a particular file even if no icon overlay appears.
 
