@@ -38,9 +38,10 @@ jobs:
           $sourceVersion = $parts[0..2] -join '.'
           $tag = "v$sourceVersion"
           "RELEASE_VERSION=$sourceVersion" >> $env:GITHUB_ENV
-          # gh release create owns tag creation and rejects an existing
-          # release/tag. Do not gate the build on separate GitHub API probes.
-          Write-Host "Release version $tag selected; GitHub CLI will check tag/release conflicts."
+          # gh release create creates a missing tag at GITHUB_SHA and rejects
+          # duplicate releases. An existing tag is reusable; verify its target
+          # before publishing if a tag was created independently.
+          Write-Host "Release version $tag selected for draft creation."
 
       - name: Set up Visual Studio 2026 MSBuild
         uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
