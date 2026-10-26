@@ -268,10 +268,10 @@ namespace
     }
 
     Microsoft::WRL::ComPtr<IShellIconOverlayIdentifier> CreateOverlay(
-        HMODULE module, bool markOfTheWeb)
+        HMODULE moduleHandle, bool markOfTheWeb)
     {
         auto factory = markOfTheWeb ?
-            GetMotwClassFactory(module) : GetOverlayClassFactory(module);
+            GetMotwClassFactory(moduleHandle) : GetOverlayClassFactory(moduleHandle);
         Microsoft::WRL::ComPtr<IShellIconOverlayIdentifier> overlay;
         Assert::IsTrue(SUCCEEDED(factory->CreateInstance(nullptr,
             __uuidof(IShellIconOverlayIdentifier),
