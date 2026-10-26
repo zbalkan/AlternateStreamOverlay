@@ -302,6 +302,13 @@ namespace
             nullptr, 0) == 0)
             return false;
 
+        // Some producers terminate Zone.Identifier with one NUL byte.
+        // Accept only a terminal NUL; embedded NULs remain invalid.
+        if (bytes[length - 1] == 0)
+            --length;
+        if (length == 0)
+            return false;
+
         size_t pos = length >= 3 && bytes[0] == 0xEF &&
             bytes[1] == 0xBB && bytes[2] == 0xBF ? 3 : 0;
         bool inZoneTransfer = false;
