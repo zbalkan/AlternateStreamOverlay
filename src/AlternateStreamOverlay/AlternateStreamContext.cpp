@@ -236,7 +236,7 @@ std::wstring ReadPreview(const std::wstring& path, bool asHex)
         bytesRead = MaxPreviewBytes;
 
     std::wstring formatted = FormatStreamPreview(
-        buffer.data(), bytesRead, asHex);
+        buffer.data(), bytesRead, asHex, truncated);
     if (truncated)
         formatted += L"\r\n[Preview truncated after 65535 bytes]";
     return formatted;
