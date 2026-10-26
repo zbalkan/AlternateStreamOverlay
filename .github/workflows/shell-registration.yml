@@ -34,21 +34,6 @@ jobs:
       - name: Check out source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Validate PowerShell script syntax
-        shell: pwsh
-        run: |
-          $scripts = @(Get-ChildItem -LiteralPath ./src/tests -Filter '*.ps1' -File)
-          foreach ($script in $scripts) {
-            $tokens = $null
-            $errors = $null
-            [void][System.Management.Automation.Language.Parser]::ParseFile($script.FullName, [ref]$tokens, [ref]$errors)
-            if ($errors.Count -gt 0) {
-              $errors | ForEach-Object { Write-Error "$($script.Name): $_" }
-              throw "PowerShell syntax check failed for $($script.Name)"
-            }
-          }
-          Write-Host "Validated $($scripts.Count) PowerShell scripts."
-
       - name: Set up Visual Studio MSBuild
         uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
         with:

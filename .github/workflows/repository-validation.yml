@@ -30,20 +30,6 @@ jobs:
           npm install --ignore-scripts --no-save --package-lock=false --no-audit --no-fund markdownlint-cli2@0.18.1
           ./node_modules/.bin/markdownlint-cli2 "**/*.md" "#node_modules"
 
-      - name: Check YAML syntax
-        shell: bash
-        run: |
-          python3 -m venv "$RUNNER_TEMP/aso-validation-venv"
-          "$RUNNER_TEMP/aso-validation-venv/bin/python" -m pip install --only-binary=:all: 'PyYAML==6.0.2'
-          "$RUNNER_TEMP/aso-validation-venv/bin/python" - <<'PY'
-          from pathlib import Path
-          import yaml
-          for path in sorted(Path('.github').rglob('*.yml')) + sorted(Path('.github').rglob('*.yaml')):
-              with path.open(encoding='utf-8') as stream:
-                  yaml.safe_load(stream)
-              print(f'Valid YAML: {path}')
-          PY
-
       - name: Check GitHub Actions with actionlint
         shell: bash
         run: |

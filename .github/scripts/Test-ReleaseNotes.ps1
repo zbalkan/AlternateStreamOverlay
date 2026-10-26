@@ -29,7 +29,8 @@ Historical text.
     foreach ($case in @(
         @{ Name = 'Wrong version'; Content = $valid; Version = '2.0.1'; ExpectedError = 'Latest versioned changelog section must be \[2\.0\.1\]\.' },
         @{ Name = 'Missing version section'; Content = '## [Unreleased]'; Version = '2.0.0'; ExpectedError = 'Latest versioned changelog section must be \[2\.0\.0\]\.' },
-        @{ Name = 'Undated version'; Content = $valid.Replace(' - 2026-10-25', ''); Version = '2.0.0'; ExpectedError = 'Changelog section \[2\.0\.0\] must have a release date\.' }
+        @{ Name = 'Undated version'; Content = $valid.Replace(' - 2026-10-25', ''); Version = '2.0.0'; ExpectedError = 'Changelog section \[2\.0\.0\] must have a release date\.' },
+        @{ Name = 'Uncategorized notes'; Content = $valid.Replace("### Added`r`n`r`n", '').Replace("### Added`n`n", ''); Version = '2.0.0'; ExpectedError = 'Changelog section \[2\.0\.0\] has no categorized release notes\.' }
     )) {
         Set-Content -LiteralPath $changelog -Value $case.Content -Encoding utf8
         $actualError = $null
